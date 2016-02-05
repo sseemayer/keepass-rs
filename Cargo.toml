@@ -3,6 +3,7 @@ name = "keepass"
 description = "KeePass .kdbx database file parser"
 
 homepage = "https://github.com/sseemayer/keepass-rs"
+repository = "https://github.com/sseemayer/keepass-rs"
 documentation = "https://sseemayer.github.io/keepass-rs/"
 
 version = "0.1.0"
