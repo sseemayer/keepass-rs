@@ -48,7 +48,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                 match &local_name[..] {
                     "Group" => {
                         parsed_stack.push(Node::Group(Group {
-                            name: "".to_string(),
+                            name: "".into(),
                             child_groups: Vec::new(),
                             entries: Vec::new(),
                         }));
@@ -67,8 +67,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                                      .filter(|oa| oa.name.local_name == "Protected")
                                      .next()
                                      .map(|oa| &oa.value)
-                                     .map(|v| v.to_lowercase().parse::<bool>().unwrap_or(false))
-                                     .unwrap_or(false) {
+                                     .map_or(false, |v| v.to_lowercase().parse::<bool>().unwrap_or(false)) {
 
                             // Transform value to a Value::Protected
                             if let Some(&mut Node::KeyValue(_, ref mut ev)) =
@@ -147,11 +146,11 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                         // Got a "Value" element with a Node::KeyValue on the parsed_stack
                         // Update the KeyValue's value
 
-                        match ev {
-                            &mut Value::Unprotected(ref mut v) => {
+                        match *ev {
+                            Value::Unprotected(ref mut v) => {
                                 *v = c;
                             }
-                            &mut Value::Protected(ref mut v) => {
+                            Value::Protected(ref mut v) => {
 
                                 // Use the decryptor to decrypt the protected
                                 // and base64-encoded value

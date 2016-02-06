@@ -245,17 +245,17 @@ impl Database {
         let payload_encrypted = &data[pos..];
 
         // derive master key from composite key, transform_seed, transform_rounds and master_seed
-        let composite_key = decrypt::derive_composite_key(&vec![password.as_bytes()]);
+        let composite_key = decrypt::derive_composite_key(&[password.as_bytes()]);
         let transformed_key = try!(decrypt::derive_transformed_key(transform_seed,
                                                                    transform_rounds,
                                                                    composite_key)
-                                       .map_err(|e| OpenDBError::Crypto(e)));
-        let master_key = decrypt::calculate_sha256(&vec![master_seed, &transformed_key]);
+                                       .map_err(OpenDBError::Crypto));
+        let master_key = decrypt::calculate_sha256(&[master_seed, &transformed_key]);
 
         // Decrypt payload
         let mut outer_decryptor = outer_cipher.new(&master_key, outer_iv);
         let payload = try!(decrypt::decrypt(&mut *outer_decryptor, payload_encrypted)
-                               .map_err(|e| OpenDBError::Crypto(e)));
+                               .map_err(OpenDBError::Crypto));
 
         // Check if we decrypted correctly
         if &payload[0..stream_start.len()] != stream_start {
@@ -263,7 +263,7 @@ impl Database {
         }
 
         // Derive stream key for decrypting inner protected values and set up decryption context
-        let stream_key = decrypt::calculate_sha256(&vec![protected_stream_key]);
+        let stream_key = decrypt::calculate_sha256(&[protected_stream_key]);
         let mut inner_decryptor = inner_cipher.new(&stream_key, inner_iv);
 
         pos = 32;
@@ -291,14 +291,14 @@ impl Database {
             let block_buffer_compressed = &payload[(pos + 40)..(pos + 40 + block_size)];
 
             // Test block hash
-            let block_hash_check = decrypt::calculate_sha256(&vec![&block_buffer_compressed]);
+            let block_hash_check = decrypt::calculate_sha256(&[&block_buffer_compressed]);
             if block_hash != block_hash_check {
                 return Err(OpenDBError::BlockHashMismatch);
             }
 
             // Decompress block_buffer_compressed
             let block_buffer = try!(compression.decompress(block_buffer_compressed)
-                                               .map_err(|e| OpenDBError::Compression(e)));
+                                               .map_err(OpenDBError::Compression));
 
             // Parse XML data
             let block_group = xmlparse::parse_xml_block(&block_buffer, &mut *inner_decryptor);
@@ -313,7 +313,7 @@ impl Database {
             db.root = db.root.child_groups.pop().unwrap();
         }
 
-        return Ok(db);
+        Ok(db)
     }
 }
 

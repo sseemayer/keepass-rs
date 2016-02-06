@@ -15,8 +15,7 @@ pub struct NoCompression;
 
 impl Decompress for NoCompression {
     fn decompress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, DecompressionError> {
-        let res = in_buffer.into_iter().map(|c| c.clone()).collect();
-        Ok(res)
+        Ok(in_buffer.into_iter().cloned().collect())
     }
 }
 
