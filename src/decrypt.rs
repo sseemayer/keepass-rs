@@ -43,11 +43,11 @@ impl Decryptor for NoOpDecryptor {
                _: bool)
                -> Result<BufferResult, SymmetricCipherError> {
         input.push_to(output);
-        return Ok(BufferResult::BufferUnderflow);
+        Ok(BufferResult::BufferUnderflow)
     }
 }
 
-pub fn calculate_sha256(elements: &Vec<&[u8]>) -> [u8; 32] {
+pub fn calculate_sha256(elements: &[&[u8]]) -> [u8; 32] {
 
     let mut digest = Sha256::new();
 
@@ -68,7 +68,7 @@ pub fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>, Symmet
 
     loop {
         let result = try!(decryptor.decrypt(&mut read_buffer, &mut write_buffer, true));
-        final_result.extend(write_buffer.take_read_buffer().take_remaining().iter().map(|&i| i));
+        final_result.extend(write_buffer.take_read_buffer().take_remaining().iter().cloned());
 
         match result {
             BufferResult::BufferUnderflow => break,
@@ -79,15 +79,15 @@ pub fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>, Symmet
     Ok(final_result)
 }
 
-pub fn derive_composite_key(elements: &Vec<&[u8]>) -> [u8; 32] {
+pub fn derive_composite_key(elements: &[&[u8]]) -> [u8; 32] {
     let credentials_hash = calculate_sha256(elements);
-    calculate_sha256(&vec![&credentials_hash])
+    calculate_sha256(&[&credentials_hash])
 }
 
-pub fn derive_transformed_key<'a>(transform_seed: &[u8],
-                                  transform_rounds: u64,
-                                  composite_key: [u8; 32])
-                                  -> Result<[u8; 32], SymmetricCipherError> {
+pub fn derive_transformed_key(transform_seed: &[u8],
+                              transform_rounds: u64,
+                              composite_key: [u8; 32])
+                              -> Result<[u8; 32], SymmetricCipherError> {
 
     let mut key: [u8; 32] = composite_key.clone();
 
@@ -108,5 +108,5 @@ pub fn derive_transformed_key<'a>(transform_seed: &[u8],
 
     }
 
-    Ok(calculate_sha256(&vec![&key]))
+    Ok(calculate_sha256(&[&key]))
 }
