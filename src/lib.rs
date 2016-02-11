@@ -42,6 +42,7 @@ use crypto::symmetriccipher::SymmetricCipherError;
 
 use secstr::SecStr;
 
+use std::fmt::Display;
 use std::collections::HashMap;
 
 mod decrypt;
@@ -73,6 +74,41 @@ pub enum OpenDBError {
     InvalidCompressionSuite,
     InvalidInnerRandomStreamId,
     BlockHashMismatch,
+}
+
+impl Display for OpenDBError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            &OpenDBError::Io(ref e) => write!(f, "I/O eror: {}", e),
+            &OpenDBError::Compression(_) => write!(f, "Decompression error"),
+            &OpenDBError::Crypto(_) => write!(f, "Decryption error"),
+            &OpenDBError::IncorrectKey => write!(f, "Incorrect key"),
+            &OpenDBError::InvalidIdentifier => write!(f, "Invalid file header - not a .kdbx file?"),
+            &OpenDBError::InvalidHeaderEntry(h) => write!(f, "Encountered invalid header entry {}", h),
+            &OpenDBError::InvalidCipherID => write!(f, "Encountered an invalid cipher ID"),
+            &OpenDBError::InvalidCompressionSuite => write!(f, "Encountered an invalid compression suite"),
+            &OpenDBError::InvalidInnerRandomStreamId => write!(f, "Encountered an invalid inner stream cipher"),
+            &OpenDBError::BlockHashMismatch => write!(f, "Block hash verification failed")
+        }
+    }
+}
+
+impl std::error::Error for OpenDBError {
+    fn description(&self) -> &str {
+        match self {
+            &OpenDBError::Io(ref e) => e.description(),
+            &OpenDBError::Compression(_) => "decompression error",
+            &OpenDBError::Crypto(_) => "decryption error",
+            &OpenDBError::IncorrectKey => "incorrect key",
+            &OpenDBError::InvalidIdentifier => "invalid file header",
+            &OpenDBError::InvalidHeaderEntry(_) => "invalid header entry",
+            &OpenDBError::InvalidCipherID => "invalid cipher ID",
+            &OpenDBError::InvalidCompressionSuite => "invalid compression suite ID",
+            &OpenDBError::InvalidInnerRandomStreamId => "invalid inner cipher ID",
+            &OpenDBError::BlockHashMismatch => "block hash verification failed"
+        }
+    }
+    
 }
 
 #[derive(Debug)]
