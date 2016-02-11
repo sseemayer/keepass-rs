@@ -63,7 +63,7 @@ pub struct Database {
 
 #[derive(Debug)]
 pub enum OpenDBError {
-    Io(String),
+    Io(std::io::Error),
     Compression(decompress::DecompressionError),
     Crypto(SymmetricCipherError),
     IncorrectKey,
@@ -131,7 +131,7 @@ impl Database {
     pub fn open(source: &mut std::io::Read, password: &str) -> Result<Database, OpenDBError> {
 
         let mut data = Vec::new();
-        try!(source.read_to_end(&mut data).map_err(|e| OpenDBError::Io(e.to_string())));
+        try!(source.read_to_end(&mut data).map_err(|e| OpenDBError::Io(e)));
 
         // check identifier
         if data[0..4] != KDBX_IDENTIFIER {
@@ -361,7 +361,7 @@ impl<'a> IntoIterator for &'a Group {
 fn open_db() {
 
     let db = std::fs::File::open(std::path::Path::new("test/sample.kdbx"))
-                 .map_err(|err| OpenDBError::Io(err.to_string()))
+                 .map_err(|err| OpenDBError::Io(err))
                  .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
                  .unwrap();
 
