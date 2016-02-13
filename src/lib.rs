@@ -10,7 +10,7 @@
 //! fn main() {
 //!     // Open KeePass database
 //!     let db = File::open(std::path::Path::new("test/sample.kdbx"))
-//!                  .map_err(|e| OpenDBError::Io(e))
+//!                  .map_err(|e| OpenDBError::from(e))
 //!                  .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
 //!                  .unwrap();
 //!
@@ -79,7 +79,7 @@ pub enum OpenDBError {
 impl Display for OpenDBError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &OpenDBError::Io(ref e) => write!(f, "I/O eror: {}", e),
+            &OpenDBError::Io(ref e) => write!(f, "I/O error: {}", e),
             &OpenDBError::Compression(_) => write!(f, "Decompression error"),
             &OpenDBError::Crypto(_) => write!(f, "Decryption error"),
             &OpenDBError::IncorrectKey => write!(f, "Incorrect key"),
@@ -97,7 +97,7 @@ impl std::error::Error for OpenDBError {
     fn description(&self) -> &str {
         match self {
             &OpenDBError::Io(ref e) => e.description(),
-            &OpenDBError::Compression(_) => "decompression error",
+            &OpenDBError::Compression(ref e) => e.description(),
             &OpenDBError::Crypto(_) => "decryption error",
             &OpenDBError::IncorrectKey => "incorrect key",
             &OpenDBError::InvalidIdentifier => "invalid file header",
@@ -108,7 +108,33 @@ impl std::error::Error for OpenDBError {
             &OpenDBError::BlockHashMismatch => "block hash verification failed"
         }
     }
+
+    fn cause(&self) -> Option<&std::error::Error> {
+        match self {
+            &OpenDBError::Io(ref e) => Some(e),
+            &OpenDBError::Compression(ref e) => Some(e),
+            _ => None
+        }
+    }
     
+}
+
+impl From<std::io::Error> for OpenDBError {
+    fn from(e: std::io::Error) -> OpenDBError {
+        OpenDBError::Io(e)
+    }
+}
+
+impl From<SymmetricCipherError> for OpenDBError {
+    fn from(e: SymmetricCipherError) -> OpenDBError {
+        OpenDBError::Crypto(e)
+    }
+}
+
+impl From<decompress::DecompressionError> for OpenDBError {
+    fn from(e: decompress::DecompressionError) -> OpenDBError {
+        OpenDBError::Compression(e)
+    }
 }
 
 #[derive(Debug)]
@@ -167,7 +193,7 @@ impl Database {
     pub fn open(source: &mut std::io::Read, password: &str) -> Result<Database, OpenDBError> {
 
         let mut data = Vec::new();
-        try!(source.read_to_end(&mut data).map_err(|e| OpenDBError::Io(e)));
+        try!(source.read_to_end(&mut data));
 
         // check identifier
         if data[0..4] != KDBX_IDENTIFIER {
@@ -284,14 +310,12 @@ impl Database {
         let composite_key = decrypt::derive_composite_key(&[password.as_bytes()]);
         let transformed_key = try!(decrypt::derive_transformed_key(transform_seed,
                                                                    transform_rounds,
-                                                                   composite_key)
-                                       .map_err(OpenDBError::Crypto));
+                                                                   composite_key));
         let master_key = decrypt::calculate_sha256(&[master_seed, &transformed_key]);
 
         // Decrypt payload
         let mut outer_decryptor = outer_cipher.new(&master_key, outer_iv);
-        let payload = try!(decrypt::decrypt(&mut *outer_decryptor, payload_encrypted)
-                               .map_err(OpenDBError::Crypto));
+        let payload = try!(decrypt::decrypt(&mut *outer_decryptor, payload_encrypted));
 
         // Check if we decrypted correctly
         if &payload[0..stream_start.len()] != stream_start {
@@ -333,8 +357,7 @@ impl Database {
             }
 
             // Decompress block_buffer_compressed
-            let block_buffer = try!(compression.decompress(block_buffer_compressed)
-                                               .map_err(OpenDBError::Compression));
+            let block_buffer = try!(compression.decompress(block_buffer_compressed));
 
             // Parse XML data
             let block_group = xmlparse::parse_xml_block(&block_buffer, &mut *inner_decryptor);
@@ -397,7 +420,7 @@ impl<'a> IntoIterator for &'a Group {
 fn open_db() {
 
     let db = std::fs::File::open(std::path::Path::new("test/sample.kdbx"))
-                 .map_err(|err| OpenDBError::Io(err))
+                 .map_err(|e| OpenDBError::from(e))
                  .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
                  .unwrap();
 
