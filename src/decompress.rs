@@ -30,7 +30,6 @@ impl std::error::Error for DecompressionError {
             &DecompressionError::Io(ref e) => Some(e),
         }
     }
-    
 }
 
 

@@ -67,7 +67,9 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                                      .filter(|oa| oa.name.local_name == "Protected")
                                      .next()
                                      .map(|oa| &oa.value)
-                                     .map_or(false, |v| v.to_lowercase().parse::<bool>().unwrap_or(false)) {
+                                     .map_or(false, |v| {
+                                         v.to_lowercase().parse::<bool>().unwrap_or(false)
+                                     }) {
 
                             // Transform value to a Value::Protected
                             if let Some(&mut Node::KeyValue(_, ref mut ev)) =

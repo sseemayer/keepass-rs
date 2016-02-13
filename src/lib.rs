@@ -84,11 +84,17 @@ impl Display for OpenDBError {
             &OpenDBError::Crypto(_) => write!(f, "Decryption error"),
             &OpenDBError::IncorrectKey => write!(f, "Incorrect key"),
             &OpenDBError::InvalidIdentifier => write!(f, "Invalid file header - not a .kdbx file?"),
-            &OpenDBError::InvalidHeaderEntry(h) => write!(f, "Encountered invalid header entry {}", h),
+            &OpenDBError::InvalidHeaderEntry(h) => {
+                write!(f, "Encountered invalid header entry {}", h)
+            }
             &OpenDBError::InvalidCipherID => write!(f, "Encountered an invalid cipher ID"),
-            &OpenDBError::InvalidCompressionSuite => write!(f, "Encountered an invalid compression suite"),
-            &OpenDBError::InvalidInnerRandomStreamId => write!(f, "Encountered an invalid inner stream cipher"),
-            &OpenDBError::BlockHashMismatch => write!(f, "Block hash verification failed")
+            &OpenDBError::InvalidCompressionSuite => {
+                write!(f, "Encountered an invalid compression suite")
+            }
+            &OpenDBError::InvalidInnerRandomStreamId => {
+                write!(f, "Encountered an invalid inner stream cipher")
+            }
+            &OpenDBError::BlockHashMismatch => write!(f, "Block hash verification failed"),
         }
     }
 }
@@ -105,7 +111,7 @@ impl std::error::Error for OpenDBError {
             &OpenDBError::InvalidCipherID => "invalid cipher ID",
             &OpenDBError::InvalidCompressionSuite => "invalid compression suite ID",
             &OpenDBError::InvalidInnerRandomStreamId => "invalid inner cipher ID",
-            &OpenDBError::BlockHashMismatch => "block hash verification failed"
+            &OpenDBError::BlockHashMismatch => "block hash verification failed",
         }
     }
 
@@ -113,10 +119,9 @@ impl std::error::Error for OpenDBError {
         match self {
             &OpenDBError::Io(ref e) => Some(e),
             &OpenDBError::Compression(ref e) => Some(e),
-            _ => None
+            _ => None,
         }
     }
-    
 }
 
 impl From<std::io::Error> for OpenDBError {
