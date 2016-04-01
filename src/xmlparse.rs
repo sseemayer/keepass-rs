@@ -1,19 +1,17 @@
 extern crate crypto;
 extern crate secstr;
-extern crate xml;
+extern crate quick_xml;
 
 use crypto::symmetriccipher::Decryptor;
 
 use rustc_serialize::base64::FromBase64;
 use secstr::SecStr;
 
-use self::xml::reader::{EventReader, XmlEvent};
-use self::xml::name::OwnedName;
+use self::quick_xml::{XmlReader, Event, AsStr};
 
 use std::collections::HashMap;
 
 use super::{Group, Entry, Value};
-
 
 enum Node {
     Entry(Entry),
@@ -22,7 +20,7 @@ enum Node {
 }
 
 pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
-    let parser = EventReader::new(xml);
+    let parser = XmlReader::from_reader(xml).trim_text(true);
 
     // Stack of parsed Node objects not yet associated with their parent
     let mut parsed_stack: Vec<Node> = vec![];
@@ -38,35 +36,34 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
 
     for e in parser {
         match e.unwrap() {
-            XmlEvent::StartElement {
-                name: OwnedName { ref local_name, .. },
-                ref attributes, ..
-            } => {
+            Event::Start(ref e) => {
 
-                xml_stack.push(local_name.clone());
+                let name = e.name();
+                xml_stack.push(name.as_str().unwrap().to_owned());
 
-                match &local_name[..] {
-                    "Group" => {
+                match name {
+                    b"Group" => {
                         parsed_stack.push(Node::Group(Group {
                             name: "".into(),
                             child_groups: Vec::new(),
                             entries: Vec::new(),
                         }));
                     }
-                    "Entry" => {
+                    b"Entry" => {
                         parsed_stack.push(Node::Entry(Entry { fields: HashMap::new() }));
                     }
-                    "String" => {
+                    b"String" => {
                         parsed_stack.push(Node::KeyValue(String::new(),
                                                          Value::Unprotected(String::new())));
                     }
-                    "Value" => {
+                    b"Value" => {
 
                         // Are we encountering a protected value?
-                        if attributes.into_iter()
-                                     .filter(|oa| oa.name.local_name == "Protected")
+                        if e.attributes()
+                            .map(|a| a.unwrap())
+                            .filter(|&(k, _)| k == b"Protected")
                                      .next()
-                                     .map(|oa| &oa.value)
+                                     .map(|(_, v)| v.as_str().unwrap())
                                      .map_or(false, |v| {
                                          v.to_lowercase().parse::<bool>().unwrap_or(false)
                                      }) {
@@ -84,11 +81,11 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
 
             }
 
-            XmlEvent::EndElement { name: OwnedName { ref local_name, .. } } => {
+            Event::End(ref e) => {
 
                 xml_stack.pop();
 
-                if ["Group", "Entry", "String"].contains(&&local_name[..]) {
+                if [b"Group" as &[u8], b"Entry", b"String"].contains(&e.name()) {
 
                     let finished_node = parsed_stack.pop().unwrap();
                     let mut parsed_stack_head = parsed_stack.last_mut();
@@ -128,10 +125,11 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
 
             }
 
-            XmlEvent::Characters(c) => {
+            Event::Text(e) => {
 
                 // Got some character data that need to be matched to a Node on the parsed_stack.
 
+                let c = e.into_string().unwrap();
                 match (xml_stack.last().map(|s| &s[..]), parsed_stack.last_mut()) {
                     (Some("Name"),
                      Some(&mut Node::Group(Group {ref mut name, ..}))) => {
