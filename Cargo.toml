@@ -13,9 +13,9 @@ license = "MIT"
 readme = "README.md"
 
 [dependencies]
-byteorder = "^0.4.2"
+byteorder = "^1.0.0"
 flate2 = "^0.2.13"
 rust-crypto = "^0.2.34"
-secstr = "^0.2.1"
-xml-rs = "^0.3.0"
+secstr = "^0.3.0"
+xml-rs = "^0.6.0"
 rustc-serialize = "^0.3.16"
