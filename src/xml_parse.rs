@@ -158,7 +158,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                                 // Use the decryptor to decrypt the protected
                                 // and base64-encoded value
                                 let buf = base64::decode(&c).unwrap();
-                                let buf_decode = super::decrypt::decrypt(decryptor, buf.as_ref()).unwrap();
+                                let buf_decode = super::crypt::decrypt(decryptor, buf.as_ref()).unwrap();
                                 let c_decode = String::from_utf8(buf_decode).unwrap();
 
                                 *v = SecStr::from(c_decode);

@@ -5,6 +5,7 @@ use crypto::digest::Digest;
 use crypto::salsa20::Salsa20;
 use crypto::sha2::Sha256;
 use crypto::symmetriccipher::{Decryptor, SymmetricCipherError};
+use super::result::{Result};
 
 pub(crate) trait Cipher {
     fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor>;
@@ -42,7 +43,7 @@ impl Decryptor for NoOpDecryptor {
         input: &mut RefReadBuffer,
         output: &mut RefWriteBuffer,
         _: bool,
-    ) -> Result<BufferResult, SymmetricCipherError> {
+    ) -> ::std::result::Result<BufferResult, SymmetricCipherError> {
         input.push_to(output);
         Ok(BufferResult::BufferUnderflow)
     }
@@ -60,14 +61,14 @@ pub(crate) fn calculate_sha256(elements: &[&[u8]]) -> [u8; 32] {
     hash
 }
 
-pub(crate) fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
+pub(crate) fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>> {
     let mut final_result = Vec::new();
     let mut read_buffer = RefReadBuffer::new(data);
     let mut buffer = [0u8; 4096];
     let mut write_buffer = RefWriteBuffer::new(&mut buffer);
 
     loop {
-        let result = try!(decryptor.decrypt(&mut read_buffer, &mut write_buffer, true));
+        let result = decryptor.decrypt(&mut read_buffer, &mut write_buffer, true)?;
         final_result.extend(
             write_buffer
                 .take_read_buffer()
@@ -94,7 +95,7 @@ pub(crate) fn derive_transformed_key(
     transform_seed: &[u8],
     transform_rounds: u64,
     composite_key: [u8; 32],
-) -> Result<[u8; 32], SymmetricCipherError> {
+) -> Result<[u8; 32]> {
     let mut key: [u8; 32] = composite_key.clone();
 
     for _ in 0..transform_rounds {
@@ -104,7 +105,7 @@ pub(crate) fn derive_transformed_key(
         {
             let mut encryptor = ecb_encryptor(KeySize::KeySize256, transform_seed, NoPadding);
             let mut read_buffer = RefReadBuffer::new(&key);
-            try!(encryptor.encrypt(&mut read_buffer, &mut write_buffer, true));
+            encryptor.encrypt(&mut read_buffer, &mut write_buffer, true)?;
         }
 
         for (&x, k) in write_buffer

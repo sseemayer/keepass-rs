@@ -4,13 +4,13 @@
 //! ```
 //! extern crate keepass;
 //!
-//! use keepass::{Database, Node, OpenDBError};
+//! use keepass::{Database, Node, ErrorKind};
 //! use std::fs::File;
 //!
 //! fn main() {
 //!     // Open KeePass database
 //!     let db = File::open(std::path::Path::new("tests/resources/sample.kdbx"))
-//!                  .map_err(|e| OpenDBError::from(e))
+//!                  .map_err(|e| ErrorKind::from(e))
 //!                  .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
 //!                  .unwrap();
 //!
@@ -31,6 +31,9 @@
 //! }
 //! ```
 
+#![recursion_limit = "1024"]
+
+
 extern crate byteorder;
 extern crate crypto;
 extern crate base64;
@@ -39,14 +42,17 @@ extern crate flate2;
 extern crate xml;
 
 
-mod decrypt;
+#[macro_use]
+extern crate error_chain;
+
+
+mod crypt;
 mod decompress;
 mod xml_parse;
-mod error;
+pub mod result;
 mod db;
 mod db_parse;
 
-pub use self::error::*;
 pub use self::db::*;
 pub use self::db_parse::*;
 // see https://gist.github.com/msmuenchen/9318327 for file format details
