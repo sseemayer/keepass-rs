@@ -48,9 +48,11 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
     };
 
     // parse header
-    let mut pos = 12;
+
 
     let header = parse_header(data.as_ref())?;
+    let mut pos = header.body_start;
+    println!("Headers {:?}", header);
     let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
 
     let compression: Box<decompress::Decompress> = match header.compression_flag {
@@ -78,7 +80,11 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
         header.transform_rounds,
         composite_key
     )?;
+
+
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
+
+    println!("{:?}", master_key);
 
     // Decrypt payload
     let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
@@ -247,7 +253,9 @@ fn parse_header(data: &[u8]) -> Result<Header> {
         error_if_not_exists(outer_iv)?,
         error_if_not_exists(protected_stream_key)?,
         error_if_not_exists(stream_start)?,
-        error_if_not_exists(inner_cipher_id)?)
+        error_if_not_exists(inner_cipher_id)?,
+        pos
+    )
     )
 }
 

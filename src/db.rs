@@ -35,7 +35,7 @@ pub struct Entry {
     pub fields: HashMap<String, Value>,
 }
 
-
+#[derive(Debug)]
 pub struct Header {
     //https://gist.github.com/msmuenchen/9318327
     pub version: u32,
@@ -50,6 +50,7 @@ pub struct Header {
     pub protected_stream_key: Vec<u8>,
     pub stream_start: Vec<u8>,
     pub inner_cipher_id: u32,
+    pub body_start: usize
 }
 
 
@@ -67,6 +68,7 @@ impl Header {
         protected_stream_key: Vec<u8>,
         stream_start: Vec<u8>,
         inner_cipher_id: u32,
+        body_start: usize
     ) -> Self {
         Header {
             version: version,
@@ -81,6 +83,7 @@ impl Header {
             protected_stream_key: protected_stream_key,
             stream_start: stream_start,
             inner_cipher_id: inner_cipher_id,
+            body_start:body_start
         }
     }
 }
