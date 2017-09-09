@@ -3,10 +3,11 @@ extern crate keepass;
 mod tests {
     use std;
     use keepass::*;
+    use keepass::result::*;
     #[test]
     fn open_db() {
         let db = std::fs::File::open(std::path::Path::new("tests/resources/sample.kdbx"))
-            .map_err(|e| OpenDBError::from(e))
+            .chain_err(||"Error open db file")
             .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
             .unwrap();
 
@@ -19,11 +20,11 @@ mod tests {
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::Group(g) => {
+                Node::GroupNode(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::Entry(e) => {
+                Node::EntryNode(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();

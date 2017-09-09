@@ -35,9 +35,62 @@ pub struct Entry {
     pub fields: HashMap<String, Value>,
 }
 
+#[derive(Debug)]
+pub struct Header {
+    //https://gist.github.com/msmuenchen/9318327
+    pub version: u32,
+    pub file_major_version: u16,
+    pub file_minor_version: u16,
+    pub outer_cipher_id: Vec<u8>,
+    pub compression_flag: u32,
+    pub master_seed: Vec<u8>,
+    pub transform_seed: Vec<u8>,
+    pub transform_rounds: u64,
+    pub outer_iv: Vec<u8>,
+    pub protected_stream_key: Vec<u8>,
+    pub stream_start: Vec<u8>,
+    pub inner_cipher_id: u32,
+    pub body_start: usize
+}
+
+
+impl Header {
+    pub fn new(
+        version: u32,
+        file_major_version: u16,
+        file_minor_version: u16,
+        outer_cipher_id: Vec<u8>,
+        compression_flag: u32,
+        master_seed: Vec<u8>,
+        transform_seed: Vec<u8>,
+        transform_rounds: u64,
+        outer_iv: Vec<u8>,
+        protected_stream_key: Vec<u8>,
+        stream_start: Vec<u8>,
+        inner_cipher_id: u32,
+        body_start: usize
+    ) -> Self {
+        Header {
+            version: version,
+            file_major_version: file_major_version,
+            file_minor_version: file_minor_version,
+            outer_cipher_id: outer_cipher_id,
+            compression_flag: compression_flag,
+            master_seed: master_seed,
+            transform_seed: transform_seed,
+            transform_rounds: transform_rounds,
+            outer_iv: outer_iv,
+            protected_stream_key: protected_stream_key,
+            stream_start: stream_start,
+            inner_cipher_id: inner_cipher_id,
+            body_start:body_start
+        }
+    }
+}
+
 pub enum Node<'a> {
-    Group(&'a Group),
-    Entry(&'a Entry),
+    GroupNode(&'a Group),
+    EntryNode(&'a Entry),
 }
 
 /// An iterator over Groups and Entries
@@ -79,10 +132,10 @@ impl<'a> Iterator for NodeIter<'a> {
     fn next(&mut self) -> Option<Node<'a>> {
         let res = self.queue.pop();
 
-        if let Some(Node::Group(ref g)) = res {
-            self.queue.extend(g.entries.iter().map(|e| Node::Entry(&e)));
+        if let Some(Node::GroupNode(ref g)) = res {
+            self.queue.extend(g.entries.iter().map(|e| Node::EntryNode(&e)));
             self.queue
-                .extend(g.child_groups.iter().map(|g| Node::Group(&g)));
+                .extend(g.child_groups.iter().map(|g| Node::GroupNode(&g)));
         }
 
         res
@@ -101,7 +154,7 @@ impl<'a> IntoIterator for &'a Group {
 
     fn into_iter(self) -> NodeIter<'a> {
         NodeIter {
-            queue: vec![Node::Group(&self)],
+            queue: vec![Node::GroupNode(&self)],
         }
     }
 }

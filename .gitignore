@@ -1,4 +1,6 @@
-#### joe made this: https://goel.io/joe
+.DS_Store
+.idea
+*.iml
 
 #####=== Rust ===#####
 
