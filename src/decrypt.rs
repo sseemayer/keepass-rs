@@ -89,7 +89,7 @@ pub fn derive_transformed_key(transform_seed: &[u8],
                               composite_key: [u8; 32])
                               -> Result<[u8; 32], SymmetricCipherError> {
 
-    let mut key: [u8; 32] = composite_key.clone();
+    let mut key: [u8; 32] = composite_key;
 
     for _ in 0..transform_rounds {
 

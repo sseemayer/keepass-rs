@@ -64,8 +64,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
 
                         // Are we encountering a protected value?
                         if attributes.into_iter()
-                                     .filter(|oa| oa.name.local_name == "Protected")
-                                     .next()
+                                     .find(|oa| oa.name.local_name == "Protected")
                                      .map(|oa| &oa.value)
                                      .map_or(false, |v| {
                                          v.to_lowercase().parse::<bool>().unwrap_or(false)
@@ -91,7 +90,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                 if ["Group", "Entry", "String"].contains(&&local_name[..]) {
 
                     let finished_node = parsed_stack.pop().unwrap();
-                    let mut parsed_stack_head = parsed_stack.last_mut();
+                    let parsed_stack_head = parsed_stack.last_mut();
 
                     match finished_node {
                         Node::KeyValue(k, v) => {
@@ -108,7 +107,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                                 // A Group was finished - add Group to parent Group's child groups
                                 child_groups.push(finished_group);
 
-                            } else if let None = parsed_stack_head {
+                            } else if parsed_stack_head.is_none() {
                                 // There is no more parent nodes left -> we are at the root
                                 root_group = finished_group;
                             }

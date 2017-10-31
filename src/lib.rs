@@ -78,47 +78,47 @@ pub enum OpenDBError {
 
 impl Display for OpenDBError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            &OpenDBError::Io(ref e) => write!(f, "I/O error: {}", e),
-            &OpenDBError::Compression(_) => write!(f, "Decompression error"),
-            &OpenDBError::Crypto(_) => write!(f, "Decryption error"),
-            &OpenDBError::IncorrectKey => write!(f, "Incorrect key"),
-            &OpenDBError::InvalidIdentifier => write!(f, "Invalid file header - not a .kdbx file?"),
-            &OpenDBError::InvalidHeaderEntry(h) => {
+        match *self {
+            OpenDBError::Io(ref e) => write!(f, "I/O error: {}", e),
+            OpenDBError::Compression(_) => write!(f, "Decompression error"),
+            OpenDBError::Crypto(_) => write!(f, "Decryption error"),
+            OpenDBError::IncorrectKey => write!(f, "Incorrect key"),
+            OpenDBError::InvalidIdentifier => write!(f, "Invalid file header - not a .kdbx file?"),
+            OpenDBError::InvalidHeaderEntry(h) => {
                 write!(f, "Encountered invalid header entry {}", h)
             }
-            &OpenDBError::InvalidCipherID => write!(f, "Encountered an invalid cipher ID"),
-            &OpenDBError::InvalidCompressionSuite => {
+            OpenDBError::InvalidCipherID => write!(f, "Encountered an invalid cipher ID"),
+            OpenDBError::InvalidCompressionSuite => {
                 write!(f, "Encountered an invalid compression suite")
             }
-            &OpenDBError::InvalidInnerRandomStreamId => {
+            OpenDBError::InvalidInnerRandomStreamId => {
                 write!(f, "Encountered an invalid inner stream cipher")
             }
-            &OpenDBError::BlockHashMismatch => write!(f, "Block hash verification failed"),
+            OpenDBError::BlockHashMismatch => write!(f, "Block hash verification failed"),
         }
     }
 }
 
 impl std::error::Error for OpenDBError {
     fn description(&self) -> &str {
-        match self {
-            &OpenDBError::Io(ref e) => e.description(),
-            &OpenDBError::Compression(ref e) => e.description(),
-            &OpenDBError::Crypto(_) => "decryption error",
-            &OpenDBError::IncorrectKey => "incorrect key",
-            &OpenDBError::InvalidIdentifier => "invalid file header",
-            &OpenDBError::InvalidHeaderEntry(_) => "invalid header entry",
-            &OpenDBError::InvalidCipherID => "invalid cipher ID",
-            &OpenDBError::InvalidCompressionSuite => "invalid compression suite ID",
-            &OpenDBError::InvalidInnerRandomStreamId => "invalid inner cipher ID",
-            &OpenDBError::BlockHashMismatch => "block hash verification failed",
+        match *self {
+            OpenDBError::Io(ref e) => e.description(),
+            OpenDBError::Compression(ref e) => e.description(),
+            OpenDBError::Crypto(_) => "decryption error",
+            OpenDBError::IncorrectKey => "incorrect key",
+            OpenDBError::InvalidIdentifier => "invalid file header",
+            OpenDBError::InvalidHeaderEntry(_) => "invalid header entry",
+            OpenDBError::InvalidCipherID => "invalid cipher ID",
+            OpenDBError::InvalidCompressionSuite => "invalid compression suite ID",
+            OpenDBError::InvalidInnerRandomStreamId => "invalid inner cipher ID",
+            OpenDBError::BlockHashMismatch => "block hash verification failed",
         }
     }
 
     fn cause(&self) -> Option<&std::error::Error> {
-        match self {
-            &OpenDBError::Io(ref e) => Some(e),
-            &OpenDBError::Compression(ref e) => Some(e),
+        match *self {
+            OpenDBError::Io(ref e) => Some(e),
+            OpenDBError::Compression(ref e) => Some(e),
             _ => None,
         }
     }
@@ -159,7 +159,7 @@ impl<'a> Entry {
     pub fn get(&'a self, key: &str) -> Option<&'a str> {
         match self.fields.get(key) {
             Some(&Value::Protected(ref pv)) => std::str::from_utf8(pv.unsecure()).ok(),
-            Some(&Value::Unprotected(ref uv)) => Some(&uv),
+            Some(&Value::Unprotected(ref uv)) => Some(uv),
             None => None,
         }
     }
@@ -397,9 +397,9 @@ impl<'a> Iterator for NodeIter<'a> {
     fn next(&mut self) -> Option<Node<'a>> {
         let res = self.queue.pop();
 
-        if let Some(Node::Group(ref g)) = res {
-            self.queue.extend(g.entries.iter().map(|e| Node::Entry(&e)));
-            self.queue.extend(g.child_groups.iter().map(|g| Node::Group(&g)));
+        if let Some(Node::Group(g)) = res {
+            self.queue.extend(g.entries.iter().map(|e| Node::Entry(e)));
+            self.queue.extend(g.child_groups.iter().map(|g| Node::Group(g)));
         }
 
         res
@@ -408,7 +408,7 @@ impl<'a> Iterator for NodeIter<'a> {
 
 impl<'a> Group {
     pub fn iter(&'a self) -> NodeIter<'a> {
-        (&self).into_iter()
+        (self).into_iter()
     }
 }
 
@@ -417,7 +417,7 @@ impl<'a> IntoIterator for &'a Group {
     type IntoIter = NodeIter<'a>;
 
     fn into_iter(self) -> NodeIter<'a> {
-        NodeIter { queue: vec![Node::Group(&self)] }
+        NodeIter { queue: vec![Node::Group(self)] }
     }
 }
 

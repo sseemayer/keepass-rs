@@ -12,22 +12,22 @@ pub enum DecompressionError {
 
 impl std::fmt::Display for DecompressionError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            &DecompressionError::Io(ref e) => write!(f, "I/O error during decompression: {}", e),
+        match *self {
+            DecompressionError::Io(ref e) => write!(f, "I/O error during decompression: {}", e),
         }
     }
 }
 
 impl std::error::Error for DecompressionError {
     fn description(&self) -> &str {
-        match self {
-            &DecompressionError::Io(ref e) => e.description(),
+        match *self {
+            DecompressionError::Io(ref e) => e.description(),
         }
     }
 
     fn cause(&self) -> Option<&std::error::Error> {
-        match self {
-            &DecompressionError::Io(ref e) => Some(e),
+        match *self {
+            DecompressionError::Io(ref e) => Some(e),
         }
     }
 }
