@@ -48,7 +48,5 @@ pub fn parse(source: &mut std::io::Read) -> Result<Vec<u8>> {
         buffer.extend(v);
     }
 
-    println!("Keyfile parsed: {:?}", buffer);
-
     Ok(buffer)
 }
