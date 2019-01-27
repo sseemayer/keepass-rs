@@ -13,10 +13,10 @@ fn main() -> Result<()> {
     // Open KeePass database
     let path = std::path::Path::new("tests/resources/test_db_with_password.kdbx");
     let db = Database::open(
-		&mut File::open(path)?,			// the database
-		Some("demopass"),				// password
-		None							// keyfile
-	)?;
+        &mut File::open(path)?,         // the database
+        Some("demopass"),               // password
+        None                            // keyfile
+    )?;
 
     // Iterate over all Groups and Nodes
     for node in &db.root {
