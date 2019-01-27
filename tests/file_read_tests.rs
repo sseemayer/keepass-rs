@@ -6,10 +6,12 @@ mod tests {
     use std;
     #[test]
     fn open_db() {
-        let db = std::fs::File::open(std::path::Path::new("tests/resources/sample.kdbx"))
-            .chain_err(|| "Error open db file")
-            .and_then(|mut db_file| Database::open(&mut db_file, Some("demopass")))
-            .unwrap();
+        let db = std::fs::File::open(std::path::Path::new(
+            "tests/resources/test_db_with_password.kdbx",
+        ))
+        .chain_err(|| "Error open db file")
+        .and_then(|mut db_file| Database::open(&mut db_file, Some("demopass")))
+        .unwrap();
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "sample");

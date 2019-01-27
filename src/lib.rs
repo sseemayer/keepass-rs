@@ -10,7 +10,7 @@
 //!
 //! fn main() {
 //!     // Open KeePass database
-//!     let db = std::fs::File::open(std::path::Path::new("tests/resources/sample.kdbx"))
+//!     let db = std::fs::File::open(std::path::Path::new("tests/resources/test_db_with_password.kdbx"))
 //!             .chain_err(||"Error open db file")
 //!             .and_then(|mut db_file| Database::open(&mut db_file, Some("demopass")))
 //!             .unwrap();
