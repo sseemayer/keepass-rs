@@ -13,7 +13,7 @@ const CIPHERSUITE_AES256: [u8; 16] = [
 ];
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
+pub fn open_db(source: &mut std::io::Read, key_elements: &[&[u8]]) -> Result<Database> {
     let mut data = Vec::new();
     source.read_to_end(&mut data)?;
 
@@ -55,7 +55,7 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
     let payload_encrypted = &data[pos..];
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
-    let composite_key = crypt::derive_composite_key(&[password.as_bytes()]);
+    let composite_key = crypt::derive_composite_key(key_elements);
     let transformed_key = crypt::derive_transformed_key(
         db.header.transform_seed.as_ref(),
         db.header.transform_rounds,
@@ -248,7 +248,13 @@ fn error_if_not_exists<T>(val: Option<T>) -> Result<T> {
 }
 
 impl Database {
-    pub fn open(source: &mut std::io::Read, password: &str) -> Result<Database> {
-        open_db(source, password)
+    pub fn open(source: &mut std::io::Read, password: Option<&str>) -> Result<Database> {
+        let mut key_elements = Vec::new();
+
+        if let Some(p) = password {
+            key_elements.push(p.as_bytes())
+        }
+
+        open_db(source, &key_elements)
     }
 }

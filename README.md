@@ -12,7 +12,7 @@ fn main() {
     // Open KeePass database
     let db = File::open(std::path::Path::new("test/sample.kdbx"))
                  .map_err(|e| OpenDBError::Io(e))
-                 .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
+                 .and_then(|mut db_file| Database::open(&mut db_file, Some("demopass")))
                  .unwrap();
 
     // Iterate over all Groups and Nodes

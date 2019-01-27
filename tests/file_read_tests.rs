@@ -8,7 +8,7 @@ mod tests {
     fn open_db() {
         let db = std::fs::File::open(std::path::Path::new("tests/resources/sample.kdbx"))
             .chain_err(|| "Error open db file")
-            .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
+            .and_then(|mut db_file| Database::open(&mut db_file, Some("demopass")))
             .unwrap();
 
         println!("{:?} DB Opened", db);
