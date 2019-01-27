@@ -217,21 +217,31 @@ fn parse_header(data: &[u8]) -> Result<Header> {
         };
     }
 
-    Ok(Header::new(
+    let outer_cipher_id = error_if_not_exists(outer_cipher_id)?;
+    let compression_flag = error_if_not_exists(compression_flag)?;
+    let master_seed = error_if_not_exists(master_seed)?;
+    let transform_seed = error_if_not_exists(transform_seed)?;
+    let transform_rounds = error_if_not_exists(transform_rounds)?;
+    let outer_iv = error_if_not_exists(outer_iv)?;
+    let protected_stream_key = error_if_not_exists(protected_stream_key)?;
+    let stream_start = error_if_not_exists(stream_start)?;
+    let inner_cipher_id = error_if_not_exists(inner_cipher_id)?;
+
+    Ok(Header {
         version,
         file_major_version,
         file_minor_version,
-        error_if_not_exists(outer_cipher_id)?,
-        error_if_not_exists(compression_flag)?,
-        error_if_not_exists(master_seed)?,
-        error_if_not_exists(transform_seed)?,
-        error_if_not_exists(transform_rounds)?,
-        error_if_not_exists(outer_iv)?,
-        error_if_not_exists(protected_stream_key)?,
-        error_if_not_exists(stream_start)?,
-        error_if_not_exists(inner_cipher_id)?,
-        pos,
-    ))
+        outer_cipher_id,
+        compression_flag,
+        master_seed,
+        transform_seed,
+        transform_rounds,
+        outer_iv,
+        protected_stream_key,
+        stream_start,
+        inner_cipher_id,
+        body_start: pos,
+    })
 }
 
 fn error_if_not_exists<T>(val: Option<T>) -> Result<T> {

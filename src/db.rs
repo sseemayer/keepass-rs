@@ -52,40 +52,6 @@ pub struct Header {
     pub body_start: usize,
 }
 
-impl Header {
-    pub fn new(
-        version: u32,
-        file_major_version: u16,
-        file_minor_version: u16,
-        outer_cipher_id: Vec<u8>,
-        compression_flag: u32,
-        master_seed: Vec<u8>,
-        transform_seed: Vec<u8>,
-        transform_rounds: u64,
-        outer_iv: Vec<u8>,
-        protected_stream_key: Vec<u8>,
-        stream_start: Vec<u8>,
-        inner_cipher_id: u32,
-        body_start: usize,
-    ) -> Self {
-        Header {
-            version: version,
-            file_major_version: file_major_version,
-            file_minor_version: file_minor_version,
-            outer_cipher_id: outer_cipher_id,
-            compression_flag: compression_flag,
-            master_seed: master_seed,
-            transform_seed: transform_seed,
-            transform_rounds: transform_rounds,
-            outer_iv: outer_iv,
-            protected_stream_key: protected_stream_key,
-            stream_start: stream_start,
-            inner_cipher_id: inner_cipher_id,
-            body_start: body_start,
-        }
-    }
-}
-
 pub enum Node<'a> {
     GroupNode(&'a Group),
     EntryNode(&'a Entry),
