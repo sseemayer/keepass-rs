@@ -31,10 +31,9 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
     };
 
     // parse header
-
     let header = parse_header(data.as_ref())?;
+
     let mut pos = header.body_start;
-    println!("Headers {:?}", header);
     let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
 
     let compression: Box<decompress::Decompress> = match header.compression_flag {
@@ -64,14 +63,12 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
 
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
 
-    println!("{:?}", master_key);
-
     // Decrypt payload
     let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
     let payload = crypt::decrypt(&mut *outer_decryptor, payload_encrypted)?;
 
-    let ss: &[u8] = header.stream_start.as_ref();
     // Check if we decrypted correctly
+    let ss: &[u8] = header.stream_start.as_ref();
     if &payload[0..header.stream_start.len()] != ss {
         return Err(ErrorKind::IncorrectKey.into());
     }
@@ -171,8 +168,6 @@ fn parse_header(data: &[u8]) -> Result<Header> {
 
             // COMMENT
             1 => {}
-
-            // COMMENT
 
             // CIPHERID - a UUID specifying which cipher suite
             //            should be used to encrypt the payload
