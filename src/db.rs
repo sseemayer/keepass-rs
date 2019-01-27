@@ -1,6 +1,5 @@
 use result::Result;
 use secstr::SecStr;
-use std;
 use std::collections::HashMap;
 
 /// A decrypted KeePass database
@@ -15,11 +14,19 @@ pub struct Database {
 
 impl Database {
     /// Parse a database from a std::io::Read
-    pub fn open(source: &mut std::io::Read, password: Option<&str>) -> Result<Database> {
-        let mut key_elements = Vec::new();
+    pub fn open(
+        source: &mut std::io::Read,
+        password: Option<&str>,
+        keyfile: Option<&mut std::io::Read>,
+    ) -> Result<Database> {
+        let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
-            key_elements.push(p.as_bytes())
+            key_elements.push(p.as_bytes().to_vec());
+        }
+
+        if let Some(f) = keyfile {
+            key_elements.push(::keyfile::parse(f)?);
         }
 
         ::db_parse::parse(source, &key_elements)

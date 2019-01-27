@@ -8,12 +8,11 @@
 //! use keepass::result::{Result, ResultExt, Error};
 //! use std::fs::File;
 //!
-//! fn main() {
+//! fn main() -> Result<()> {
 //!     // Open KeePass database
-//!     let db = std::fs::File::open(std::path::Path::new("tests/resources/test_db_with_password.kdbx"))
-//!             .chain_err(||"Error open db file")
-//!             .and_then(|mut db_file| Database::open(&mut db_file, Some("demopass")))
-//!             .unwrap();
+//!     let path = std::path::Path::new("tests/resources/test_db_with_password.kdbx");
+//!     let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+//!
 //!     // Iterate over all Groups and Nodes
 //!     for node in &db.root {
 //!         match node {
@@ -28,6 +27,8 @@
 //!             }
 //!         }
 //!     }
+//!
+//!     Ok(())
 //! }
 //! ```
 
@@ -48,6 +49,7 @@ mod db;
 mod db_parse;
 mod decompress;
 pub mod result;
+mod keyfile;
 mod xml_parse;
 
 pub use self::db::*;

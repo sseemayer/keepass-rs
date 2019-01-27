@@ -86,9 +86,18 @@ pub(crate) fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>>
     Ok(final_result)
 }
 
-pub(crate) fn derive_composite_key(elements: &[&[u8]]) -> [u8; 32] {
-    let credentials_hash = calculate_sha256(elements);
-    calculate_sha256(&[&credentials_hash])
+pub(crate) fn derive_composite_key(elements: &Vec<Vec<u8>>) -> [u8; 32] {
+    let credentials_hashes: Vec<[u8; 32]> =
+        elements.iter().map(|c| calculate_sha256(&[c])).collect();
+
+    let mut digest = Sha256::new();
+    for element in credentials_hashes {
+        digest.input(&element);
+    }
+
+    let mut hash = [0u8; 32];
+    digest.result(&mut hash);
+    hash
 }
 
 pub(crate) fn derive_transformed_key(

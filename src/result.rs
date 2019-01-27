@@ -1,6 +1,7 @@
 error_chain! {
     foreign_links {
         Io(::std::io::Error);
+        XML(::xml::reader::Error);
     }
 
     errors {
@@ -19,6 +20,9 @@ error_chain! {
         }
         InvalidHeaderEntry(h: u8)  {
             description("Encountered invalid header entry")
+        }
+        InvalidKeyFile {
+            description("Key file invalid")
         }
         IncompleteHeader {
             description("Invalid file header - missing some required entries")
