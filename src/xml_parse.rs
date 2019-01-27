@@ -1,16 +1,14 @@
-
 use crypto::symmetriccipher::Decryptor;
 
 use base64;
 use secstr::SecStr;
 
-use xml::reader::{EventReader, XmlEvent};
 use xml::name::OwnedName;
+use xml::reader::{EventReader, XmlEvent};
 
 use std::collections::HashMap;
 
 use super::{Entry, Group, Value};
-
 
 enum Node {
     Entry(Entry),
@@ -102,12 +100,10 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                         }
 
                         Node::Group(finished_group) => {
-                            if let Some(
-                                &mut Node::Group(Group {
-                                    ref mut child_groups,
-                                    ..
-                                }),
-                            ) = parsed_stack_head
+                            if let Some(&mut Node::Group(Group {
+                                ref mut child_groups,
+                                ..
+                            })) = parsed_stack_head
                             {
                                 // A Group was finished - add Group to parent Group's child groups
                                 child_groups.push(finished_group);
@@ -118,11 +114,9 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                         }
 
                         Node::Entry(finished_entry) => {
-                            if let Some(
-                                &mut Node::Group(Group {
-                                    ref mut entries, ..
-                                }),
-                            ) = parsed_stack_head
+                            if let Some(&mut Node::Group(Group {
+                                ref mut entries, ..
+                            })) = parsed_stack_head
                             {
                                 // A Entry was finished - add Node to parent Group's entries
                                 entries.push(finished_entry);
@@ -158,7 +152,8 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                                 // Use the decryptor to decrypt the protected
                                 // and base64-encoded value
                                 let buf = base64::decode(&c).unwrap();
-                                let buf_decode = super::crypt::decrypt(decryptor, buf.as_ref()).unwrap();
+                                let buf_decode =
+                                    super::crypt::decrypt(decryptor, buf.as_ref()).unwrap();
                                 let c_decode = String::from_utf8(buf_decode).unwrap();
 
                                 *v = SecStr::from(c_decode);

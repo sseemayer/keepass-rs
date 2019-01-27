@@ -1,13 +1,13 @@
 extern crate keepass;
 
 mod tests {
-    use std;
-    use keepass::*;
     use keepass::result::*;
+    use keepass::*;
+    use std;
     #[test]
     fn open_db() {
         let db = std::fs::File::open(std::path::Path::new("tests/resources/sample.kdbx"))
-            .chain_err(||"Error open db file")
+            .chain_err(|| "Error open db file")
             .and_then(|mut db_file| Database::open(&mut db_file, "demopass"))
             .unwrap();
 

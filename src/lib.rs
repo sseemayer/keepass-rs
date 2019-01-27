@@ -33,28 +33,23 @@
 
 #![recursion_limit = "1024"]
 
-
+extern crate base64;
 extern crate byteorder;
 extern crate crypto;
-extern crate base64;
-extern crate secstr;
 extern crate flate2;
+extern crate secstr;
 extern crate xml;
-
 
 #[macro_use]
 extern crate error_chain;
 
-
 mod crypt;
-mod decompress;
-mod xml_parse;
-pub mod result;
 mod db;
 mod db_parse;
+mod decompress;
+pub mod result;
+mod xml_parse;
 
 pub use self::db::*;
 pub use self::db_parse::*;
 // see https://gist.github.com/msmuenchen/9318327 for file format details
-
-

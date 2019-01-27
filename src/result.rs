@@ -1,4 +1,3 @@
-
 error_chain! {
     foreign_links {
         Io(::std::io::Error);
@@ -37,10 +36,8 @@ error_chain! {
 
 }
 
-
 impl ::std::convert::From<::crypto::symmetriccipher::SymmetricCipherError> for self::Error {
-    fn from(_ce: ::crypto::symmetriccipher::SymmetricCipherError) -> Self{
+    fn from(_ce: ::crypto::symmetriccipher::SymmetricCipherError) -> Self {
         self::ErrorKind::Crypto.into()
     }
 }
-

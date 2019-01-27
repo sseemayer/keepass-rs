@@ -1,5 +1,5 @@
+use super::result::Result;
 use flate2::read::GzDecoder;
-use super::result::{Result};
 use std::io::Read;
 
 pub trait Decompress {

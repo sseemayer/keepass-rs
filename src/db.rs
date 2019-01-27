@@ -1,6 +1,6 @@
 use secstr::SecStr;
-use std::collections::HashMap;
 use std;
+use std::collections::HashMap;
 
 /// A decrypted KeePass database
 #[derive(Debug)]
@@ -21,7 +21,6 @@ pub struct Group {
     /// The list of entries in this group
     pub entries: Vec<Entry>,
 }
-
 
 #[derive(Debug)]
 pub enum Value {
@@ -50,9 +49,8 @@ pub struct Header {
     pub protected_stream_key: Vec<u8>,
     pub stream_start: Vec<u8>,
     pub inner_cipher_id: u32,
-    pub body_start: usize
+    pub body_start: usize,
 }
-
 
 impl Header {
     pub fn new(
@@ -68,7 +66,7 @@ impl Header {
         protected_stream_key: Vec<u8>,
         stream_start: Vec<u8>,
         inner_cipher_id: u32,
-        body_start: usize
+        body_start: usize,
     ) -> Self {
         Header {
             version: version,
@@ -83,7 +81,7 @@ impl Header {
             protected_stream_key: protected_stream_key,
             stream_start: stream_start,
             inner_cipher_id: inner_cipher_id,
-            body_start:body_start
+            body_start: body_start,
         }
     }
 }
@@ -97,7 +95,6 @@ pub enum Node<'a> {
 pub struct NodeIter<'a> {
     queue: Vec<Node<'a>>,
 }
-
 
 impl<'a> Entry {
     /// Get a field by name, taking care of unprotecting Protected values automatically
@@ -125,7 +122,6 @@ impl<'a> Entry {
     }
 }
 
-
 impl<'a> Iterator for NodeIter<'a> {
     type Item = Node<'a>;
 
@@ -133,7 +129,8 @@ impl<'a> Iterator for NodeIter<'a> {
         let res = self.queue.pop();
 
         if let Some(Node::GroupNode(ref g)) = res {
-            self.queue.extend(g.entries.iter().map(|e| Node::EntryNode(&e)));
+            self.queue
+                .extend(g.entries.iter().map(|e| Node::EntryNode(&e)));
             self.queue
                 .extend(g.child_groups.iter().map(|g| Node::GroupNode(&g)));
         }

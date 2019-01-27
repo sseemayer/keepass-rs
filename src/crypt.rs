@@ -1,3 +1,4 @@
+use super::result::Result;
 use crypto::aes::{cbc_decryptor, ecb_encryptor, KeySize};
 use crypto::blockmodes::{NoPadding, PkcsPadding};
 use crypto::buffer::{BufferResult, ReadBuffer, RefReadBuffer, RefWriteBuffer, WriteBuffer};
@@ -5,7 +6,6 @@ use crypto::digest::Digest;
 use crypto::salsa20::Salsa20;
 use crypto::sha2::Sha256;
 use crypto::symmetriccipher::{Decryptor, SymmetricCipherError};
-use super::result::{Result};
 
 pub(crate) trait Cipher {
     fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor>;

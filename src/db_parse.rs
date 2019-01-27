@@ -2,32 +2,15 @@ use byteorder::{ByteOrder, LittleEndian};
 use std;
 
 use super::crypt;
-use super::decompress;
-use super::xml_parse;
-use super::result::{Result, ErrorKind};
 use super::db::{Database, Group, Header};
-
+use super::decompress;
+use super::result::{ErrorKind, Result};
+use super::xml_parse;
 
 const KDBX_IDENTIFIER: [u8; 4] = [0x03, 0xd9, 0xa2, 0x9a];
 const CIPHERSUITE_AES256: [u8; 16] = [
-    0x31,
-    0xc1,
-    0xf2,
-    0xe6,
-    0xbf,
-    0x71,
-    0x43,
-    0x50,
-    0xbe,
-    0x58,
-    0x05,
-    0x21,
-    0x6a,
-    0xfc,
-    0x5a,
-    0xff,
+    0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a, 0xff,
 ];
-
 
 /// Open, decrypt and parse a KeePass database from a source and a password
 pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
@@ -49,7 +32,6 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
 
     // parse header
 
-
     let header = parse_header(data.as_ref())?;
     let mut pos = header.body_start;
     println!("Headers {:?}", header);
@@ -69,7 +51,6 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
         }
     };
 
-
     // Rest of file after header is payload
     let payload_encrypted = &data[pos..];
 
@@ -78,9 +59,8 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
     let transformed_key = crypt::derive_transformed_key(
         header.transform_seed.as_ref(),
         header.transform_rounds,
-        composite_key
+        composite_key,
     )?;
-
 
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
 
@@ -148,12 +128,10 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
     Ok(db)
 }
 
-
 fn parse_header(data: &[u8]) -> Result<Header> {
     let version: u32 = LittleEndian::read_u32(&data[4..8]);
     let file_minor_version: u16 = LittleEndian::read_u16(&data[8..10]);
     let file_major_version: u16 = LittleEndian::read_u16(&data[10..12]);
-
 
     let mut outer_cipher_id: Option<Vec<u8>> = None;
     let mut compression_flag: Option<u32> = None;
@@ -164,7 +142,6 @@ fn parse_header(data: &[u8]) -> Result<Header> {
     let mut protected_stream_key: Option<Vec<u8>> = None;
     let mut stream_start: Option<Vec<u8>> = None;
     let mut inner_cipher_id: Option<u32> = None;
-
 
     // parse header
     let mut pos = 12;
@@ -240,7 +217,6 @@ fn parse_header(data: &[u8]) -> Result<Header> {
         };
     }
 
-
     Ok(Header::new(
         version,
         file_major_version,
@@ -254,9 +230,8 @@ fn parse_header(data: &[u8]) -> Result<Header> {
         error_if_not_exists(protected_stream_key)?,
         error_if_not_exists(stream_start)?,
         error_if_not_exists(inner_cipher_id)?,
-        pos
-    )
-    )
+        pos,
+    ))
 }
 
 fn error_if_not_exists<T>(val: Option<T>) -> Result<T> {
