@@ -5,23 +5,26 @@ KeePass .kdbx database file parser for Rust
 ```rust
 extern crate keepass;
 
-use keepass::{Database, Node, OpenDBError};
+use keepass::{Database, Node};
+use keepass::result::{Result, ResultExt, Error};
 use std::fs::File;
 
-fn main() {
+fn main() -> Result<()> {
     // Open KeePass database
-    let db = File::open(std::path::Path::new("test/resources/test_db_with_password.kdbx"))
-                 .map_err(|e| OpenDBError::Io(e))
-                 .and_then(|mut db_file| Database::open(&mut db_file, Some("demopass"), None))
-                 .unwrap();
+    let path = std::path::Path::new("tests/resources/test_db_with_password.kdbx");
+    let db = Database::open(
+		&mut File::open(path)?,			// the database
+		Some("demopass"),				// password
+		None							// keyfile
+	)?;
 
     // Iterate over all Groups and Nodes
     for node in &db.root {
         match node {
-            Node::Group(g) => {
+            Node::GroupNode(g) => {
                 println!("Saw group '{0}'", g.name);
             },
-            Node::Entry(e) => {
+            Node::EntryNode(e) => {
                 let title = e.get_title().unwrap();
                 let user = e.get_username().unwrap();
                 let pass = e.get_password().unwrap();
@@ -29,6 +32,8 @@ fn main() {
             }
         }
     }
+
+    Ok(())
 }
 ```
 
