@@ -20,6 +20,9 @@ error_chain! {
         InvalidHeaderEntry(h: u8)  {
             description("Encountered invalid header entry")
         }
+        IncompleteHeader {
+            description("Invalid file header - missing some required entries")
+        }
         InvalidCipherID {
             description ("Encountered an invalid cipher ID")
         }

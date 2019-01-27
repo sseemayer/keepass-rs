@@ -212,15 +212,18 @@ fn parse_header(data: &[u8]) -> Result<Header> {
         };
     }
 
-    let outer_cipher_id = error_if_not_exists(outer_cipher_id)?;
-    let compression_flag = error_if_not_exists(compression_flag)?;
-    let master_seed = error_if_not_exists(master_seed)?;
-    let transform_seed = error_if_not_exists(transform_seed)?;
-    let transform_rounds = error_if_not_exists(transform_rounds)?;
-    let outer_iv = error_if_not_exists(outer_iv)?;
-    let protected_stream_key = error_if_not_exists(protected_stream_key)?;
-    let stream_start = error_if_not_exists(stream_start)?;
-    let inner_cipher_id = error_if_not_exists(inner_cipher_id)?;
+    // at this point, the header needs to be fully defined - unwrap options and return errors if
+    // something is missing
+
+    let outer_cipher_id = outer_cipher_id.ok_or(ErrorKind::IncompleteHeader)?;
+    let compression_flag = compression_flag.ok_or(ErrorKind::IncompleteHeader)?;
+    let master_seed = master_seed.ok_or(ErrorKind::IncompleteHeader)?;
+    let transform_seed = transform_seed.ok_or(ErrorKind::IncompleteHeader)?;
+    let transform_rounds = transform_rounds.ok_or(ErrorKind::IncompleteHeader)?;
+    let outer_iv = outer_iv.ok_or(ErrorKind::IncompleteHeader)?;
+    let protected_stream_key = protected_stream_key.ok_or(ErrorKind::IncompleteHeader)?;
+    let stream_start = stream_start.ok_or(ErrorKind::IncompleteHeader)?;
+    let inner_cipher_id = inner_cipher_id.ok_or(ErrorKind::IncompleteHeader)?;
 
     Ok(Header {
         version,
@@ -237,14 +240,6 @@ fn parse_header(data: &[u8]) -> Result<Header> {
         inner_cipher_id,
         body_start: pos,
     })
-}
-
-fn error_if_not_exists<T>(val: Option<T>) -> Result<T> {
-    if let Some(ret) = val {
-        Ok(ret)
-    } else {
-        bail!("Incorrect file header")
-    }
 }
 
 impl Database {
