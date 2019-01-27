@@ -51,5 +51,4 @@ pub mod result;
 mod xml_parse;
 
 pub use self::db::*;
-pub use self::db_parse::*;
 // see https://gist.github.com/msmuenchen/9318327 for file format details

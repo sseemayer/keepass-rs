@@ -1,3 +1,4 @@
+use result::Result;
 use secstr::SecStr;
 use std;
 use std::collections::HashMap;
@@ -10,6 +11,19 @@ pub struct Database {
 
     /// Root node of the KeePass database
     pub root: Group,
+}
+
+impl Database {
+    /// Parse a database from a std::io::Read
+    pub fn open(source: &mut std::io::Read, password: Option<&str>) -> Result<Database> {
+        let mut key_elements = Vec::new();
+
+        if let Some(p) = password {
+            key_elements.push(p.as_bytes())
+        }
+
+        ::db_parse::parse(source, &key_elements)
+    }
 }
 
 /// A database group with child groups and entries

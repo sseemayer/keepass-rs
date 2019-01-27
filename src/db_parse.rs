@@ -13,7 +13,7 @@ const CIPHERSUITE_AES256: [u8; 16] = [
 ];
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub fn open_db(source: &mut std::io::Read, key_elements: &[&[u8]]) -> Result<Database> {
+pub(crate) fn parse(source: &mut std::io::Read, key_elements: &[&[u8]]) -> Result<Database> {
     let mut data = Vec::new();
     source.read_to_end(&mut data)?;
 
@@ -240,16 +240,4 @@ fn parse_header(data: &[u8]) -> Result<Header> {
         inner_cipher_id,
         body_start: pos,
     })
-}
-
-impl Database {
-    pub fn open(source: &mut std::io::Read, password: Option<&str>) -> Result<Database> {
-        let mut key_elements = Vec::new();
-
-        if let Some(p) = password {
-            key_elements.push(p.as_bytes())
-        }
-
-        open_db(source, &key_elements)
-    }
 }
