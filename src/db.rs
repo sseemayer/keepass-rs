@@ -5,6 +5,9 @@ use std::collections::HashMap;
 /// A decrypted KeePass database
 #[derive(Debug)]
 pub struct Database {
+    /// Header information of the KeePass database
+    pub header: Header,
+
     /// Root node of the KeePass database
     pub root: Group,
 }

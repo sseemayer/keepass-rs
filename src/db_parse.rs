@@ -22,7 +22,11 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
         return Err(ErrorKind::InvalidIdentifier.into());
     }
 
+    // parse header
+    let header = parse_header(data.as_ref())?;
+
     let mut db = Database {
+        header,
         root: Group {
             name: "Root".to_owned(),
             child_groups: Vec::new(),
@@ -30,19 +34,16 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
         },
     };
 
-    // parse header
-    let header = parse_header(data.as_ref())?;
-
-    let mut pos = header.body_start;
+    let mut pos = db.header.body_start;
     let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
 
-    let compression: Box<decompress::Decompress> = match header.compression_flag {
+    let compression: Box<decompress::Decompress> = match db.header.compression_flag {
         0 => Box::new(decompress::NoCompression),
         1 => Box::new(decompress::GZipCompression),
         _ => return Err(ErrorKind::InvalidCompressionSuite.into()),
     };
     let outer_cipher: Box<crypt::Cipher> = Box::new(crypt::AES256Cipher);
-    let inner_cipher: Box<crypt::Cipher> = match header.inner_cipher_id {
+    let inner_cipher: Box<crypt::Cipher> = match db.header.inner_cipher_id {
         0 => Box::new(crypt::PlainCipher),
         2 => Box::new(crypt::Salsa20Cipher),
         _ => {
@@ -56,25 +57,24 @@ pub fn open_db(source: &mut std::io::Read, password: &str) -> Result<Database> {
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let composite_key = crypt::derive_composite_key(&[password.as_bytes()]);
     let transformed_key = crypt::derive_transformed_key(
-        header.transform_seed.as_ref(),
-        header.transform_rounds,
+        db.header.transform_seed.as_ref(),
+        db.header.transform_rounds,
         composite_key,
     )?;
 
-    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
+    let master_key = crypt::calculate_sha256(&[db.header.master_seed.as_ref(), &transformed_key]);
 
     // Decrypt payload
-    let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
+    let mut outer_decryptor = outer_cipher.new(&master_key, db.header.outer_iv.as_ref());
     let payload = crypt::decrypt(&mut *outer_decryptor, payload_encrypted)?;
 
     // Check if we decrypted correctly
-    let ss: &[u8] = header.stream_start.as_ref();
-    if &payload[0..header.stream_start.len()] != ss {
+    if &payload[0..db.header.stream_start.len()] != db.header.stream_start.as_slice() {
         return Err(ErrorKind::IncorrectKey.into());
     }
 
     // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()]);
+    let stream_key = crypt::calculate_sha256(&[db.header.protected_stream_key.as_ref()]);
     let mut inner_decryptor = inner_cipher.new(&stream_key, inner_iv);
 
     pos = 32;
