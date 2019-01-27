@@ -40,7 +40,7 @@ Add the following to the `dependencies` section of your `Cargo.toml`:
 keepass = "*"
 ```
 
-## [Documentation](https://sseemayer.github.io/keepass-rs)
+## [Documentation](https://docs.rs/keepass)
 
 ## License
 MIT
