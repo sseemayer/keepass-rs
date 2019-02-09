@@ -34,7 +34,7 @@ impl Database {
 }
 
 /// A database group with child groups and entries
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Group {
     /// The name of the group
     pub name: String,
@@ -53,9 +53,25 @@ pub enum Value {
 }
 
 /// A database entry containing several key-value fields.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Entry {
     pub fields: HashMap<String, Value>,
+    pub autotype: Option<AutoType>,
+}
+
+/// An AutoType setting associated with an Entry
+#[derive(Debug, Default)]
+pub struct AutoType {
+    pub enabled: bool,
+    pub sequence: Option<String>,
+    pub associations: Vec<AutoTypeAssociation>,
+}
+
+/// A window association associated with an AutoType setting
+#[derive(Debug, Default)]
+pub struct AutoTypeAssociation {
+    pub window: Option<String>,
+    pub sequence: Option<String>,
 }
 
 #[derive(Debug)]

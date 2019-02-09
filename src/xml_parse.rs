@@ -6,14 +6,15 @@ use secstr::SecStr;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
-use std::collections::HashMap;
+use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Value};
 
-use super::{Entry, Group, Value};
-
+#[derive(Debug)]
 enum Node {
     Entry(Entry),
     Group(Group),
     KeyValue(String, Value),
+    AutoType(AutoType),
+    AutoTypeAssociation(AutoTypeAssociation),
 }
 
 pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
@@ -25,11 +26,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
     // Stack of XML element names
     let mut xml_stack: Vec<String> = vec![];
 
-    let mut root_group = Group {
-        name: String::new(),
-        child_groups: Vec::new(),
-        entries: Vec::new(),
-    };
+    let mut root_group: Group = Default::default();
 
     for e in parser {
         match e.unwrap() {
@@ -41,24 +38,12 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                 xml_stack.push(local_name.clone());
 
                 match &local_name[..] {
-                    "Group" => {
-                        parsed_stack.push(Node::Group(Group {
-                            name: "".into(),
-                            child_groups: Vec::new(),
-                            entries: Vec::new(),
-                        }));
-                    }
-                    "Entry" => {
-                        parsed_stack.push(Node::Entry(Entry {
-                            fields: HashMap::new(),
-                        }));
-                    }
-                    "String" => {
-                        parsed_stack.push(Node::KeyValue(
-                            String::new(),
-                            Value::Unprotected(String::new()),
-                        ));
-                    }
+                    "Group" => parsed_stack.push(Node::Group(Default::default())),
+                    "Entry" => parsed_stack.push(Node::Entry(Default::default())),
+                    "String" => parsed_stack.push(Node::KeyValue(
+                        String::new(),
+                        Value::Unprotected(String::new()),
+                    )),
                     "Value" => {
                         // Are we encountering a protected value?
                         if attributes
@@ -76,6 +61,10 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                             }
                         }
                     }
+                    "AutoType" => parsed_stack.push(Node::AutoType(Default::default())),
+                    "Association" => {
+                        parsed_stack.push(Node::AutoTypeAssociation(Default::default()))
+                    }
                     _ => {}
                 }
             }
@@ -85,13 +74,15 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
             } => {
                 xml_stack.pop();
 
-                if ["Group", "Entry", "String"].contains(&&local_name[..]) {
+                if ["Group", "Entry", "String", "AutoType", "Association"]
+                    .contains(&&local_name[..])
+                {
                     let finished_node = parsed_stack.pop().unwrap();
                     let parsed_stack_head = parsed_stack.last_mut();
 
                     match finished_node {
                         Node::KeyValue(k, v) => {
-                            if let Some(&mut Node::Entry(Entry { ref mut fields })) =
+                            if let Some(&mut Node::Entry(Entry { ref mut fields, .. })) =
                                 parsed_stack_head
                             {
                                 // A KeyValue was finished inside of an Entry -> add a field
@@ -120,6 +111,25 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                             {
                                 // A Entry was finished - add Node to parent Group's entries
                                 entries.push(finished_entry);
+                            }
+                        }
+
+                        Node::AutoType(at) => {
+                            if let Some(&mut Node::Entry(Entry {
+                                ref mut autotype, ..
+                            })) = parsed_stack_head
+                            {
+                                autotype.replace(at);
+                            }
+                        }
+
+                        Node::AutoTypeAssociation(ata) => {
+                            if let Some(&mut Node::AutoType(AutoType {
+                                ref mut associations,
+                                ..
+                            })) = parsed_stack_head
+                            {
+                                associations.push(ata);
                             }
                         }
                     }
@@ -159,6 +169,21 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                                 *v = SecStr::from(c_decode);
                             }
                         }
+                    }
+                    (Some("Enabled"), Some(&mut Node::AutoType(ref mut at))) => {
+                        at.enabled = c.parse().unwrap_or(false);
+                    }
+                    (Some("DefaultSequence"), Some(&mut Node::AutoType(ref mut at))) => {
+                        at.sequence = Some(c.to_owned());
+                    }
+                    (Some("Window"), Some(&mut Node::AutoTypeAssociation(ref mut ata))) => {
+                        ata.window = Some(c.to_owned());
+                    }
+                    (
+                        Some("KeystrokeSequence"),
+                        Some(&mut Node::AutoTypeAssociation(ref mut ata)),
+                    ) => {
+                        ata.sequence = Some(c.to_owned());
                     }
                     _ => {}
                 }
