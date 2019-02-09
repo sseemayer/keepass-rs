@@ -46,6 +46,44 @@ pub struct Group {
     pub entries: HashMap<String, Entry>,
 }
 
+impl Group {
+    /// Recursively get a Group or Entry by specifying a path relative to the current Group
+    /// ```
+    /// use keepass::{Database, Node};
+    /// use std::{fs::File, path::Path};
+    ///
+    /// let path = Path::new("tests/resources/test_db_with_password.kdbx");
+    /// let db = Database::open(&mut File::open(path).unwrap(), Some("demopass"), None).unwrap();
+    ///
+    /// if let Some(Node::EntryNode(e)) = db.root.get(&["General", "Sample Entry #2"]) {
+    ///     println!("User: {}", e.get_username().unwrap());
+    /// }
+    /// ```
+    pub fn get(&self, path: &[&str]) -> Option<Node> {
+        if path.len() == 0 {
+            Some(Node::GroupNode(self))
+        } else {
+            let p = path[0];
+            let l = path.len();
+
+            if self.entries.contains_key(p) && l == 1 {
+                Some(Node::EntryNode(&self.entries[p]))
+            } else if self.child_groups.contains_key(p) {
+                let g = &self.child_groups[p];
+
+                if l == 1 {
+                    Some(Node::GroupNode(g))
+                } else {
+                    let r = &path[1..];
+                    g.get(r)
+                }
+            } else {
+                None
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Value {
     Unprotected(String),
