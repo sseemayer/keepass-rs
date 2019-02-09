@@ -1,4 +1,9 @@
 # keepass
+
+[![Crates.io](https://img.shields.io/crates/v/keepass.svg)](https://crates.io/crates/keepass)
+[![Documentation](https://docs.rs/keepass/badge.svg)](https://docs.rs/keepass/)
+[![Build Status](https://travis-ci.org/sseemayer/keepass-rs.svg?branch=master)](https://travis-ci.org/sseemayer/keepass-rs)
+
 KeePass .kdbx database file parser for Rust
 
 ## Example
