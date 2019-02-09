@@ -29,8 +29,8 @@ pub(crate) fn parse(source: &mut std::io::Read, key_elements: &Vec<Vec<u8>>) -> 
         header,
         root: Group {
             name: "Root".to_owned(),
-            child_groups: Vec::new(),
-            entries: Vec::new(),
+            child_groups: Default::default(),
+            entries: Default::default(),
         },
     };
 
@@ -112,14 +112,20 @@ pub(crate) fn parse(source: &mut std::io::Read, key_elements: &Vec<Vec<u8>>) -> 
 
         // Parse XML data
         let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor);
-        db.root.child_groups.push(block_group);
+        db.root
+            .child_groups
+            .insert(block_group.name.clone(), block_group);
 
         pos += 40 + block_size;
     }
 
     // Re-root db.root if it contains only one child (if there was only one block)
     if db.root.child_groups.len() == 1 {
-        db.root = db.root.child_groups.pop().unwrap();
+        let mut new_root = Default::default();
+        for (_, v) in db.root.child_groups.drain() {
+            new_root = v
+        }
+        db.root = new_root;
     }
 
     Ok(db)

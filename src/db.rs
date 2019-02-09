@@ -40,10 +40,10 @@ pub struct Group {
     pub name: String,
 
     /// The list of child groups
-    pub child_groups: Vec<Group>,
+    pub child_groups: HashMap<String, Group>,
 
     /// The list of entries in this group
-    pub entries: Vec<Entry>,
+    pub entries: HashMap<String, Entry>,
 }
 
 #[derive(Debug)]
@@ -136,9 +136,9 @@ impl<'a> Iterator for NodeIter<'a> {
 
         if let Some(Node::GroupNode(ref g)) = res {
             self.queue
-                .extend(g.entries.iter().map(|e| Node::EntryNode(&e)));
+                .extend(g.entries.iter().map(|(_, e)| Node::EntryNode(&e)));
             self.queue
-                .extend(g.child_groups.iter().map(|g| Node::GroupNode(&g)));
+                .extend(g.child_groups.iter().map(|(_, g)| Node::GroupNode(&g)));
         }
 
         res

@@ -10,7 +10,7 @@ mod tests {
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
 
         println!("{:?}", db.root);
-        let e = &db.root.entries[0];
+        let e = &db.root.entries["Sample Entry"];
 
         assert_eq!(e.get_title(), Some("Sample Entry"));
         assert_eq!(e.get_username(), Some("User Name"));

@@ -97,7 +97,7 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                             })) = parsed_stack_head
                             {
                                 // A Group was finished - add Group to parent Group's child groups
-                                child_groups.push(finished_group);
+                                child_groups.insert(finished_group.name.clone(), finished_group);
                             } else if let None = parsed_stack_head {
                                 // There is no more parent nodes left -> we are at the root
                                 root_group = finished_group;
@@ -110,7 +110,10 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                             })) = parsed_stack_head
                             {
                                 // A Entry was finished - add Node to parent Group's entries
-                                entries.push(finished_entry);
+                                entries.insert(
+                                    finished_entry.get_title().unwrap().to_owned(),
+                                    finished_entry,
+                                );
                             }
                         }
 
