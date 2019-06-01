@@ -2,33 +2,90 @@ use secstr::SecStr;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use crate::result::{ErrorKind, Result};
-
-pub use crate::parse::kdbx3::KDBX3Header;
+use crate::{
+    crypt, decompress,
+    parse::kdbx3::KDBX3Header,
+    result::{Error, ErrorKind, Result},
+};
 
 const CIPHERSUITE_AES256: [u8; 16] = [
     0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a, 0xff,
 ];
 
-const CIPHERSUITE_ARGON2: [u8; 16] = [
-    0x00, 0x00, 0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc,
-];
-
 #[derive(Debug)]
 pub enum OuterCipherSuite {
     AES256,
-    Argon2,
+}
+
+impl OuterCipherSuite {
+    pub(crate) fn get_cipher(&self) -> Box<crypt::Cipher> {
+        match self {
+            OuterCipherSuite::AES256 => Box::new(crypt::AES256Cipher),
+        }
+    }
 }
 
 impl TryFrom<&[u8]> for OuterCipherSuite {
-    type Error = crate::result::Error;
+    type Error = Error;
     fn try_from(v: &[u8]) -> Result<OuterCipherSuite> {
         if v == CIPHERSUITE_AES256 {
             Ok(OuterCipherSuite::AES256)
-        } else if v == CIPHERSUITE_ARGON2 {
-            Ok(OuterCipherSuite::Argon2)
         } else {
             Err(ErrorKind::InvalidCipherID.into())
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum InnerCipherSuite {
+    Plain,
+    Salsa20,
+}
+
+impl InnerCipherSuite {
+    pub(crate) fn get_cipher(&self) -> Box<crypt::Cipher> {
+        match self {
+            InnerCipherSuite::Plain => Box::new(crypt::PlainCipher),
+            InnerCipherSuite::Salsa20 => Box::new(crypt::Salsa20Cipher),
+        }
+    }
+}
+
+impl TryFrom<u32> for InnerCipherSuite {
+    type Error = Error;
+
+    fn try_from(v: u32) -> Result<InnerCipherSuite> {
+        match v {
+            0 => Ok(InnerCipherSuite::Plain),
+            2 => Ok(InnerCipherSuite::Salsa20),
+            _ => Err(ErrorKind::InvalidCipherID.into()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Compression {
+    None,
+    GZip,
+}
+
+impl Compression {
+    pub(crate) fn get_compression(&self) -> Box<decompress::Decompress> {
+        match self {
+            Compression::None => Box::new(decompress::NoCompression),
+            Compression::GZip => Box::new(decompress::GZipCompression),
+        }
+    }
+}
+
+impl TryFrom<u32> for Compression {
+    type Error = Error;
+
+    fn try_from(v: u32) -> Result<Compression> {
+        match v {
+            0 => Ok(Compression::None),
+            1 => Ok(Compression::GZip),
+            _ => Err(ErrorKind::InvalidCompressionSuite.into()),
         }
     }
 }

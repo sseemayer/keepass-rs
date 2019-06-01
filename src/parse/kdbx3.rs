@@ -1,7 +1,6 @@
 use crate::{
     crypt,
-    db::{Database, Group, OuterCipherSuite},
-    decompress,
+    db::{Compression, Database, Group, InnerCipherSuite, OuterCipherSuite},
     result::{ErrorKind, Result},
     xml_parse,
 };
@@ -19,14 +18,14 @@ pub struct KDBX3Header {
     pub file_major_version: u16,
     pub file_minor_version: u16,
     pub outer_cipher: OuterCipherSuite,
-    pub compression_flag: u32,
+    pub compression: Compression,
     pub master_seed: Vec<u8>,
     pub transform_seed: Vec<u8>,
     pub transform_rounds: u64,
     pub outer_iv: Vec<u8>,
     pub protected_stream_key: Vec<u8>,
     pub stream_start: Vec<u8>,
-    pub inner_cipher_id: u32,
+    pub inner_cipher: InnerCipherSuite,
     pub body_start: usize,
 }
 
@@ -36,14 +35,14 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     let file_major_version: u16 = LittleEndian::read_u16(&data[10..12]);
 
     let mut outer_cipher: Option<OuterCipherSuite> = None;
-    let mut compression_flag: Option<u32> = None;
+    let mut compression: Option<Compression> = None;
     let mut master_seed: Option<Vec<u8>> = None;
     let mut transform_seed: Option<Vec<u8>> = None;
     let mut transform_rounds: Option<u64> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
     let mut protected_stream_key: Option<Vec<u8>> = None;
     let mut stream_start: Option<Vec<u8>> = None;
-    let mut inner_cipher_id: Option<u32> = None;
+    let mut inner_cipher: Option<InnerCipherSuite> = None;
 
     // parse header
     let mut pos = 12;
@@ -77,16 +76,14 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
             // CIPHERID - a UUID specifying which cipher suite
             //            should be used to encrypt the payload
             2 => {
-                if let Ok(oc) = OuterCipherSuite::try_from(entry_buffer) {
-                    outer_cipher = Some(oc)
-                } else {
-                    return Err(ErrorKind::InvalidCompressionSuite.into());
-                }
+                outer_cipher = Some(OuterCipherSuite::try_from(entry_buffer)?);
             }
 
             // COMPRESSIONFLAGS - first byte determines compression of payload
             3 => {
-                compression_flag = Some(LittleEndian::read_u32(&entry_buffer));
+                compression = Some(Compression::try_from(LittleEndian::read_u32(
+                    &entry_buffer,
+                ))?);
             }
 
             // MASTERSEED - Master seed for deriving the master key
@@ -110,7 +107,9 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
             // INNERRANDOMSTREAMID - specifies which cipher suite
             //                       to use for decrypting the inner protected values
             10 => {
-                inner_cipher_id = Some(LittleEndian::read_u32(entry_buffer));
+                inner_cipher = Some(InnerCipherSuite::try_from(LittleEndian::read_u32(
+                    entry_buffer,
+                ))?);
             }
 
             _ => {
@@ -123,28 +122,28 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     // something is missing
 
     let outer_cipher = outer_cipher.ok_or(ErrorKind::IncompleteHeader)?;
-    let compression_flag = compression_flag.ok_or(ErrorKind::IncompleteHeader)?;
+    let compression = compression.ok_or(ErrorKind::IncompleteHeader)?;
     let master_seed = master_seed.ok_or(ErrorKind::IncompleteHeader)?;
     let transform_seed = transform_seed.ok_or(ErrorKind::IncompleteHeader)?;
     let transform_rounds = transform_rounds.ok_or(ErrorKind::IncompleteHeader)?;
     let outer_iv = outer_iv.ok_or(ErrorKind::IncompleteHeader)?;
     let protected_stream_key = protected_stream_key.ok_or(ErrorKind::IncompleteHeader)?;
     let stream_start = stream_start.ok_or(ErrorKind::IncompleteHeader)?;
-    let inner_cipher_id = inner_cipher_id.ok_or(ErrorKind::IncompleteHeader)?;
+    let inner_cipher = inner_cipher.ok_or(ErrorKind::IncompleteHeader)?;
 
     Ok(KDBX3Header {
         version,
         file_major_version,
         file_minor_version,
         outer_cipher,
-        compression_flag,
+        compression,
         master_seed,
         transform_seed,
         transform_rounds,
         outer_iv,
         protected_stream_key,
         stream_start,
-        inner_cipher_id,
+        inner_cipher,
         body_start: pos,
     })
 }
@@ -177,19 +176,10 @@ pub(crate) fn parse(
     let mut pos = db.header.body_start;
     let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
 
-    let compression: Box<decompress::Decompress> = match db.header.compression_flag {
-        0 => Box::new(decompress::NoCompression),
-        1 => Box::new(decompress::GZipCompression),
-        _ => return Err(ErrorKind::InvalidCompressionSuite.into()),
-    };
-    let outer_cipher: Box<crypt::Cipher> = Box::new(crypt::AES256Cipher);
-    let inner_cipher: Box<crypt::Cipher> = match db.header.inner_cipher_id {
-        0 => Box::new(crypt::PlainCipher),
-        2 => Box::new(crypt::Salsa20Cipher),
-        _ => {
-            return Err(ErrorKind::InvalidInnerRandomStreamId.into());
-        }
-    };
+    // Turn enums into appropriate trait objects
+    let compression = db.header.compression.get_compression();
+    let outer_cipher = db.header.outer_cipher.get_cipher();
+    let inner_cipher = db.header.inner_cipher.get_cipher();
 
     // Rest of file after header is payload
     let payload_encrypted = &data[pos..];
