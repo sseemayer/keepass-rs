@@ -140,6 +140,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let composite_key = crypt::derive_composite_key(key_elements);
     let transformed_key = header.kdf.derive_key(&composite_key)?;
+    println!("transformed key is {:x?}", transformed_key);
 
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
 

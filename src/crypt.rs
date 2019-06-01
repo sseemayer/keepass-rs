@@ -146,7 +146,6 @@ pub(crate) fn transform_key_argon2(
     version: u32,
     composite_key: &[u8],
 ) -> Result<[u8; 32]> {
-    println!("Version of argon2 is {}", version);
     let version = match version {
         0x10 => argon2::Version::Version10,
         0x13 => argon2::Version::Version13,
@@ -165,9 +164,7 @@ pub(crate) fn transform_key_argon2(
         version,
     };
 
-    Ok(u8_32_from_slice(&argon2::hash_raw(
-        composite_key,
-        salt,
-        &config,
-    )?))
+    let key = argon2::hash_raw(composite_key, salt, &config)?;
+
+    Ok(u8_32_from_slice(&key))
 }

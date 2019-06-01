@@ -51,7 +51,7 @@ pub(crate) enum VariantDictionaryValue {
 }
 
 impl VariantDictionaryValue {
-    fn get_u32(&self) -> Option<u32> {
+    pub(crate) fn get_u32(&self) -> Option<u32> {
         if let VariantDictionaryValue::UInt32(v) = self {
             Some(v.clone())
         } else {
@@ -59,7 +59,7 @@ impl VariantDictionaryValue {
         }
     }
 
-    fn get_u64(&self) -> Option<u64> {
+    pub(crate) fn get_u64(&self) -> Option<u64> {
         if let VariantDictionaryValue::UInt64(v) = self {
             Some(v.clone())
         } else {
@@ -67,7 +67,7 @@ impl VariantDictionaryValue {
         }
     }
 
-    fn get_bool(&self) -> Option<bool> {
+    pub(crate) fn _get_bool(&self) -> Option<bool> {
         if let VariantDictionaryValue::Bool(v) = self {
             Some(v.clone())
         } else {
@@ -75,7 +75,7 @@ impl VariantDictionaryValue {
         }
     }
 
-    fn get_i32(&self) -> Option<i32> {
+    pub(crate) fn _get_i32(&self) -> Option<i32> {
         if let VariantDictionaryValue::Int32(v) = self {
             Some(v.clone())
         } else {
@@ -83,7 +83,7 @@ impl VariantDictionaryValue {
         }
     }
 
-    fn get_i64(&self) -> Option<i64> {
+    pub(crate) fn _get_i64(&self) -> Option<i64> {
         if let VariantDictionaryValue::Int64(v) = self {
             Some(v.clone())
         } else {
@@ -91,7 +91,7 @@ impl VariantDictionaryValue {
         }
     }
 
-    fn get_string(&self) -> Option<String> {
+    pub(crate) fn _get_string(&self) -> Option<String> {
         if let VariantDictionaryValue::String(v) = self {
             Some(v.clone())
         } else {
@@ -99,7 +99,7 @@ impl VariantDictionaryValue {
         }
     }
 
-    fn get_bytearray(&self) -> Option<Vec<u8>> {
+    pub(crate) fn get_bytearray(&self) -> Option<Vec<u8>> {
         if let VariantDictionaryValue::ByteArray(v) = self {
             Some(v.clone())
         } else {
