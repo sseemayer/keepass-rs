@@ -37,6 +37,9 @@ error_chain! {
         InvalidInnerRandomStreamId {
             description("Encountered an invalid inner stream cipher")
         }
+        InvalidKDBXVersion {
+            description("Invalid KDBX database file version")
+        }
         BlockHashMismatch {
             description( "Block hash verification failed"),
         }

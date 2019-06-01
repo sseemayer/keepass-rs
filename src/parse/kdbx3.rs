@@ -34,6 +34,10 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     let file_minor_version: u16 = LittleEndian::read_u16(&data[8..10]);
     let file_major_version: u16 = LittleEndian::read_u16(&data[10..12]);
 
+    if version != 0xb54bfb67 || file_major_version != 3 {
+        return Err(ErrorKind::InvalidKDBXVersion.into());
+    }
+
     let mut outer_cipher: Option<OuterCipherSuite> = None;
     let mut compression: Option<Compression> = None;
     let mut master_seed: Option<Vec<u8>> = None;
