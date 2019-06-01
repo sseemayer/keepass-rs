@@ -6,7 +6,7 @@ mod tests {
     use std::{fs::File, path::Path};
 
     #[test]
-    fn open_with_password() -> Result<()> {
+    fn open_kdbx3_with_password() -> Result<()> {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
 
@@ -42,7 +42,7 @@ mod tests {
     }
 
     #[test]
-    fn open_with_keyfile() -> Result<()> {
+    fn open_kdbx3_with_keyfile() -> Result<()> {
         let path = Path::new("tests/resources/test_db_with_keyfile.kdbx");
         let kf_path = Path::new("tests/resources/test_key.key");
         let db = Database::open(
@@ -78,6 +78,39 @@ mod tests {
         assert_eq!(total_entries, 1);
 
         println!("{:?}", db);
+
+        Ok(())
+    }
+
+    #[test]
+    fn open_kdbx4_with_password() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password.kdbx");
+
+        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.entries.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn open_kdbx4_with_keyfile() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_keyfile.kdbx");
+        let kf_path = Path::new("tests/resources/test_key.key");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            None,
+            Some(&mut File::open(kf_path)?),
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.entries.len(), 1);
 
         Ok(())
     }
