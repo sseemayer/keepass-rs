@@ -1,4 +1,5 @@
-use super::result::Result;
+use super::result::{ErrorKind, Result};
+use argon2;
 use crypto::aes::{cbc_decryptor, ecb_encryptor, KeySize};
 use crypto::blockmodes::{NoPadding, PkcsPadding};
 use crypto::buffer::{BufferResult, ReadBuffer, RefReadBuffer, RefWriteBuffer, WriteBuffer};
@@ -6,6 +7,13 @@ use crypto::digest::Digest;
 use crypto::salsa20::Salsa20;
 use crypto::sha2::Sha256;
 use crypto::symmetriccipher::{Decryptor, SymmetricCipherError};
+
+pub(crate) fn u8_32_from_slice(bytes: &[u8]) -> [u8; 32] {
+    let mut array = [0; 32];
+    let bytes = &bytes[..array.len()]; // panics if not enough data
+    array.copy_from_slice(bytes);
+    array
+}
 
 pub(crate) trait Cipher {
     fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor>;
@@ -35,7 +43,7 @@ impl Cipher for PlainCipher {
     }
 }
 
-struct NoOpDecryptor;
+pub(crate) struct NoOpDecryptor;
 
 impl Decryptor for NoOpDecryptor {
     fn decrypt(
@@ -100,7 +108,7 @@ pub(crate) fn derive_composite_key(elements: &Vec<Vec<u8>>) -> [u8; 32] {
     hash
 }
 
-pub(crate) fn derive_transformed_key(
+pub(crate) fn transform_key_aes(
     transform_seed: &[u8],
     transform_rounds: u64,
     composite_key: [u8; 32],
@@ -128,4 +136,38 @@ pub(crate) fn derive_transformed_key(
     }
 
     Ok(calculate_sha256(&[&key]))
+}
+
+pub(crate) fn transform_key_argon2(
+    memory: u64,
+    salt: &[u8],
+    iterations: u64,
+    parallelism: u32,
+    version: u32,
+    composite_key: &[u8],
+) -> Result<[u8; 32]> {
+    println!("Version of argon2 is {}", version);
+    let version = match version {
+        0x10 => argon2::Version::Version10,
+        0x13 => argon2::Version::Version13,
+        _ => return Err(ErrorKind::InvalidKdfParams.into()),
+    };
+
+    let config = argon2::Config {
+        ad: &[],
+        hash_length: 32,
+        lanes: parallelism,
+        mem_cost: (memory / 1024) as u32,
+        secret: &[],
+        thread_mode: argon2::ThreadMode::default(),
+        time_cost: iterations as u32,
+        variant: argon2::Variant::Argon2d,
+        version,
+    };
+
+    Ok(u8_32_from_slice(&argon2::hash_raw(
+        composite_key,
+        salt,
+        &config,
+    )?))
 }

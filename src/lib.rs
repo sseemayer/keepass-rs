@@ -34,10 +34,12 @@
 
 #![recursion_limit = "1024"]
 
+extern crate argon2;
 extern crate base64;
 extern crate byteorder;
 extern crate crypto;
 extern crate flate2;
+extern crate hex_literal;
 extern crate secstr;
 extern crate xml;
 

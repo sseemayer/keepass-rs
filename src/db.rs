@@ -1,16 +1,18 @@
+use hex_literal::hex;
 use secstr::SecStr;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
 use crate::{
     crypt, decompress,
-    parse::kdbx3::KDBX3Header,
+    parse::{kdbx3::KDBX3Header, kdbx4::KDBX4Header},
     result::{Error, ErrorKind, Result},
 };
 
-const CIPHERSUITE_AES256: [u8; 16] = [
-    0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a, 0xff,
-];
+const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
+const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
+const _CIPHERSUITE_TWOFISH: [u8; 16] = hex!("ad68f29f576f4bb9a36ad47af965346c");
+const _CIPHERSUITE_CHACHA20: [u8; 16] = hex!("d6038a2b8b6f4cb5a524339a31dbb59a");
 
 #[derive(Debug)]
 pub enum OuterCipherSuite {
@@ -31,7 +33,158 @@ impl TryFrom<&[u8]> for OuterCipherSuite {
         if v == CIPHERSUITE_AES256 {
             Ok(OuterCipherSuite::AES256)
         } else {
+            println!("Unknown outer cipher: {:x?}", v);
             Err(ErrorKind::InvalidCipherID.into())
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum VariantDictionaryValue {
+    UInt32(u32),
+    UInt64(u64),
+    Bool(bool),
+    Int32(i32),
+    Int64(i64),
+    String(String),
+    ByteArray(Vec<u8>),
+}
+
+impl VariantDictionaryValue {
+    fn get_u32(&self) -> Option<u32> {
+        if let VariantDictionaryValue::UInt32(v) = self {
+            Some(v.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_u64(&self) -> Option<u64> {
+        if let VariantDictionaryValue::UInt64(v) = self {
+            Some(v.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_bool(&self) -> Option<bool> {
+        if let VariantDictionaryValue::Bool(v) = self {
+            Some(v.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_i32(&self) -> Option<i32> {
+        if let VariantDictionaryValue::Int32(v) = self {
+            Some(v.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_i64(&self) -> Option<i64> {
+        if let VariantDictionaryValue::Int64(v) = self {
+            Some(v.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_string(&self) -> Option<String> {
+        if let VariantDictionaryValue::String(v) = self {
+            Some(v.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_bytearray(&self) -> Option<Vec<u8>> {
+        if let VariantDictionaryValue::ByteArray(v) = self {
+            Some(v.clone())
+        } else {
+            None
+        }
+    }
+}
+
+const _KDF_AES_KDBX3: [u8; 16] = hex!("c9d9f39a628a4460bf740d08c18a4fea");
+const _KDF_AES_KDBX4: [u8; 16] = hex!("7c02bb8279a74ac0927d114a00648238");
+const KDF_ARGON2: [u8; 16] = hex!("ef636ddf8c29444b91f7a9a403e30a0c");
+
+#[derive(Debug)]
+pub enum KDFSettings {
+    //AESKDBX3 {
+    //    seed: [u8; 8],
+    //    rounds: u64,
+    //},
+    //AESKDBX4 {
+    //    seed: [u8; 8],
+    //    rounds: u64,
+    //},
+    Argon2 {
+        memory: u64,      // M
+        salt: [u8; 32],   // S
+        iterations: u64,  // I
+        parallelism: u32, // P
+        version: u32,     // V
+    },
+}
+
+impl KDFSettings {
+    pub(crate) fn derive_key(&self, composite_key: &[u8; 32]) -> Result<[u8; 32]> {
+        match self {
+            KDFSettings::Argon2 {
+                memory,
+                salt,
+                iterations,
+                parallelism,
+                version,
+            } => crypt::transform_key_argon2(
+                *memory,
+                salt,
+                *iterations,
+                *parallelism,
+                *version,
+                composite_key,
+            ),
+        }
+    }
+}
+
+/// Convenience method for accessing VariantDictionary values
+fn get_vd<R, F>(dict: &HashMap<String, VariantDictionaryValue>, key: &str, f: F) -> Result<R>
+where
+    F: FnOnce(&VariantDictionaryValue) -> Option<R>,
+{
+    dict.get(key)
+        .and_then(f)
+        .ok_or(ErrorKind::InvalidKdfParams.into())
+}
+
+impl TryFrom<&HashMap<String, VariantDictionaryValue>> for KDFSettings {
+    type Error = Error;
+
+    fn try_from(v: &HashMap<String, VariantDictionaryValue>) -> Result<KDFSettings> {
+        let uuid = get_vd(v, "$UUID", VariantDictionaryValue::get_bytearray)?;
+
+        if uuid == KDF_ARGON2 {
+            let memory = get_vd(v, "M", VariantDictionaryValue::get_u64)?;
+            let salt =
+                crypt::u8_32_from_slice(&get_vd(v, "S", VariantDictionaryValue::get_bytearray)?);
+            let iterations = get_vd(v, "I", VariantDictionaryValue::get_u64)?;
+            let parallelism = get_vd(v, "P", VariantDictionaryValue::get_u32)?;
+            let version = get_vd(v, "V", VariantDictionaryValue::get_u32)?;
+
+            Ok(KDFSettings::Argon2 {
+                memory,
+                salt,
+                iterations,
+                parallelism,
+                version,
+            })
+        } else {
+            return Err(ErrorKind::InvalidKdfParams.into());
         }
     }
 }
@@ -93,6 +246,7 @@ impl TryFrom<u32> for Compression {
 #[derive(Debug)]
 pub enum Header {
     KDBX3(KDBX3Header),
+    KDBX4(KDBX4Header),
 }
 
 /// A decrypted KeePass database
@@ -129,6 +283,7 @@ impl Database {
 
         match file_major_version {
             3 => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
+            4 => crate::parse::kdbx4::parse(data.as_ref(), &key_elements),
             _ => Err(ErrorKind::InvalidKDBXVersion.into()),
         }
     }

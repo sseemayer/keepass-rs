@@ -1,16 +1,19 @@
+use std::collections::HashMap;
+use std::convert::TryFrom;
+
 use crate::{
     crypt,
-    db::{Compression, Database, Group, Header, InnerCipherSuite, OuterCipherSuite},
+    db::{
+        Compression, Database, Group, Header, KDFSettings, OuterCipherSuite, VariantDictionaryValue,
+    },
     result::{ErrorKind, Result},
     xml_parse,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
 
-use std::convert::TryFrom;
-
 #[derive(Debug)]
-pub struct KDBX3Header {
+pub struct KDBX4Header {
     // https://gist.github.com/msmuenchen/9318327
     pub version: u32,
     pub file_major_version: u16,
@@ -18,31 +21,23 @@ pub struct KDBX3Header {
     pub outer_cipher: OuterCipherSuite,
     pub compression: Compression,
     pub master_seed: Vec<u8>,
-    pub transform_seed: Vec<u8>,
-    pub transform_rounds: u64,
     pub outer_iv: Vec<u8>,
-    pub protected_stream_key: Vec<u8>,
-    pub stream_start: Vec<u8>,
-    pub inner_cipher: InnerCipherSuite,
+    pub kdf: KDFSettings,
     pub body_start: usize,
 }
 
-fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
+fn parse_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
-    if version != 0xb54bfb67 || file_major_version != 3 {
+    if version != 0xb54bfb67 || file_major_version != 4 {
         return Err(ErrorKind::InvalidKDBXVersion.into());
     }
 
     let mut outer_cipher: Option<OuterCipherSuite> = None;
     let mut compression: Option<Compression> = None;
     let mut master_seed: Option<Vec<u8>> = None;
-    let mut transform_seed: Option<Vec<u8>> = None;
-    let mut transform_rounds: Option<u64> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
-    let mut protected_stream_key: Option<Vec<u8>> = None;
-    let mut stream_start: Option<Vec<u8>> = None;
-    let mut inner_cipher: Option<InnerCipherSuite> = None;
+    let mut kdf: Option<KDFSettings> = None;
 
     // parse header
     let mut pos = 12;
@@ -54,15 +49,15 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
         //
         // (
         //   entry_type: u8,                        // a numeric entry type identifier
-        //   entry_length: u16,                     // length of the entry buffer
+        //   entry_length: u32,                     // length of the entry buffer
         //   entry_buffer: [u8; entry_length]       // the entry buffer
         // )
 
         let entry_type = data[pos];
-        let entry_length: usize = LittleEndian::read_u16(&data[pos + 1..(pos + 3)]) as usize;
-        let entry_buffer = &data[(pos + 3)..(pos + 3 + entry_length)];
+        let entry_length: usize = LittleEndian::read_u32(&data[pos + 1..(pos + 5)]) as usize;
+        let entry_buffer = &data[(pos + 5)..(pos + 5 + entry_length)];
 
-        pos += 3 + entry_length;
+        pos += 5 + entry_length;
 
         match entry_type {
             // END - finished parsing header
@@ -89,27 +84,13 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
             // MASTERSEED - Master seed for deriving the master key
             4 => master_seed = Some(entry_buffer.clone().to_vec()),
 
-            // TRANSFORMSEED - Seed used in deriving the transformed key
-            5 => transform_seed = Some(entry_buffer.clone().to_vec()),
-
-            // TRANSFORMROUNDS - Number of rounds used in derivation of transformed key
-            6 => transform_rounds = Some(LittleEndian::read_u64(entry_buffer)),
-
             // ENCRYPTIONIV - Initialization Vector for decrypting the payload
             7 => outer_iv = Some(entry_buffer.clone().to_vec()),
 
-            // PROTECTEDSTREAMKEY - Key for decrypting the inner protected values
-            8 => protected_stream_key = Some(entry_buffer.clone().to_vec()),
-
-            // STREAMSTARTBYTES - First bytes of decrypted payload (to check correct decryption)
-            9 => stream_start = Some(entry_buffer.clone().to_vec()),
-
-            // INNERRANDOMSTREAMID - specifies which cipher suite
-            //                       to use for decrypting the inner protected values
-            10 => {
-                inner_cipher = Some(InnerCipherSuite::try_from(LittleEndian::read_u32(
-                    entry_buffer,
-                ))?);
+            // KdfParameters
+            11 => {
+                let kdf_params = parse_variant_dictionary(entry_buffer)?;
+                kdf = Some(KDFSettings::try_from(&kdf_params)?);
             }
 
             _ => {
@@ -124,26 +105,20 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     let outer_cipher = outer_cipher.ok_or(ErrorKind::IncompleteHeader)?;
     let compression = compression.ok_or(ErrorKind::IncompleteHeader)?;
     let master_seed = master_seed.ok_or(ErrorKind::IncompleteHeader)?;
-    let transform_seed = transform_seed.ok_or(ErrorKind::IncompleteHeader)?;
-    let transform_rounds = transform_rounds.ok_or(ErrorKind::IncompleteHeader)?;
     let outer_iv = outer_iv.ok_or(ErrorKind::IncompleteHeader)?;
-    let protected_stream_key = protected_stream_key.ok_or(ErrorKind::IncompleteHeader)?;
-    let stream_start = stream_start.ok_or(ErrorKind::IncompleteHeader)?;
-    let inner_cipher = inner_cipher.ok_or(ErrorKind::IncompleteHeader)?;
+    let kdf = kdf.ok_or(ErrorKind::IncompleteHeader)?;
 
-    Ok(KDBX3Header {
+    println!("KDF {:x?}", kdf);
+
+    Ok(KDBX4Header {
         version,
         file_major_version,
         file_minor_version,
         outer_cipher,
         compression,
         master_seed,
-        transform_seed,
-        transform_rounds,
         outer_iv,
-        protected_stream_key,
-        stream_start,
-        inner_cipher,
+        kdf,
         body_start: pos,
     })
 }
@@ -154,41 +129,33 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let header = parse_header(data)?;
 
     let mut pos = header.body_start;
-    let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
 
     // Turn enums into appropriate trait objects
     let compression = header.compression.get_compression();
     let outer_cipher = header.outer_cipher.get_cipher();
-    let inner_cipher = header.inner_cipher.get_cipher();
 
     // Rest of file after header is payload
     let payload_encrypted = &data[pos..];
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let composite_key = crypt::derive_composite_key(key_elements);
-    let transformed_key = crypt::transform_key_aes(
-        header.transform_seed.as_ref(),
-        header.transform_rounds,
-        composite_key,
-    )?;
+    let transformed_key = header.kdf.derive_key(&composite_key)?;
 
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
+
+    println!("Master key is {:x?}", master_key);
+
+    // TODO check hmac
 
     // Decrypt payload
     let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
     let payload = crypt::decrypt(&mut *outer_decryptor, payload_encrypted)?;
 
-    // Check if we decrypted correctly
-    if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
-        return Err(ErrorKind::IncorrectKey.into());
-    }
-
-    // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()]);
-    let mut inner_decryptor = inner_cipher.new(&stream_key, inner_iv);
+    // No inner decryptor for KDBX4
+    let mut inner_decryptor = Box::new(crypt::NoOpDecryptor);
 
     let mut db = Database {
-        header: Header::KDBX3(header),
+        header: Header::KDBX4(header),
         root: Group {
             name: "Root".to_owned(),
             child_groups: Default::default(),
@@ -248,4 +215,50 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     }
 
     Ok(db)
+}
+
+/// Read KDBX4 VariantDictionary data structures
+fn parse_variant_dictionary(data: &[u8]) -> Result<HashMap<String, VariantDictionaryValue>> {
+    let version = LittleEndian::read_u16(&data[0..2]);
+
+    if version != 0x100 {
+        return Err(ErrorKind::InvalidVariantDictionaryVersion.into());
+    }
+
+    let mut pos = 2;
+    let mut out = HashMap::new();
+
+    while pos < data.len() - 9 {
+        let value_type = data[pos];
+        pos += 1;
+
+        let key_length = LittleEndian::read_u32(&data[pos..(pos + 4)]) as usize;
+        pos += 4;
+
+        let key = std::str::from_utf8(&data[pos..(pos + key_length)])?.to_owned();
+        pos += key_length;
+
+        let value_length = LittleEndian::read_u32(&data[pos..(pos + 4)]) as usize;
+        pos += 4;
+
+        let value_buffer = &data[pos..(pos + value_length)];
+        pos += value_length;
+
+        let value = match value_type {
+            0x04 => VariantDictionaryValue::UInt32(LittleEndian::read_u32(value_buffer)),
+            0x05 => VariantDictionaryValue::UInt64(LittleEndian::read_u64(value_buffer)),
+            0x08 => VariantDictionaryValue::Bool(value_buffer != [0]),
+            0x0c => VariantDictionaryValue::Int32(LittleEndian::read_i32(value_buffer)),
+            0x0d => VariantDictionaryValue::Int64(LittleEndian::read_i64(value_buffer)),
+            0x18 => VariantDictionaryValue::String(std::str::from_utf8(value_buffer)?.into()),
+            0x42 => VariantDictionaryValue::ByteArray(value_buffer.to_vec()),
+            _ => {
+                return Err(ErrorKind::InvalidVariantDictionaryValueType.into());
+            }
+        };
+
+        out.insert(key, value);
+    }
+
+    Ok(out)
 }

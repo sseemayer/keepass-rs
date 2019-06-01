@@ -3,6 +3,7 @@ error_chain! {
         Io(::std::io::Error);
         XML(::xml::reader::Error);
         UTF8(::std::str::Utf8Error);
+        Argon2(::argon2::Error);
     }
 
     errors {
@@ -37,8 +38,17 @@ error_chain! {
         InvalidInnerRandomStreamId {
             description("Encountered an invalid inner stream cipher")
         }
+        InvalidVariantDictionaryVersion {
+            description("Encountered an invalid VariantDictionary version")
+        }
+        InvalidVariantDictionaryValueType {
+            description("Encountered an invalid VariantDictionary value type")
+        }
         InvalidKDBXVersion {
             description("Invalid KDBX database file version")
+        }
+        InvalidKdfParams {
+            description("KDF parameters invalid")
         }
         BlockHashMismatch {
             description( "Block hash verification failed"),
