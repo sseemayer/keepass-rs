@@ -46,7 +46,6 @@ extern crate error_chain;
 
 mod crypt;
 mod db;
-mod db_parse;
 mod decompress;
 mod keyfile;
 pub mod result;
