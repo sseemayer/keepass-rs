@@ -2,6 +2,7 @@ error_chain! {
     foreign_links {
         Io(::std::io::Error);
         XML(::xml::reader::Error);
+        UTF8(::std::str::Utf8Error);
     }
 
     errors {

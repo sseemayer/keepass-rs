@@ -48,9 +48,11 @@ mod crypt;
 mod db;
 mod db_parse;
 mod decompress;
-pub mod result;
 mod keyfile;
+pub mod result;
 mod xml_parse;
+
+pub(crate) mod parse;
 
 pub use self::db::*;
 // see https://gist.github.com/msmuenchen/9318327 for file format details

@@ -1,24 +1,55 @@
-use result::Result;
 use secstr::SecStr;
 use std::collections::HashMap;
+use std::convert::TryFrom;
+
+use crate::result::{ErrorKind, Result};
+
+pub use crate::parse::kdbx3::KDBX3Header;
+
+const CIPHERSUITE_AES256: [u8; 16] = [
+    0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a, 0xff,
+];
+
+const CIPHERSUITE_ARGON2: [u8; 16] = [
+    0x00, 0x00, 0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc,
+];
+
+#[derive(Debug)]
+pub enum OuterCipherSuite {
+    AES256,
+    Argon2,
+}
+
+impl TryFrom<&[u8]> for OuterCipherSuite {
+    type Error = crate::result::Error;
+    fn try_from(v: &[u8]) -> Result<OuterCipherSuite> {
+        if v == CIPHERSUITE_AES256 {
+            Ok(OuterCipherSuite::AES256)
+        } else if v == CIPHERSUITE_ARGON2 {
+            Ok(OuterCipherSuite::Argon2)
+        } else {
+            Err(ErrorKind::InvalidCipherID.into())
+        }
+    }
+}
 
 /// A decrypted KeePass database
 #[derive(Debug)]
-pub struct Database {
+pub struct Database<H> {
     /// Header information of the KeePass database
-    pub header: Header,
+    pub header: H,
 
     /// Root node of the KeePass database
     pub root: Group,
 }
 
-impl Database {
+impl Database<KDBX3Header> {
     /// Parse a database from a std::io::Read
     pub fn open(
         source: &mut std::io::Read,
         password: Option<&str>,
         keyfile: Option<&mut std::io::Read>,
-    ) -> Result<Database> {
+    ) -> Result<Database<KDBX3Header>> {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
@@ -29,7 +60,7 @@ impl Database {
             key_elements.push(::keyfile::parse(f)?);
         }
 
-        ::db_parse::parse(source, &key_elements)
+        ::parse::kdbx3::parse(source, &key_elements)
     }
 }
 
@@ -110,24 +141,6 @@ pub struct AutoType {
 pub struct AutoTypeAssociation {
     pub window: Option<String>,
     pub sequence: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct Header {
-    //https://gist.github.com/msmuenchen/9318327
-    pub version: u32,
-    pub file_major_version: u16,
-    pub file_minor_version: u16,
-    pub outer_cipher_id: Vec<u8>,
-    pub compression_flag: u32,
-    pub master_seed: Vec<u8>,
-    pub transform_seed: Vec<u8>,
-    pub transform_rounds: u64,
-    pub outer_iv: Vec<u8>,
-    pub protected_stream_key: Vec<u8>,
-    pub stream_start: Vec<u8>,
-    pub inner_cipher_id: u32,
-    pub body_start: usize,
 }
 
 pub enum Node<'a> {
