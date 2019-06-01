@@ -149,12 +149,9 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub(crate) fn parse(source: &mut std::io::Read, key_elements: &Vec<Vec<u8>>) -> Result<Database> {
-    let mut data = Vec::new();
-    source.read_to_end(&mut data)?;
-
+pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database> {
     // parse header
-    let header = parse_header(data.as_ref())?;
+    let header = parse_header(data)?;
 
     let mut pos = header.body_start;
     let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];

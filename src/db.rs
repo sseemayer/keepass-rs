@@ -122,7 +122,15 @@ impl Database {
             key_elements.push(::keyfile::parse(f)?);
         }
 
-        ::parse::kdbx3::parse(source, &key_elements)
+        let mut data = Vec::new();
+        source.read_to_end(&mut data)?;
+
+        let (_, file_major_version, _) = crate::parse::get_kdbx_version(data.as_ref())?;
+
+        match file_major_version {
+            3 => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
+            _ => Err(ErrorKind::InvalidKDBXVersion.into()),
+        }
     }
 }
 
