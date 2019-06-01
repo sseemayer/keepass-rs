@@ -90,23 +90,28 @@ impl TryFrom<u32> for Compression {
     }
 }
 
+#[derive(Debug)]
+pub enum Header {
+    KDBX3(KDBX3Header),
+}
+
 /// A decrypted KeePass database
 #[derive(Debug)]
-pub struct Database<H> {
+pub struct Database {
     /// Header information of the KeePass database
-    pub header: H,
+    pub header: Header,
 
     /// Root node of the KeePass database
     pub root: Group,
 }
 
-impl Database<KDBX3Header> {
+impl Database {
     /// Parse a database from a std::io::Read
     pub fn open(
         source: &mut std::io::Read,
         password: Option<&str>,
         keyfile: Option<&mut std::io::Read>,
-    ) -> Result<Database<KDBX3Header>> {
+    ) -> Result<Database> {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {

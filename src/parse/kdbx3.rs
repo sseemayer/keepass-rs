@@ -1,6 +1,6 @@
 use crate::{
     crypt,
-    db::{Compression, Database, Group, InnerCipherSuite, OuterCipherSuite},
+    db::{Compression, Database, Group, Header, InnerCipherSuite, OuterCipherSuite},
     result::{ErrorKind, Result},
     xml_parse,
 };
@@ -8,8 +8,6 @@ use crate::{
 use byteorder::{ByteOrder, LittleEndian};
 
 use std::convert::TryFrom;
-
-const KDBX_IDENTIFIER: [u8; 4] = [0x03, 0xd9, 0xa2, 0x9a];
 
 #[derive(Debug)]
 pub struct KDBX3Header {
@@ -30,7 +28,7 @@ pub struct KDBX3Header {
 }
 
 fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
-    let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data);
+    let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
     if version != 0xb54bfb67 || file_major_version != 3 {
         return Err(ErrorKind::InvalidKDBXVersion.into());
@@ -151,37 +149,20 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub(crate) fn parse(
-    source: &mut std::io::Read,
-    key_elements: &Vec<Vec<u8>>,
-) -> Result<Database<KDBX3Header>> {
+pub(crate) fn parse(source: &mut std::io::Read, key_elements: &Vec<Vec<u8>>) -> Result<Database> {
     let mut data = Vec::new();
     source.read_to_end(&mut data)?;
-
-    // check identifier
-    if data[0..4] != KDBX_IDENTIFIER {
-        return Err(ErrorKind::InvalidIdentifier.into());
-    }
 
     // parse header
     let header = parse_header(data.as_ref())?;
 
-    let mut db = Database {
-        header,
-        root: Group {
-            name: "Root".to_owned(),
-            child_groups: Default::default(),
-            entries: Default::default(),
-        },
-    };
-
-    let mut pos = db.header.body_start;
+    let mut pos = header.body_start;
     let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
 
     // Turn enums into appropriate trait objects
-    let compression = db.header.compression.get_compression();
-    let outer_cipher = db.header.outer_cipher.get_cipher();
-    let inner_cipher = db.header.inner_cipher.get_cipher();
+    let compression = header.compression.get_compression();
+    let outer_cipher = header.outer_cipher.get_cipher();
+    let inner_cipher = header.inner_cipher.get_cipher();
 
     // Rest of file after header is payload
     let payload_encrypted = &data[pos..];
@@ -189,25 +170,34 @@ pub(crate) fn parse(
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let composite_key = crypt::derive_composite_key(key_elements);
     let transformed_key = crypt::derive_transformed_key(
-        db.header.transform_seed.as_ref(),
-        db.header.transform_rounds,
+        header.transform_seed.as_ref(),
+        header.transform_rounds,
         composite_key,
     )?;
 
-    let master_key = crypt::calculate_sha256(&[db.header.master_seed.as_ref(), &transformed_key]);
+    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
 
     // Decrypt payload
-    let mut outer_decryptor = outer_cipher.new(&master_key, db.header.outer_iv.as_ref());
+    let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
     let payload = crypt::decrypt(&mut *outer_decryptor, payload_encrypted)?;
 
     // Check if we decrypted correctly
-    if &payload[0..db.header.stream_start.len()] != db.header.stream_start.as_slice() {
+    if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
         return Err(ErrorKind::IncorrectKey.into());
     }
 
     // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = crypt::calculate_sha256(&[db.header.protected_stream_key.as_ref()]);
+    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()]);
     let mut inner_decryptor = inner_cipher.new(&stream_key, inner_iv);
+
+    let mut db = Database {
+        header: Header::KDBX3(header),
+        root: Group {
+            name: "Root".to_owned(),
+            child_groups: Default::default(),
+            entries: Default::default(),
+        },
+    };
 
     pos = 32;
     loop {
