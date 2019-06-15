@@ -20,7 +20,7 @@ pub enum OuterCipherSuite {
 }
 
 impl OuterCipherSuite {
-    pub(crate) fn get_cipher(&self) -> Box<crypt::Cipher> {
+    pub(crate) fn get_cipher(&self) -> Box<crypt::OuterCipher> {
         match self {
             OuterCipherSuite::AES256 => Box::new(crypt::AES256Cipher),
         }
@@ -33,8 +33,7 @@ impl TryFrom<&[u8]> for OuterCipherSuite {
         if v == CIPHERSUITE_AES256 {
             Ok(OuterCipherSuite::AES256)
         } else {
-            println!("Unknown outer cipher: {:x?}", v);
-            Err(ErrorKind::InvalidCipherID.into())
+            Err(ErrorKind::InvalidOuterCipherID(v.to_vec()).into())
         }
     }
 }
@@ -193,13 +192,15 @@ impl TryFrom<&HashMap<String, VariantDictionaryValue>> for KDFSettings {
 pub enum InnerCipherSuite {
     Plain,
     Salsa20,
+    ChaCha20,
 }
 
 impl InnerCipherSuite {
-    pub(crate) fn get_cipher(&self) -> Box<crypt::Cipher> {
+    pub(crate) fn get_cipher(&self) -> Box<crypt::InnerCipher> {
         match self {
             InnerCipherSuite::Plain => Box::new(crypt::PlainCipher),
             InnerCipherSuite::Salsa20 => Box::new(crypt::Salsa20Cipher),
+            InnerCipherSuite::ChaCha20 => Box::new(crypt::ChaCha20Cipher),
         }
     }
 }
@@ -211,7 +212,8 @@ impl TryFrom<u32> for InnerCipherSuite {
         match v {
             0 => Ok(InnerCipherSuite::Plain),
             2 => Ok(InnerCipherSuite::Salsa20),
-            _ => Err(ErrorKind::InvalidCipherID.into()),
+            3 => Ok(InnerCipherSuite::ChaCha20),
+            _ => Err(ErrorKind::InvalidInnerCipherID(v).into()),
         }
     }
 }

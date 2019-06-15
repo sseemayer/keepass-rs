@@ -49,6 +49,7 @@ extern crate error_chain;
 mod crypt;
 mod db;
 mod decompress;
+mod hmac_block_stream;
 mod keyfile;
 pub mod result;
 mod xml_parse;

@@ -29,8 +29,11 @@ error_chain! {
         IncompleteHeader {
             description("Invalid file header - missing some required entries")
         }
-        InvalidCipherID {
-            description ("Encountered an invalid cipher ID")
+        InvalidOuterCipherID(cid: Vec<u8>) {
+            description ("Encountered an invalid outer cipher ID")
+        }
+        InvalidInnerCipherID(cid: u32) {
+            description ("Encountered an invalid inner cipher ID")
         }
         InvalidCompressionSuite {
             description("Encountered an invalid compression suite")
@@ -49,6 +52,9 @@ error_chain! {
         }
         InvalidKdfParams {
             description("KDF parameters invalid")
+        }
+        HeaderHashMismatch {
+            description("Header hash mismatch")
         }
         BlockHashMismatch {
             description( "Block hash verification failed"),

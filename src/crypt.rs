@@ -3,9 +3,12 @@ use argon2;
 use crypto::aes::{cbc_decryptor, ecb_encryptor, KeySize};
 use crypto::blockmodes::{NoPadding, PkcsPadding};
 use crypto::buffer::{BufferResult, ReadBuffer, RefReadBuffer, RefWriteBuffer, WriteBuffer};
+use crypto::chacha20::ChaCha20;
 use crypto::digest::Digest;
+use crypto::hmac::Hmac;
+use crypto::mac::Mac;
 use crypto::salsa20::Salsa20;
-use crypto::sha2::Sha256;
+use crypto::sha2::{Sha256, Sha512};
 use crypto::symmetriccipher::{Decryptor, SymmetricCipherError};
 
 pub(crate) fn u8_32_from_slice(bytes: &[u8]) -> [u8; 32] {
@@ -15,30 +18,44 @@ pub(crate) fn u8_32_from_slice(bytes: &[u8]) -> [u8; 32] {
     array
 }
 
-pub(crate) trait Cipher {
+pub(crate) trait OuterCipher {
     fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor>;
 }
 
 pub(crate) struct AES256Cipher;
 
-impl Cipher for AES256Cipher {
+impl OuterCipher for AES256Cipher {
     fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor> {
         cbc_decryptor(KeySize::KeySize256, key, iv, PkcsPadding)
     }
 }
 
+pub(crate) trait InnerCipher {
+    fn new(&self, key: &[u8]) -> Box<Decryptor>;
+}
+
 pub(crate) struct Salsa20Cipher;
 
-impl Cipher for Salsa20Cipher {
-    fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor> {
+impl InnerCipher for Salsa20Cipher {
+    fn new(&self, key: &[u8]) -> Box<Decryptor> {
+        let iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
         Box::new(Salsa20::new(key, iv))
     }
 }
 
-pub(crate) struct PlainCipher;
+pub(crate) struct ChaCha20Cipher;
 
-impl Cipher for PlainCipher {
-    fn new(&self, _: &[u8], _: &[u8]) -> Box<Decryptor> {
+impl InnerCipher for ChaCha20Cipher {
+    fn new(&self, key: &[u8]) -> Box<Decryptor> {
+        let iv = calculate_sha512(&[key]);
+
+        Box::new(ChaCha20::new(&iv[0..32], &iv[32..44]))
+    }
+}
+
+pub(crate) struct PlainCipher;
+impl InnerCipher for PlainCipher {
+    fn new(&self, _: &[u8]) -> Box<Decryptor> {
         Box::new(NoOpDecryptor)
     }
 }
@@ -57,6 +74,18 @@ impl Decryptor for NoOpDecryptor {
     }
 }
 
+pub(crate) fn calculate_hmac(elements: &[&[u8]], key: &[u8]) -> [u8; 32] {
+    let mut mac = Hmac::new(Sha256::new(), key);
+    for element in elements {
+        mac.input(element);
+    }
+
+    let mut hash = [0u8; 32];
+    mac.raw_result(&mut hash);
+
+    hash
+}
+
 pub(crate) fn calculate_sha256(elements: &[&[u8]]) -> [u8; 32] {
     let mut digest = Sha256::new();
 
@@ -65,6 +94,18 @@ pub(crate) fn calculate_sha256(elements: &[&[u8]]) -> [u8; 32] {
     }
 
     let mut hash = [0u8; 32];
+    digest.result(&mut hash);
+    hash
+}
+
+pub(crate) fn calculate_sha512(elements: &[&[u8]]) -> [u8; 64] {
+    let mut digest = Sha512::new();
+
+    for element in elements {
+        digest.input(element);
+    }
+
+    let mut hash = [0u8; 64];
     digest.result(&mut hash);
     hash
 }

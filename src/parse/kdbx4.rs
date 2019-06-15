@@ -4,9 +4,11 @@ use std::convert::TryFrom;
 use crate::{
     crypt,
     db::{
-        Compression, Database, Group, Header, KDFSettings, OuterCipherSuite, VariantDictionaryValue,
+        Compression, Database, Group, Header, InnerCipherSuite, KDFSettings, OuterCipherSuite,
+        VariantDictionaryValue,
     },
-    result::{ErrorKind, Result},
+    hmac_block_stream,
+    result::{Error, ErrorKind, Result},
     xml_parse,
 };
 
@@ -26,7 +28,30 @@ pub struct KDBX4Header {
     pub body_start: usize,
 }
 
-fn parse_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
+struct Binary {
+    flags: u8,
+    content: Vec<u8>,
+}
+
+impl TryFrom<&[u8]> for Binary {
+    type Error = Error;
+
+    fn try_from(data: &[u8]) -> Result<Self> {
+        let flags = data[0];
+        let content = data[1..].to_vec();
+
+        Ok(Binary { flags, content })
+    }
+}
+
+struct KDBX4InnerHeader {
+    inner_random_stream: InnerCipherSuite,
+    inner_random_stream_key: Vec<u8>,
+    binaries: Vec<Binary>,
+    body_start: usize,
+}
+
+fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
     if version != 0xb54bfb67 || file_major_version != 4 {
@@ -108,8 +133,6 @@ fn parse_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     let outer_iv = outer_iv.ok_or(ErrorKind::IncompleteHeader)?;
     let kdf = kdf.ok_or(ErrorKind::IncompleteHeader)?;
 
-    println!("KDF {:x?}", kdf);
-
     Ok(KDBX4Header {
         version,
         file_major_version,
@@ -123,37 +146,109 @@ fn parse_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     })
 }
 
-/// Open, decrypt and parse a KeePass database from a source and a password
+fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
+    let mut pos = 0;
+
+    let mut inner_random_stream = None;
+    let mut inner_random_stream_key = None;
+    let mut binaries = Vec::new();
+
+    loop {
+        let entry_type = data[pos];
+        let entry_length: usize = LittleEndian::read_u32(&data[pos + 1..(pos + 5)]) as usize;
+        let entry_buffer = &data[(pos + 5)..(pos + 5 + entry_length)];
+
+        pos += 5 + entry_length;
+
+        match entry_type {
+            // end of header
+            0x00 => break,
+
+            // inner random stream ID
+            0x01 => {
+                inner_random_stream = Some(InnerCipherSuite::try_from(LittleEndian::read_u32(
+                    &entry_buffer,
+                ))?);
+            }
+
+            // inner random stream key
+            0x02 => inner_random_stream_key = Some(entry_buffer.clone().to_vec()),
+
+            // binary attachment
+            0x03 => {
+                let binary = Binary::try_from(entry_buffer)?;
+                binaries.push(binary);
+            }
+
+            _ => {
+                return Err(ErrorKind::InvalidHeaderEntry(entry_type).into());
+            }
+        }
+    }
+
+    let inner_random_stream = inner_random_stream.ok_or(ErrorKind::IncompleteHeader)?;
+    let inner_random_stream_key = inner_random_stream_key.ok_or(ErrorKind::IncompleteHeader)?;
+
+    Ok(KDBX4InnerHeader {
+        inner_random_stream,
+        inner_random_stream_key,
+        binaries,
+        body_start: pos,
+    })
+}
+
+/// Open, decrypt and parse a KeePass database from a source and key elements
 pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database> {
     // parse header
-    let header = parse_header(data)?;
+    let header = parse_outer_header(data)?;
+    let pos = header.body_start;
 
-    let mut pos = header.body_start;
+    // split file into segments:
+    //      header_data         - The outer header data
+    //      header_sha256       - A Sha256 hash of header_data (for verification of header integrity)
+    //      header_hmac         - A HMAC of the header_data (for verification of the key_elements)
+    //      hmac_block_stream   - A HMAC-verified block stream of encrypted and compressed blocks
+    let header_data = &data[0..pos];
+    let header_sha256 = &data[pos..(pos + 32)];
+    let header_hmac = &data[(pos + 32)..(pos + 64)];
+    let hmac_block_stream = &data[(pos + 64)..];
 
     // Turn enums into appropriate trait objects
     let compression = header.compression.get_compression();
     let outer_cipher = header.outer_cipher.get_cipher();
 
-    // Rest of file after header is payload
-    let payload_encrypted = &data[pos..];
-
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let composite_key = crypt::derive_composite_key(key_elements);
     let transformed_key = header.kdf.derive_key(&composite_key)?;
-    println!("transformed key is {:x?}", transformed_key);
-
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
 
-    println!("Master key is {:x?}", master_key);
+    // verify header
+    if header_sha256 != crypt::calculate_sha256(&[&data[0..pos]]) {
+        return Err(ErrorKind::HeaderHashMismatch.into());
+    }
 
-    // TODO check hmac
+    // verify credentials
+    let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"]);
+    let header_hmac_key = hmac_block_stream::get_hmac_block_key(usize::max_value(), &hmac_key);
+    if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key) {
+        return Err(ErrorKind::IncorrectKey.into());
+    }
 
-    // Decrypt payload
+    // read encrypted payload from hmac-verified block stream
+    let payload_encrypted =
+        hmac_block_stream::read_hmac_block_stream(&hmac_block_stream, &master_key);
+
+    // Decrypt and decompress encrypted payload
     let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
-    let payload = crypt::decrypt(&mut *outer_decryptor, payload_encrypted)?;
+    let payload_compressed = crypt::decrypt(&mut *outer_decryptor, &payload_encrypted)?;
+    let payload = compression.decompress(&payload_compressed)?;
 
-    // No inner decryptor for KDBX4
-    let mut inner_decryptor = Box::new(crypt::NoOpDecryptor);
+    // KDBX4 has inner header, too - parse it
+    let inner_header = parse_inner_header(&payload)?;
+
+    // Initialize inner decryptor from inner header params
+    let inner_cipher = inner_header.inner_random_stream.get_cipher();
+    let mut inner_decryptor = inner_cipher.new(&inner_header.inner_random_stream_key);
 
     let mut db = Database {
         header: Header::KDBX4(header),
@@ -164,56 +259,9 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
         },
     };
 
-    pos = 32;
-    loop {
-        // Parse blocks in payload.
-        //
-        // Each block is a tuple of size (40 + block_size) with structure:
-        //
-        // (
-        //   block_id: u32,                                 // a numeric block ID (starts at 0)
-        //   block_hash: [u8, 32],                          // SHA256 of block_buffer_compressed
-        //   block_size: u32,                               // block_size size in bytes
-        //   block_buffer_compressed: [u8, block_size]      // Block data, possibly compressed
-        // )
-
-        // let block_id = LittleEndian::read_u32(&payload[pos..(pos + 4)]);
-        let block_hash = &payload[(pos + 4)..(pos + 36)];
-        let block_size = LittleEndian::read_u32(&payload[(pos + 36)..(pos + 40)]) as usize;
-
-        // A block with size 0 means we have hit EOF
-        if block_size == 0 {
-            break;
-        }
-
-        let block_buffer_compressed = &payload[(pos + 40)..(pos + 40 + block_size)];
-
-        // Test block hash
-        let block_hash_check = crypt::calculate_sha256(&[&block_buffer_compressed]);
-        if block_hash != block_hash_check {
-            return Err(ErrorKind::BlockHashMismatch.into());
-        }
-
-        // Decompress block_buffer_compressed
-        let block_buffer = compression.decompress(block_buffer_compressed)?;
-
-        // Parse XML data
-        let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor);
-        db.root
-            .child_groups
-            .insert(block_group.name.clone(), block_group);
-
-        pos += 40 + block_size;
-    }
-
-    // Re-root db.root if it contains only one child (if there was only one block)
-    if db.root.child_groups.len() == 1 {
-        let mut new_root = Default::default();
-        for (_, v) in db.root.child_groups.drain() {
-            new_root = v
-        }
-        db.root = new_root;
-    }
+    // after inner header is one XML document
+    let xml = &payload[inner_header.body_start..];
+    db.root = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor);
 
     Ok(db)
 }

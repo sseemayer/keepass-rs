@@ -154,7 +154,6 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let header = parse_header(data)?;
 
     let mut pos = header.body_start;
-    let inner_iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
 
     // Turn enums into appropriate trait objects
     let compression = header.compression.get_compression();
@@ -185,7 +184,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // Derive stream key for decrypting inner protected values and set up decryption context
     let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()]);
-    let mut inner_decryptor = inner_cipher.new(&stream_key, inner_iv);
+    let mut inner_decryptor = inner_cipher.new(&stream_key);
 
     let mut db = Database {
         header: Header::KDBX3(header),
