@@ -236,7 +236,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // read encrypted payload from hmac-verified block stream
     let payload_encrypted =
-        hmac_block_stream::read_hmac_block_stream(&hmac_block_stream, &master_key);
+        hmac_block_stream::read_hmac_block_stream(&hmac_block_stream, &hmac_key)?;
 
     // Decrypt and decompress encrypted payload
     let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());

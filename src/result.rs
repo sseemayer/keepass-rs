@@ -56,6 +56,9 @@ error_chain! {
         HeaderHashMismatch {
             description("Header hash mismatch")
         }
+        HmacBlockHashMismatch {
+            description("Encountered a HMAC Block with an unvalid HMAC")
+        }
         BlockHashMismatch {
             description( "Block hash verification failed"),
         }
