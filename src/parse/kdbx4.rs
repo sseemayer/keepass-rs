@@ -8,7 +8,7 @@ use crate::{
         VariantDictionaryValue,
     },
     hmac_block_stream,
-    result::{Error, ErrorKind, Result},
+    result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
 };
 
@@ -55,7 +55,12 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
     if version != 0xb54bfb67 || file_major_version != 4 {
-        return Err(ErrorKind::InvalidKDBXVersion.into());
+        return Err(DatabaseIntegrityError::InvalidKDBXVersion {
+            version,
+            file_major_version,
+            file_minor_version,
+        }
+        .into());
     }
 
     let mut outer_cipher: Option<OuterCipherSuite> = None;
@@ -119,7 +124,7 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
             }
 
             _ => {
-                return Err(ErrorKind::InvalidHeaderEntry(entry_type).into());
+                return Err(DatabaseIntegrityError::InvalidOuterHeaderEntry { entry_type }.into());
             }
         };
     }
@@ -127,11 +132,20 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     // at this point, the header needs to be fully defined - unwrap options and return errors if
     // something is missing
 
-    let outer_cipher = outer_cipher.ok_or(ErrorKind::IncompleteHeader)?;
-    let compression = compression.ok_or(ErrorKind::IncompleteHeader)?;
-    let master_seed = master_seed.ok_or(ErrorKind::IncompleteHeader)?;
-    let outer_iv = outer_iv.ok_or(ErrorKind::IncompleteHeader)?;
-    let kdf = kdf.ok_or(ErrorKind::IncompleteHeader)?;
+    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
+        v.ok_or(
+            DatabaseIntegrityError::IncompleteOuterHeader {
+                missing_field: err.into(),
+            }
+            .into(),
+        )
+    }
+
+    let outer_cipher = get_or_err(outer_cipher, "Outer Cipher ID")?;
+    let compression = get_or_err(compression, "Compression ID")?;
+    let master_seed = get_or_err(master_seed, "Master seed")?;
+    let outer_iv = get_or_err(outer_iv, "Outer IV")?;
+    let kdf = get_or_err(kdf, "Key Derivation Function Parameters")?;
 
     Ok(KDBX4Header {
         version,
@@ -181,13 +195,22 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
             }
 
             _ => {
-                return Err(ErrorKind::InvalidHeaderEntry(entry_type).into());
+                return Err(DatabaseIntegrityError::InvalidInnerHeaderEntry { entry_type }.into());
             }
         }
     }
 
-    let inner_random_stream = inner_random_stream.ok_or(ErrorKind::IncompleteHeader)?;
-    let inner_random_stream_key = inner_random_stream_key.ok_or(ErrorKind::IncompleteHeader)?;
+    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
+        v.ok_or(
+            DatabaseIntegrityError::IncompleteInnerHeader {
+                missing_field: err.into(),
+            }
+            .into(),
+        )
+    }
+
+    let inner_random_stream = get_or_err(inner_random_stream, "Inner random stream UUID")?;
+    let inner_random_stream_key = get_or_err(inner_random_stream_key, "Inner random stream key")?;
 
     Ok(KDBX4InnerHeader {
         inner_random_stream,
@@ -224,14 +247,14 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // verify header
     if header_sha256 != crypt::calculate_sha256(&[&data[0..pos]]) {
-        return Err(ErrorKind::HeaderHashMismatch.into());
+        return Err(DatabaseIntegrityError::HeaderHashMismatch.into());
     }
 
     // verify credentials
     let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"]);
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(usize::max_value(), &hmac_key);
     if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key) {
-        return Err(ErrorKind::IncorrectKey.into());
+        return Err(Error::IncorrectKey.into());
     }
 
     // read encrypted payload from hmac-verified block stream
@@ -271,7 +294,7 @@ fn parse_variant_dictionary(data: &[u8]) -> Result<HashMap<String, VariantDictio
     let version = LittleEndian::read_u16(&data[0..2]);
 
     if version != 0x100 {
-        return Err(ErrorKind::InvalidVariantDictionaryVersion.into());
+        return Err(DatabaseIntegrityError::InvalidVariantDictionaryVersion { version }.into());
     }
 
     let mut pos = 2;
@@ -284,7 +307,9 @@ fn parse_variant_dictionary(data: &[u8]) -> Result<HashMap<String, VariantDictio
         let key_length = LittleEndian::read_u32(&data[pos..(pos + 4)]) as usize;
         pos += 4;
 
-        let key = std::str::from_utf8(&data[pos..(pos + key_length)])?.to_owned();
+        let key = std::str::from_utf8(&data[pos..(pos + key_length)])
+            .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?
+            .to_owned();
         pos += key_length;
 
         let value_length = LittleEndian::read_u32(&data[pos..(pos + 4)]) as usize;
@@ -299,10 +324,17 @@ fn parse_variant_dictionary(data: &[u8]) -> Result<HashMap<String, VariantDictio
             0x08 => VariantDictionaryValue::Bool(value_buffer != [0]),
             0x0c => VariantDictionaryValue::Int32(LittleEndian::read_i32(value_buffer)),
             0x0d => VariantDictionaryValue::Int64(LittleEndian::read_i64(value_buffer)),
-            0x18 => VariantDictionaryValue::String(std::str::from_utf8(value_buffer)?.into()),
+            0x18 => VariantDictionaryValue::String(
+                std::str::from_utf8(value_buffer)
+                    .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?
+                    .into(),
+            ),
             0x42 => VariantDictionaryValue::ByteArray(value_buffer.to_vec()),
             _ => {
-                return Err(ErrorKind::InvalidVariantDictionaryValueType.into());
+                return Err(DatabaseIntegrityError::InvalidVariantDictionaryValueType {
+                    value_type,
+                }
+                .into());
             }
         };
 

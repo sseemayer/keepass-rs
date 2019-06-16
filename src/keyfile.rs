@@ -1,4 +1,4 @@
-use result::{ErrorKind, Result};
+use result::{Error, Result};
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
@@ -8,7 +8,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>> {
     let mut tag_stack = Vec::new();
 
     for ev in parser {
-        match ev? {
+        match ev.map_err(|_e| Error::InvalidKeyFile)? {
             XmlEvent::StartElement {
                 name: OwnedName { ref local_name, .. },
                 ..
@@ -35,7 +35,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>> {
         }
     }
 
-    Err(ErrorKind::InvalidKeyFile.into())
+    Err(Error::InvalidKeyFile.into())
 }
 
 pub fn parse(source: &mut std::io::Read) -> Result<Vec<u8>> {

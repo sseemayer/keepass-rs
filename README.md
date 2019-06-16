@@ -11,7 +11,7 @@ KeePass .kdbx database file parser for Rust
 extern crate keepass;
 
 use keepass::{Database, Node};
-use keepass::result::{Result, ResultExt, Error};
+use keepass::result::{Result, Error};
 use std::fs::File;
 
 fn main() -> Result<()> {

@@ -6,7 +6,7 @@ use std::convert::TryFrom;
 use crate::{
     crypt, decompress,
     parse::{kdbx3::KDBX3Header, kdbx4::KDBX4Header},
-    result::{Error, ErrorKind, Result},
+    result::{DatabaseIntegrityError, Error, Result},
 };
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
@@ -33,7 +33,7 @@ impl TryFrom<&[u8]> for OuterCipherSuite {
         if v == CIPHERSUITE_AES256 {
             Ok(OuterCipherSuite::AES256)
         } else {
-            Err(ErrorKind::InvalidOuterCipherID(v.to_vec()).into())
+            Err(DatabaseIntegrityError::InvalidOuterCipherID { cid: v.to_vec() }.into())
         }
     }
 }
@@ -156,9 +156,12 @@ fn get_vd<R, F>(dict: &HashMap<String, VariantDictionaryValue>, key: &str, f: F)
 where
     F: FnOnce(&VariantDictionaryValue) -> Option<R>,
 {
-    dict.get(key)
-        .and_then(f)
-        .ok_or(ErrorKind::InvalidKdfParams.into())
+    dict.get(key).and_then(f).ok_or(
+        DatabaseIntegrityError::MissingKDFParams {
+            key: key.to_owned(),
+        }
+        .into(),
+    )
 }
 
 impl TryFrom<&HashMap<String, VariantDictionaryValue>> for KDFSettings {
@@ -183,7 +186,7 @@ impl TryFrom<&HashMap<String, VariantDictionaryValue>> for KDFSettings {
                 version,
             })
         } else {
-            return Err(ErrorKind::InvalidKdfParams.into());
+            return Err(DatabaseIntegrityError::InvalidKDFUUID { uuid }.into());
         }
     }
 }
@@ -213,7 +216,7 @@ impl TryFrom<u32> for InnerCipherSuite {
             0 => Ok(InnerCipherSuite::Plain),
             2 => Ok(InnerCipherSuite::Salsa20),
             3 => Ok(InnerCipherSuite::ChaCha20),
-            _ => Err(ErrorKind::InvalidInnerCipherID(v).into()),
+            _ => Err(DatabaseIntegrityError::InvalidInnerCipherID { cid: v }.into()),
         }
     }
 }
@@ -240,7 +243,7 @@ impl TryFrom<u32> for Compression {
         match v {
             0 => Ok(Compression::None),
             1 => Ok(Compression::GZip),
-            _ => Err(ErrorKind::InvalidCompressionSuite.into()),
+            _ => Err(DatabaseIntegrityError::InvalidCompressionSuite { cid: v }.into()),
         }
     }
 }
@@ -281,12 +284,18 @@ impl Database {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
-        let (_, file_major_version, _) = crate::parse::get_kdbx_version(data.as_ref())?;
+        let (version, file_major_version, file_minor_version) =
+            crate::parse::get_kdbx_version(data.as_ref())?;
 
         match file_major_version {
             3 => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
             4 => crate::parse::kdbx4::parse(data.as_ref(), &key_elements),
-            _ => Err(ErrorKind::InvalidKDBXVersion.into()),
+            _ => Err(DatabaseIntegrityError::InvalidKDBXVersion {
+                version,
+                file_major_version,
+                file_minor_version,
+            }
+            .into()),
         }
     }
 }

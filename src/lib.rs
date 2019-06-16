@@ -5,7 +5,7 @@
 //! extern crate keepass;
 //!
 //! use keepass::{Database, Node};
-//! use keepass::result::{Result, ResultExt, Error};
+//! use keepass::result::{Result, Error};
 //! use std::fs::File;
 //!
 //! fn main() -> Result<()> {
@@ -42,9 +42,6 @@ extern crate flate2;
 extern crate hex_literal;
 extern crate secstr;
 extern crate xml;
-
-#[macro_use]
-extern crate error_chain;
 
 mod crypt;
 mod db;

@@ -1,7 +1,7 @@
 use crate::{
     crypt,
     db::{Compression, Database, Group, Header, InnerCipherSuite, OuterCipherSuite},
-    result::{ErrorKind, Result},
+    result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
 };
 
@@ -31,7 +31,12 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
     if version != 0xb54bfb67 || file_major_version != 3 {
-        return Err(ErrorKind::InvalidKDBXVersion.into());
+        return Err(DatabaseIntegrityError::InvalidKDBXVersion {
+            version,
+            file_major_version,
+            file_minor_version,
+        }
+        .into());
     }
 
     let mut outer_cipher: Option<OuterCipherSuite> = None;
@@ -113,7 +118,7 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
             }
 
             _ => {
-                return Err(ErrorKind::InvalidHeaderEntry(entry_type).into());
+                return Err(DatabaseIntegrityError::InvalidOuterHeaderEntry { entry_type }.into());
             }
         };
     }
@@ -121,15 +126,24 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     // at this point, the header needs to be fully defined - unwrap options and return errors if
     // something is missing
 
-    let outer_cipher = outer_cipher.ok_or(ErrorKind::IncompleteHeader)?;
-    let compression = compression.ok_or(ErrorKind::IncompleteHeader)?;
-    let master_seed = master_seed.ok_or(ErrorKind::IncompleteHeader)?;
-    let transform_seed = transform_seed.ok_or(ErrorKind::IncompleteHeader)?;
-    let transform_rounds = transform_rounds.ok_or(ErrorKind::IncompleteHeader)?;
-    let outer_iv = outer_iv.ok_or(ErrorKind::IncompleteHeader)?;
-    let protected_stream_key = protected_stream_key.ok_or(ErrorKind::IncompleteHeader)?;
-    let stream_start = stream_start.ok_or(ErrorKind::IncompleteHeader)?;
-    let inner_cipher = inner_cipher.ok_or(ErrorKind::IncompleteHeader)?;
+    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
+        v.ok_or(
+            DatabaseIntegrityError::IncompleteOuterHeader {
+                missing_field: err.into(),
+            }
+            .into(),
+        )
+    }
+
+    let outer_cipher = get_or_err(outer_cipher, "Outer Cipher ID")?;
+    let compression = get_or_err(compression, "Compression ID")?;
+    let master_seed = get_or_err(master_seed, "Master seed")?;
+    let transform_seed = get_or_err(transform_seed, "Transform seed")?;
+    let transform_rounds = get_or_err(transform_rounds, "Number of transformation rounds")?;
+    let outer_iv = get_or_err(outer_iv, "Outer cipher IV")?;
+    let protected_stream_key = get_or_err(protected_stream_key, "Protected stream key")?;
+    let stream_start = get_or_err(stream_start, "Stream start bytes")?;
+    let inner_cipher = get_or_err(inner_cipher, "Inner cipher ID")?;
 
     Ok(KDBX3Header {
         version,
@@ -179,7 +193,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // Check if we decrypted correctly
     if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
-        return Err(ErrorKind::IncorrectKey.into());
+        return Err(Error::IncorrectKey.into());
     }
 
     // Derive stream key for decrypting inner protected values and set up decryption context
@@ -196,6 +210,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     };
 
     pos = 32;
+    let mut block_index = 0;
     loop {
         // Parse blocks in payload.
         //
@@ -222,7 +237,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
         // Test block hash
         let block_hash_check = crypt::calculate_sha256(&[&block_buffer_compressed]);
         if block_hash != block_hash_check {
-            return Err(ErrorKind::BlockHashMismatch.into());
+            return Err(DatabaseIntegrityError::BlockHashMismatch { block_index }.into());
         }
 
         // Decompress block_buffer_compressed
@@ -235,6 +250,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
             .insert(block_group.name.clone(), block_group);
 
         pos += 40 + block_size;
+        block_index += 1;
     }
 
     // Re-root db.root if it contains only one child (if there was only one block)

@@ -1,5 +1,5 @@
 use crate::crypt;
-use crate::result::{ErrorKind, Result};
+use crate::result::{DatabaseIntegrityError, Result};
 use byteorder::{ByteOrder, LittleEndian};
 
 /// Read from a HMAC block stream into a raw buffer
@@ -23,7 +23,7 @@ pub(crate) fn read_hmac_block_stream(data: &[u8], key: &[u8; 64]) -> Result<Vec<
         LittleEndian::write_u64(&mut block_index_buf, block_index as u64);
 
         if hmac != crypt::calculate_hmac(&[&block_index_buf, size_bytes, &block], &hmac_block_key) {
-            return Err(ErrorKind::HmacBlockHashMismatch.into());
+            return Err(DatabaseIntegrityError::BlockHashMismatch { block_index }.into());
         }
 
         pos += 36 + size;

@@ -1,4 +1,4 @@
-use super::result::{ErrorKind, Result};
+use super::result::{DatabaseIntegrityError, Error, Result};
 use argon2;
 use crypto::aes::{cbc_decryptor, ecb_encryptor, KeySize};
 use crypto::blockmodes::{NoPadding, PkcsPadding};
@@ -117,7 +117,14 @@ pub(crate) fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>>
     let mut write_buffer = RefWriteBuffer::new(&mut buffer);
 
     loop {
-        let result = decryptor.decrypt(&mut read_buffer, &mut write_buffer, true)?;
+        let result: Result<BufferResult> = decryptor
+            .decrypt(&mut read_buffer, &mut write_buffer, true)
+            .map_err(|e| DatabaseIntegrityError::from(e).into());
+
+        if let Err(e) = result {
+            return Err(e);
+        }
+
         final_result.extend(
             write_buffer
                 .take_read_buffer()
@@ -127,8 +134,9 @@ pub(crate) fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>>
         );
 
         match result {
-            BufferResult::BufferUnderflow => break,
-            BufferResult::BufferOverflow => {}
+            Ok(BufferResult::BufferUnderflow) => break,
+            Ok(BufferResult::BufferOverflow) => {}
+            Err(e) => return Err(e),
         }
     }
 
@@ -163,7 +171,9 @@ pub(crate) fn transform_key_aes(
         {
             let mut encryptor = ecb_encryptor(KeySize::KeySize256, transform_seed, NoPadding);
             let mut read_buffer = RefReadBuffer::new(&key);
-            encryptor.encrypt(&mut read_buffer, &mut write_buffer, true)?;
+            encryptor
+                .encrypt(&mut read_buffer, &mut write_buffer, true)
+                .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
         }
 
         for (&x, k) in write_buffer
@@ -190,7 +200,7 @@ pub(crate) fn transform_key_argon2(
     let version = match version {
         0x10 => argon2::Version::Version10,
         0x13 => argon2::Version::Version13,
-        _ => return Err(ErrorKind::InvalidKdfParams.into()),
+        _ => return Err(DatabaseIntegrityError::InvalidKDFVersion { version: version }.into()),
     };
 
     let config = argon2::Config {
@@ -205,7 +215,8 @@ pub(crate) fn transform_key_argon2(
         version,
     };
 
-    let key = argon2::hash_raw(composite_key, salt, &config)?;
+    let key = argon2::hash_raw(composite_key, salt, &config)
+        .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
 
     Ok(u8_32_from_slice(&key))
 }
