@@ -286,7 +286,7 @@ impl Database {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
-            key_elements.push(p.as_bytes().to_vec());
+            key_elements.push(crypt::calculate_sha256(&[p.as_bytes()]).to_vec());
         }
 
         if let Some(f) = keyfile {

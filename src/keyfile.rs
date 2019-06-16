@@ -1,3 +1,4 @@
+use crypt;
 use result::{Error, Result};
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
@@ -44,9 +45,11 @@ pub fn parse(source: &mut std::io::Read) -> Result<Vec<u8>> {
 
     // try to parse the buffer as XML, if successful, use that data instead of full file
     if let Ok(v) = parse_xml_keyfile(&buffer) {
-        buffer.clear();
-        buffer.extend(v);
+        Ok(v)
+    } else if buffer.len() == 32 {
+        // legacy binary key format
+        Ok(buffer.to_vec())
+    } else {
+        Ok(crypt::calculate_sha256(&[&buffer]).to_vec())
     }
-
-    Ok(buffer)
 }

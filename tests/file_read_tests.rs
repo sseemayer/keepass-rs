@@ -83,6 +83,47 @@ mod tests {
     }
 
     #[test]
+    fn open_kdbx3_with_keyfile_xml() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_with_keyfile_xml.kdbx");
+        let kf_path = Path::new("tests/resources/test_key_xml.key");
+        let db = Database::open(
+            &mut File::open(path)?,
+            None,
+            Some(&mut File::open(kf_path)?),
+        )?;
+
+        println!("{:?} DB Opened", db);
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.child_groups.len(), 2);
+        assert_eq!(db.root.entries.len(), 2);
+
+        let mut total_groups = 0;
+        let mut total_entries = 0;
+        for node in &db.root {
+            match node {
+                Node::GroupNode(g) => {
+                    println!("Saw group '{0}'", g.name);
+                    total_groups += 1;
+                }
+                Node::EntryNode(e) => {
+                    let title = e.get_title().unwrap();
+                    let user = e.get_username().unwrap();
+                    let pass = e.get_password().unwrap();
+                    println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
+                    total_entries += 1;
+                }
+            }
+        }
+
+        assert_eq!(total_groups, 5);
+        assert_eq!(total_entries, 6);
+
+        println!("{:?}", db);
+
+        Ok(())
+    }
+
+    #[test]
     fn open_kdbx4_with_password() -> Result<()> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password.kdbx");
 
