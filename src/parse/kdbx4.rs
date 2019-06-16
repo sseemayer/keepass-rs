@@ -4,8 +4,8 @@ use std::convert::TryFrom;
 use crate::{
     crypt,
     db::{
-        Compression, Database, Group, Header, InnerCipherSuite, KDFSettings, OuterCipherSuite,
-        VariantDictionaryValue,
+        Compression, Database, Header, InnerCipherSuite, InnerHeader, KDFSettings,
+        OuterCipherSuite, VariantDictionaryValue,
     },
     hmac_block_stream,
     result::{DatabaseIntegrityError, Error, Result},
@@ -28,26 +28,28 @@ pub struct KDBX4Header {
     pub body_start: usize,
 }
 
-struct Binary {
+#[derive(Debug)]
+pub struct BinaryAttachment {
     flags: u8,
     content: Vec<u8>,
 }
 
-impl TryFrom<&[u8]> for Binary {
+impl TryFrom<&[u8]> for BinaryAttachment {
     type Error = Error;
 
     fn try_from(data: &[u8]) -> Result<Self> {
         let flags = data[0];
         let content = data[1..].to_vec();
 
-        Ok(Binary { flags, content })
+        Ok(BinaryAttachment { flags, content })
     }
 }
 
-struct KDBX4InnerHeader {
+#[derive(Debug)]
+pub struct KDBX4InnerHeader {
     inner_random_stream: InnerCipherSuite,
     inner_random_stream_key: Vec<u8>,
-    binaries: Vec<Binary>,
+    binaries: Vec<BinaryAttachment>,
     body_start: usize,
 }
 
@@ -190,7 +192,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
 
             // binary attachment
             0x03 => {
-                let binary = Binary::try_from(entry_buffer)?;
+                let binary = BinaryAttachment::try_from(entry_buffer)?;
                 binaries.push(binary);
             }
 
@@ -273,18 +275,15 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let inner_cipher = inner_header.inner_random_stream.get_cipher();
     let mut inner_decryptor = inner_cipher.new(&inner_header.inner_random_stream_key);
 
-    let mut db = Database {
-        header: Header::KDBX4(header),
-        root: Group {
-            name: "Root".to_owned(),
-            child_groups: Default::default(),
-            entries: Default::default(),
-        },
-    };
-
     // after inner header is one XML document
     let xml = &payload[inner_header.body_start..];
-    db.root = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor);
+    let root = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor);
+
+    let db = Database {
+        header: Header::KDBX4(header),
+        inner_header: InnerHeader::KDBX4(inner_header),
+        root,
+    };
 
     Ok(db)
 }

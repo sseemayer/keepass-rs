@@ -1,6 +1,6 @@
 use crate::{
     crypt,
-    db::{Compression, Database, Group, Header, InnerCipherSuite, OuterCipherSuite},
+    db::{Compression, Database, Group, Header, InnerCipherSuite, InnerHeader, OuterCipherSuite},
     result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
 };
@@ -202,6 +202,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     let mut db = Database {
         header: Header::KDBX3(header),
+        inner_header: InnerHeader::None,
         root: Group {
             name: "Root".to_owned(),
             child_groups: Default::default(),

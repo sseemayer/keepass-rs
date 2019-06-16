@@ -5,7 +5,10 @@ use std::convert::TryFrom;
 
 use crate::{
     crypt, decompress,
-    parse::{kdbx3::KDBX3Header, kdbx4::KDBX4Header},
+    parse::{
+        kdbx3::KDBX3Header,
+        kdbx4::{KDBX4Header, KDBX4InnerHeader},
+    },
     result::{DatabaseIntegrityError, Error, Result},
 };
 
@@ -254,11 +257,20 @@ pub enum Header {
     KDBX4(KDBX4Header),
 }
 
+#[derive(Debug)]
+pub enum InnerHeader {
+    None,
+    KDBX4(KDBX4InnerHeader),
+}
+
 /// A decrypted KeePass database
 #[derive(Debug)]
 pub struct Database {
     /// Header information of the KeePass database
     pub header: Header,
+
+    /// Optional inner header information
+    pub inner_header: InnerHeader,
 
     /// Root node of the KeePass database
     pub root: Group,
