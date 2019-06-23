@@ -50,6 +50,6 @@ pub fn parse(source: &mut std::io::Read) -> Result<Vec<u8>> {
         // legacy binary key format
         Ok(buffer.to_vec())
     } else {
-        Ok(crypt::calculate_sha256(&[&buffer]).to_vec())
+        Ok(crypt::calculate_sha256(&[&buffer])?.as_slice().to_vec())
     }
 }

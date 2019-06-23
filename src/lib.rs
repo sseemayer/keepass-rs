@@ -34,13 +34,17 @@
 
 #![recursion_limit = "1024"]
 
+extern crate aes;
 extern crate argon2;
 extern crate base64;
+extern crate block_modes;
 extern crate byteorder;
 extern crate crypto;
 extern crate flate2;
 extern crate hex_literal;
+extern crate hmac;
 extern crate secstr;
+extern crate sha2;
 extern crate xml;
 
 mod crypt;

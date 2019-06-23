@@ -171,25 +171,26 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // Turn enums into appropriate trait objects
     let compression = header.compression.get_compression();
-    let outer_cipher = header.outer_cipher.get_cipher();
-    let inner_cipher = header.inner_cipher.get_cipher();
 
     // Rest of file after header is payload
     let payload_encrypted = &data[pos..];
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
-    let composite_key = crypt::derive_composite_key(key_elements);
+    let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
+    let composite_key = crypt::calculate_sha256(&key_elements)?;
     let transformed_key = crypt::transform_key_aes(
         header.transform_seed.as_ref(),
         header.transform_rounds,
-        composite_key,
+        &composite_key,
     )?;
 
-    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
+    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
 
     // Decrypt payload
-    let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
-    let payload = crypt::decrypt(&mut *outer_decryptor, payload_encrypted)?;
+    let mut outer_cipher = header
+        .outer_cipher
+        .get_cipher(&master_key, header.outer_iv.as_ref())?;
+    let payload = outer_cipher.decrypt(payload_encrypted)?;
 
     // Check if we decrypted correctly
     if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
@@ -197,8 +198,8 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     }
 
     // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()]);
-    let mut inner_decryptor = inner_cipher.new(&stream_key);
+    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()])?;
+    let mut inner_decryptor = header.inner_cipher.get_cipher(&stream_key)?;
 
     let mut db = Database {
         header: Header::KDBX3(header),
@@ -236,8 +237,8 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
         let block_buffer_compressed = &payload[(pos + 40)..(pos + 40 + block_size)];
 
         // Test block hash
-        let block_hash_check = crypt::calculate_sha256(&[&block_buffer_compressed]);
-        if block_hash != block_hash_check {
+        let block_hash_check = crypt::calculate_sha256(&[&block_buffer_compressed])?;
+        if block_hash != block_hash_check.as_slice() {
             return Err(DatabaseIntegrityError::BlockHashMismatch { block_index }.into());
         }
 
@@ -245,7 +246,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
         let block_buffer = compression.decompress(block_buffer_compressed)?;
 
         // Parse XML data
-        let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor);
+        let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
         db.root
             .child_groups
             .insert(block_group.name.clone(), block_group);

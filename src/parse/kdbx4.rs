@@ -240,22 +240,22 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // Turn enums into appropriate trait objects
     let compression = header.compression.get_compression();
-    let outer_cipher = header.outer_cipher.get_cipher();
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
-    let composite_key = crypt::derive_composite_key(key_elements);
+    let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
+    let composite_key = crypt::calculate_sha256(&key_elements)?;
     let transformed_key = header.kdf.derive_key(&composite_key)?;
-    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key]);
+    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
 
     // verify header
-    if header_sha256 != crypt::calculate_sha256(&[&data[0..pos]]) {
+    if header_sha256 != crypt::calculate_sha256(&[&data[0..pos]])?.as_slice() {
         return Err(DatabaseIntegrityError::HeaderHashMismatch.into());
     }
 
     // verify credentials
-    let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"]);
-    let header_hmac_key = hmac_block_stream::get_hmac_block_key(usize::max_value(), &hmac_key);
-    if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key) {
+    let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"])?;
+    let header_hmac_key = hmac_block_stream::get_hmac_block_key(usize::max_value(), &hmac_key)?;
+    if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key)?.as_slice() {
         return Err(Error::IncorrectKey.into());
     }
 
@@ -264,20 +264,23 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
         hmac_block_stream::read_hmac_block_stream(&hmac_block_stream, &hmac_key)?;
 
     // Decrypt and decompress encrypted payload
-    let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
-    let payload_compressed = crypt::decrypt(&mut *outer_decryptor, &payload_encrypted)?;
+    let mut outer_decryptor = header
+        .outer_cipher
+        .get_cipher(&master_key, header.outer_iv.as_ref())?;
+    let payload_compressed = outer_decryptor.decrypt(&payload_encrypted)?;
     let payload = compression.decompress(&payload_compressed)?;
 
     // KDBX4 has inner header, too - parse it
     let inner_header = parse_inner_header(&payload)?;
 
     // Initialize inner decryptor from inner header params
-    let inner_cipher = inner_header.inner_random_stream.get_cipher();
-    let mut inner_decryptor = inner_cipher.new(&inner_header.inner_random_stream_key);
+    let mut inner_decryptor = inner_header
+        .inner_random_stream
+        .get_cipher(&inner_header.inner_random_stream_key)?;
 
     // after inner header is one XML document
     let xml = &payload[inner_header.body_start..];
-    let root = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor);
+    let root = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor)?;
 
     let db = Database {
         header: Header::KDBX4(header),

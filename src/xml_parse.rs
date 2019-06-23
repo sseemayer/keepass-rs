@@ -1,4 +1,5 @@
-use crypto::symmetriccipher::Decryptor;
+use crypt::Cipher;
+use result::{DatabaseIntegrityError, Error, Result};
 
 use base64;
 use secstr::SecStr;
@@ -17,7 +18,7 @@ enum Node {
     AutoTypeAssociation(AutoTypeAssociation),
 }
 
-pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
+pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut Cipher) -> Result<Group> {
     let parser = EventReader::new(xml);
 
     // Stack of parsed Node objects not yet associated with their parent
@@ -164,10 +165,18 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
                             Value::Protected(ref mut v) => {
                                 // Use the decryptor to decrypt the protected
                                 // and base64-encoded value
-                                let buf = base64::decode(&c).unwrap();
-                                let buf_decode =
-                                    super::crypt::decrypt(decryptor, buf.as_ref()).unwrap();
-                                let c_decode = String::from_utf8(buf_decode).unwrap();
+                                //
+                                println!("Found protected string {}", c);
+                                let buf = base64::decode(&c)
+                                    .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
+
+                                println!("protected raw {:?}", buf);
+                                let buf_decode = inner_cipher.decrypt(&buf)?;
+
+                                let c_decode = std::str::from_utf8(&buf_decode)
+                                    .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
+
+                                println!("Decoded protected string to {}", c_decode);
 
                                 *v = SecStr::from(c_decode);
                             }
@@ -196,5 +205,5 @@ pub fn parse_xml_block(xml: &[u8], decryptor: &mut Decryptor) -> Group {
         }
     }
 
-    root_group
+    Ok(root_group)
 }

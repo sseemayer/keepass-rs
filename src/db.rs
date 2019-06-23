@@ -23,9 +23,9 @@ pub enum OuterCipherSuite {
 }
 
 impl OuterCipherSuite {
-    pub(crate) fn get_cipher(&self) -> Box<crypt::OuterCipher> {
+    pub(crate) fn get_cipher(&self, key: &[u8], iv: &[u8]) -> Result<Box<crypt::Cipher>> {
         match self {
-            OuterCipherSuite::AES256 => Box::new(crypt::AES256Cipher),
+            OuterCipherSuite::AES256 => Ok(Box::new(crypt::AES256Cipher::new(key, iv)?)),
         }
     }
 }
@@ -134,7 +134,10 @@ pub enum KDFSettings {
 }
 
 impl KDFSettings {
-    pub(crate) fn derive_key(&self, composite_key: &[u8; 32]) -> Result<[u8; 32]> {
+    pub(crate) fn derive_key(
+        &self,
+        composite_key: &crypt::GenericArray<u8, crypt::U32>,
+    ) -> Result<crypt::GenericArray<u8, crypt::U32>> {
         match self {
             KDFSettings::Argon2 {
                 memory,
@@ -202,11 +205,11 @@ pub enum InnerCipherSuite {
 }
 
 impl InnerCipherSuite {
-    pub(crate) fn get_cipher(&self) -> Box<crypt::InnerCipher> {
+    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<crypt::Cipher>> {
         match self {
-            InnerCipherSuite::Plain => Box::new(crypt::PlainCipher),
-            InnerCipherSuite::Salsa20 => Box::new(crypt::Salsa20Cipher),
-            InnerCipherSuite::ChaCha20 => Box::new(crypt::ChaCha20Cipher),
+            InnerCipherSuite::Plain => Ok(Box::new(crypt::PlainCipher::new(key)?)),
+            InnerCipherSuite::Salsa20 => Ok(Box::new(crypt::Salsa20Cipher::new(key)?)),
+            InnerCipherSuite::ChaCha20 => Ok(Box::new(crypt::ChaCha20Cipher::new(key)?)),
         }
     }
 }
@@ -286,7 +289,11 @@ impl Database {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
-            key_elements.push(crypt::calculate_sha256(&[p.as_bytes()]).to_vec());
+            key_elements.push(
+                crypt::calculate_sha256(&[p.as_bytes()])?
+                    .as_slice()
+                    .to_vec(),
+            );
         }
 
         if let Some(f) = keyfile {

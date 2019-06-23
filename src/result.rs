@@ -1,6 +1,20 @@
-use crate::crypto::symmetriccipher::SymmetricCipherError;
-
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum CryptoError {
+    InvalidKeyLength {
+        e: hmac::crypto_mac::InvalidKeyLength,
+    },
+    InvalidKeyIvLength {
+        e: block_modes::InvalidKeyIvLength,
+    },
+    BlockMode {
+        e: block_modes::BlockModeError,
+    },
+    SymmetricCipher {
+        e: crypto::symmetriccipher::SymmetricCipherError,
+    },
+}
 
 #[derive(Debug)]
 pub enum DatabaseIntegrityError {
@@ -9,7 +23,7 @@ pub enum DatabaseIntegrityError {
         e: argon2::Error,
     },
     Crypto {
-        e: SymmetricCipherError,
+        e: CryptoError,
     },
     HeaderHashMismatch,
     BlockHashMismatch {
@@ -59,6 +73,9 @@ pub enum DatabaseIntegrityError {
     },
     XMLParsing {
         e: xml::reader::Error,
+    },
+    Base64 {
+        e: base64::DecodeError,
     },
     UTF8 {
         e: std::str::Utf8Error,
@@ -151,6 +168,10 @@ impl std::fmt::Display for DatabaseIntegrityError {
                     "Encountering an error when parsing an UTF-8 formatted string: {}",
                     e
                 ),
+                DatabaseIntegrityError::Base64 { e } => format!(
+                    "Encountered an error when parsing a base64-encoded string: {}",
+                    e
+                ),
             }
         )
     }
@@ -199,6 +220,12 @@ impl From<DatabaseIntegrityError> for Error {
     }
 }
 
+impl From<CryptoError> for DatabaseIntegrityError {
+    fn from(e: CryptoError) -> Self {
+        DatabaseIntegrityError::Crypto { e }
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Error::IO { e }
@@ -211,9 +238,27 @@ impl From<argon2::Error> for DatabaseIntegrityError {
     }
 }
 
-impl From<SymmetricCipherError> for DatabaseIntegrityError {
-    fn from(e: SymmetricCipherError) -> Self {
-        DatabaseIntegrityError::Crypto { e }
+impl From<hmac::crypto_mac::InvalidKeyLength> for CryptoError {
+    fn from(e: hmac::crypto_mac::InvalidKeyLength) -> Self {
+        CryptoError::InvalidKeyLength { e }
+    }
+}
+
+impl From<block_modes::InvalidKeyIvLength> for CryptoError {
+    fn from(e: block_modes::InvalidKeyIvLength) -> Self {
+        CryptoError::InvalidKeyIvLength { e }
+    }
+}
+
+impl From<block_modes::BlockModeError> for CryptoError {
+    fn from(e: block_modes::BlockModeError) -> Self {
+        CryptoError::BlockMode { e }
+    }
+}
+
+impl From<crypto::symmetriccipher::SymmetricCipherError> for CryptoError {
+    fn from(e: crypto::symmetriccipher::SymmetricCipherError) -> Self {
+        CryptoError::SymmetricCipher { e }
     }
 }
 
@@ -229,78 +274,8 @@ impl From<std::str::Utf8Error> for DatabaseIntegrityError {
     }
 }
 
-/*
-error_chain! {
-    foreign_links {
-        Io(::std::io::Error);
-        XML(::xml::reader::Error);
-        UTF8(::std::str::Utf8Error);
-        Argon2(::argon2::Error);
-    }
-
-    errors {
-        Compression(v: String) {
-            description("Decompression error"),
-        }
-        Crypto {
-            description("Cryptography error")
-            display("Cryptography error")
-        }
-        IncorrectKey {
-            description("Incorrect key")
-        }
-        InvalidIdentifier {
-            description("Invalid file header - not a .kdbx file?")
-        }
-        InvalidHeaderEntry(h: u8)  {
-            description("Encountered invalid header entry")
-        }
-        InvalidKeyFile {
-            description("Key file invalid")
-        }
-        IncompleteHeader {
-            description("Invalid file header - missing some required entries")
-        }
-        InvalidOuterCipherID(cid: Vec<u8>) {
-            description ("Encountered an invalid outer cipher ID")
-        }
-        InvalidInnerCipherID(cid: u32) {
-            description ("Encountered an invalid inner cipher ID")
-        }
-        InvalidCompressionSuite {
-            description("Encountered an invalid compression suite")
-        }
-        InvalidInnerRandomStreamId {
-            description("Encountered an invalid inner stream cipher")
-        }
-        InvalidVariantDictionaryVersion {
-            description("Encountered an invalid VariantDictionary version")
-        }
-        InvalidVariantDictionaryValueType {
-            description("Encountered an invalid VariantDictionary value type")
-        }
-        InvalidKDBXVersion {
-            description("Invalid KDBX database file version")
-        }
-        InvalidKdfParams {
-            description("KDF parameters invalid")
-        }
-        HeaderHashMismatch {
-            description("Header hash mismatch")
-        }
-        HmacBlockHashMismatch {
-            description("Encountered a HMAC Block with an unvalid HMAC")
-        }
-        BlockHashMismatch {
-            description( "Block hash verification failed"),
-        }
-    }
-
-}
-
-impl ::std::convert::From<::crypto::symmetriccipher::SymmetricCipherError> for self::Error {
-    fn from(_ce: ::crypto::symmetriccipher::SymmetricCipherError) -> Self {
-        self::ErrorKind::Crypto.into()
+impl From<base64::DecodeError> for DatabaseIntegrityError {
+    fn from(e: base64::DecodeError) -> Self {
+        DatabaseIntegrityError::Base64 { e }
     }
 }
-*/
