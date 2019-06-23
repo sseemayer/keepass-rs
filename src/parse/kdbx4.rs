@@ -2,7 +2,9 @@ use std::convert::TryFrom;
 
 use crate::{
     crypt,
-    db::{Compression, Database, Header, InnerCipherSuite, InnerHeader, OuterCipherSuite},
+    db::{
+        Compression, Database, Header, InnerCipherSuite, InnerHeader, KdfSettings, OuterCipherSuite,
+    },
     hmac_block_stream,
     result::{DatabaseIntegrityError, Error, Result},
     variant_dictionary::VariantDictionary,
@@ -21,7 +23,7 @@ pub struct KDBX4Header {
     pub compression: Compression,
     pub master_seed: Vec<u8>,
     pub outer_iv: Vec<u8>,
-    pub kdf: VariantDictionary,
+    pub kdf: KdfSettings,
     pub body_start: usize,
 }
 
@@ -66,7 +68,7 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     let mut compression: Option<Compression> = None;
     let mut master_seed: Option<Vec<u8>> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
-    let mut kdf: Option<VariantDictionary> = None;
+    let mut kdf: Option<KdfSettings> = None;
 
     // parse header
     let mut pos = 12;
@@ -116,9 +118,10 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
             // ENCRYPTIONIV - Initialization Vector for decrypting the payload
             7 => outer_iv = Some(entry_buffer.clone().to_vec()),
 
-            // KdfParameters
+            // KDF Parameters
             11 => {
-                kdf = Some(VariantDictionary::parse(entry_buffer)?);
+                let vd = VariantDictionary::parse(entry_buffer)?;
+                kdf = Some(KdfSettings::try_from(vd)?);
             }
 
             _ => {
@@ -234,14 +237,10 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let header_hmac = &data[(pos + 32)..(pos + 64)];
     let hmac_block_stream = &data[(pos + 64)..];
 
-    // Turn enums into appropriate trait objects
-    let compression = header.compression.get_compression();
-    let kdf = header.kdf.to_kdf()?;
-
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = crypt::calculate_sha256(&key_elements)?;
-    let transformed_key = kdf.transform_key(&composite_key)?;
+    let transformed_key = header.kdf.get_kdf().transform_key(&composite_key)?;
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
 
     // verify header
@@ -261,11 +260,14 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
         hmac_block_stream::read_hmac_block_stream(&hmac_block_stream, &hmac_key)?;
 
     // Decrypt and decompress encrypted payload
-    let mut outer_decryptor = header
+    let payload_compressed = header
         .outer_cipher
-        .get_cipher(&master_key, header.outer_iv.as_ref())?;
-    let payload_compressed = outer_decryptor.decrypt(&payload_encrypted)?;
-    let payload = compression.decompress(&payload_compressed)?;
+        .get_cipher(&master_key, header.outer_iv.as_ref())?
+        .decrypt(&payload_encrypted)?;
+    let payload = header
+        .compression
+        .get_compression()
+        .decompress(&payload_compressed)?;
 
     // KDBX4 has inner header, too - parse it
     let inner_header = parse_inner_header(&payload)?;

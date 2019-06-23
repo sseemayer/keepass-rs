@@ -179,19 +179,20 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = crypt::calculate_sha256(&key_elements)?;
 
-    let kdf = crypt::kdf::AesKdf {
+    // KDF is hard coded for KDBX 3
+    let transformed_key = crypt::kdf::AesKdf {
         seed: header.transform_seed.clone(),
         rounds: header.transform_rounds,
-    };
-    let transformed_key = kdf.transform_key(&composite_key)?;
+    }
+    .transform_key(&composite_key)?;
 
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
 
     // Decrypt payload
-    let mut outer_cipher = header
+    let payload = header
         .outer_cipher
-        .get_cipher(&master_key, header.outer_iv.as_ref())?;
-    let payload = outer_cipher.decrypt(payload_encrypted)?;
+        .get_cipher(&master_key, header.outer_iv.as_ref())?
+        .decrypt(payload_encrypted)?;
 
     // Check if we decrypted correctly
     if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
