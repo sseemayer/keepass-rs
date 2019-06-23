@@ -38,19 +38,7 @@ impl Cipher for AES256Cipher {
     }
 }
 
-pub(crate) struct Salsa20Cipher {
-    cipher: crypto::salsa20::Salsa20,
-}
-
-impl Salsa20Cipher {
-    pub(crate) fn new(key: &[u8]) -> Result<Self> {
-        let iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
-        Ok(Salsa20Cipher {
-            cipher: crypto::salsa20::Salsa20::new(key, iv),
-        })
-    }
-}
-
+/// Utility method to work with crypto::symmetriccipher::Decryptor
 fn decrypt_stream(
     decryptor: &mut crypto::symmetriccipher::Decryptor,
     data: &[u8],
@@ -76,6 +64,19 @@ fn decrypt_stream(
     }
 
     Ok(out)
+}
+
+pub(crate) struct Salsa20Cipher {
+    cipher: crypto::salsa20::Salsa20,
+}
+
+impl Salsa20Cipher {
+    pub(crate) fn new(key: &[u8]) -> Result<Self> {
+        let iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
+        Ok(Salsa20Cipher {
+            cipher: crypto::salsa20::Salsa20::new(key, iv),
+        })
+    }
 }
 
 impl Cipher for Salsa20Cipher {
