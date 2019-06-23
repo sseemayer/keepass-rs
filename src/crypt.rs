@@ -177,7 +177,6 @@ pub(crate) fn transform_key_aes(
 
     // encrypt the key repeatedly
     for _ in 0..transform_rounds {
-        // TODO can we re-use the cipher?
         let cipher = Aes256Ecb::new_var(transform_seed, Default::default())
             .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
 
