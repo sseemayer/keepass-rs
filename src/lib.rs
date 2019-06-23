@@ -4,8 +4,7 @@
 //! ```
 //! extern crate keepass;
 //!
-//! use keepass::{Database, Node};
-//! use keepass::result::{Result, Error};
+//! use keepass::{Database, Node, Result, Error};
 //! use std::fs::File;
 //!
 //! fn main() -> Result<()> {
@@ -16,10 +15,10 @@
 //!     // Iterate over all Groups and Nodes
 //!     for node in &db.root {
 //!         match node {
-//!             Node::GroupNode(g) => {
+//!             Node::Group(g) => {
 //!                 println!("Saw group '{0}'", g.name);
 //!             },
-//!             Node::EntryNode(e) => {
+//!             Node::Entry(e) => {
 //!                 let title = e.get_title().unwrap();
 //!                 let user = e.get_username().unwrap();
 //!                 let pass = e.get_password().unwrap();
@@ -59,4 +58,5 @@ mod xml_parse;
 pub(crate) mod parse;
 
 pub use self::db::*;
+pub use self::result::{CryptoError, DatabaseIntegrityError, Error, Result};
 // see https://gist.github.com/msmuenchen/9318327 for file format details

@@ -10,7 +10,7 @@ mod tests {
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
 
         // get an entry on the root node
-        if let Some(Node::EntryNode(e)) = db.root.get(&["Sample Entry"]) {
+        if let Some(Node::Entry(e)) = db.root.get(&["Sample Entry"]) {
             assert_eq!(e.get_title(), Some("Sample Entry"));
             assert_eq!(e.get_username(), Some("User Name"));
             assert_eq!(e.get_password(), Some("Password"));
@@ -29,7 +29,7 @@ mod tests {
             panic!("Expected an entry");
         }
 
-        if let Some(Node::EntryNode(e)) = db.root.get(&["General", "Subgroup", "test entry"]) {
+        if let Some(Node::Entry(e)) = db.root.get(&["General", "Subgroup", "test entry"]) {
             assert_eq!(e.get_title(), Some("test entry"));
             assert_eq!(e.get_username(), Some("jdoe"));
             assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));

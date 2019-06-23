@@ -271,24 +271,24 @@ impl Group {
     /// let path = Path::new("tests/resources/test_db_with_password.kdbx");
     /// let db = Database::open(&mut File::open(path).unwrap(), Some("demopass"), None).unwrap();
     ///
-    /// if let Some(Node::EntryNode(e)) = db.root.get(&["General", "Sample Entry #2"]) {
+    /// if let Some(Node::Entry(e)) = db.root.get(&["General", "Sample Entry #2"]) {
     ///     println!("User: {}", e.get_username().unwrap());
     /// }
     /// ```
     pub fn get(&self, path: &[&str]) -> Option<Node> {
         if path.len() == 0 {
-            Some(Node::GroupNode(self))
+            Some(Node::Group(self))
         } else {
             let p = path[0];
             let l = path.len();
 
             if self.entries.contains_key(p) && l == 1 {
-                Some(Node::EntryNode(&self.entries[p]))
+                Some(Node::Entry(&self.entries[p]))
             } else if self.child_groups.contains_key(p) {
                 let g = &self.child_groups[p];
 
                 if l == 1 {
-                    Some(Node::GroupNode(g))
+                    Some(Node::Group(g))
                 } else {
                     let r = &path[1..];
                     g.get(r)
@@ -329,8 +329,8 @@ pub struct AutoTypeAssociation {
 }
 
 pub enum Node<'a> {
-    GroupNode(&'a Group),
-    EntryNode(&'a Entry),
+    Group(&'a Group),
+    Entry(&'a Entry),
 }
 
 /// An iterator over Groups and Entries
@@ -370,11 +370,11 @@ impl<'a> Iterator for NodeIter<'a> {
     fn next(&mut self) -> Option<Node<'a>> {
         let res = self.queue.pop();
 
-        if let Some(Node::GroupNode(ref g)) = res {
+        if let Some(Node::Group(ref g)) = res {
             self.queue
-                .extend(g.entries.iter().map(|(_, e)| Node::EntryNode(&e)));
+                .extend(g.entries.iter().map(|(_, e)| Node::Entry(&e)));
             self.queue
-                .extend(g.child_groups.iter().map(|(_, g)| Node::GroupNode(&g)));
+                .extend(g.child_groups.iter().map(|(_, g)| Node::Group(&g)));
         }
 
         res
@@ -393,7 +393,7 @@ impl<'a> IntoIterator for &'a Group {
 
     fn into_iter(self) -> NodeIter<'a> {
         NodeIter {
-            queue: vec![Node::GroupNode(&self)],
+            queue: vec![Node::Group(&self)],
         }
     }
 }

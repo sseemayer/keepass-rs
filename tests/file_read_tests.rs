@@ -19,11 +19,11 @@ mod tests {
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::GroupNode(g) => {
+                Node::Group(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::EntryNode(e) => {
+                Node::Entry(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();
@@ -60,11 +60,11 @@ mod tests {
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::GroupNode(g) => {
+                Node::Group(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::EntryNode(e) => {
+                Node::Entry(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();
@@ -101,11 +101,11 @@ mod tests {
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::GroupNode(g) => {
+                Node::Group(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::EntryNode(e) => {
+                Node::Entry(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();
