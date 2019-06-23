@@ -10,10 +10,7 @@ use block_modes::{
     BlockMode, Cbc, Ecb,
 };
 use crypto;
-use crypto::{
-    buffer::{ReadBuffer, WriteBuffer},
-    symmetriccipher::Decryptor,
-};
+use crypto::buffer::{ReadBuffer, WriteBuffer};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256, Sha512};
 
@@ -219,7 +216,7 @@ pub(crate) fn transform_key_argon2(
     };
 
     let key = argon2::hash_raw(composite_key, salt, &config)
-        .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
+        .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
 
     Ok(GenericArray::from_slice(&key).clone())
 }

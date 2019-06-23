@@ -2,6 +2,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum CryptoError {
+    Argon2 {
+        e: argon2::Error,
+    },
     InvalidKeyLength {
         e: hmac::crypto_mac::InvalidKeyLength,
     },
@@ -19,9 +22,6 @@ pub enum CryptoError {
 #[derive(Debug)]
 pub enum DatabaseIntegrityError {
     Compression,
-    Argon2 {
-        e: argon2::Error,
-    },
     Crypto {
         e: CryptoError,
     },
@@ -96,11 +96,8 @@ impl std::fmt::Display for DatabaseIntegrityError {
             f,
             "Database integrity error: {}",
             match self {
-                DatabaseIntegrityError::Argon2 { e } => {
-                    format!("Problem deriving key with Argon2: {}", e)
-                }
                 DatabaseIntegrityError::Compression => "(De)compression error".to_owned(),
-                DatabaseIntegrityError::Crypto { e } => format!("(De)cryption error: {:?}", e),
+                DatabaseIntegrityError::Crypto { e } => format!("Cryptography error: {:?}", e),
                 DatabaseIntegrityError::HeaderHashMismatch => {
                     "Hash mismatch when verifying header".to_owned()
                 }
@@ -192,12 +189,40 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl std::fmt::Display for CryptoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Crypto Error: {}",
+            match self {
+                CryptoError::Argon2 { e } => format!("Problem deriving key with Argon2: {}", e),
+                CryptoError::InvalidKeyIvLength { e } => format!("Invalid key / IV length: {}", e),
+                CryptoError::InvalidKeyLength { e } => format!("Invalid key length: {}", e),
+                CryptoError::BlockMode { e } => format!("Block mode error: {}", e),
+                CryptoError::SymmetricCipher { e } => format!("Symmetric Cipher Error: {:?}", e),
+            }
+        )
+    }
+}
+
+impl std::error::Error for CryptoError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CryptoError::Argon2 { e } => Some(e),
+            CryptoError::InvalidKeyIvLength { e } => Some(e),
+            CryptoError::InvalidKeyLength { .. } => None, // TODO pass this through once e implements Error
+            CryptoError::BlockMode { e } => Some(e),
+            CryptoError::SymmetricCipher { .. } => None, // TODO pass this through once https://github.com/DaGenix/rust-crypto/pull/452 is merged
+        }
+    }
+}
+
 impl std::error::Error for DatabaseIntegrityError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            DatabaseIntegrityError::Argon2 { e } => Some(e),
-            DatabaseIntegrityError::Crypto { .. } => None, // TODO pass this through once https://github.com/DaGenix/rust-crypto/pull/452 is merged
+            DatabaseIntegrityError::Crypto { e } => Some(e),
             DatabaseIntegrityError::XMLParsing { e } => Some(e),
+            DatabaseIntegrityError::Base64 { e } => Some(e),
             DatabaseIntegrityError::UTF8 { e } => Some(e),
             _ => None,
         }
@@ -232,9 +257,9 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<argon2::Error> for DatabaseIntegrityError {
+impl From<argon2::Error> for CryptoError {
     fn from(e: argon2::Error) -> Self {
-        DatabaseIntegrityError::Argon2 { e }
+        CryptoError::Argon2 { e }
     }
 }
 
