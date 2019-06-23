@@ -1,14 +1,11 @@
-use std::collections::HashMap;
 use std::convert::TryFrom;
 
 use crate::{
     crypt,
-    db::{
-        Compression, Database, Header, InnerCipherSuite, InnerHeader, KDFSettings,
-        OuterCipherSuite, VariantDictionaryValue,
-    },
+    db::{Compression, Database, Header, InnerCipherSuite, InnerHeader, OuterCipherSuite},
     hmac_block_stream,
     result::{DatabaseIntegrityError, Error, Result},
+    variant_dictionary::VariantDictionary,
     xml_parse,
 };
 
@@ -24,7 +21,7 @@ pub struct KDBX4Header {
     pub compression: Compression,
     pub master_seed: Vec<u8>,
     pub outer_iv: Vec<u8>,
-    pub kdf: KDFSettings,
+    pub kdf: VariantDictionary,
     pub body_start: usize,
 }
 
@@ -69,7 +66,7 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     let mut compression: Option<Compression> = None;
     let mut master_seed: Option<Vec<u8>> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
-    let mut kdf: Option<KDFSettings> = None;
+    let mut kdf: Option<VariantDictionary> = None;
 
     // parse header
     let mut pos = 12;
@@ -121,8 +118,7 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
 
             // KdfParameters
             11 => {
-                let kdf_params = parse_variant_dictionary(entry_buffer)?;
-                kdf = Some(KDFSettings::try_from(&kdf_params)?);
+                kdf = Some(VariantDictionary::parse(entry_buffer)?);
             }
 
             _ => {
@@ -240,11 +236,12 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // Turn enums into appropriate trait objects
     let compression = header.compression.get_compression();
+    let kdf = header.kdf.to_kdf()?;
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = crypt::calculate_sha256(&key_elements)?;
-    let transformed_key = header.kdf.derive_key(&composite_key)?;
+    let transformed_key = kdf.transform_key(&composite_key)?;
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
 
     // verify header
@@ -289,59 +286,4 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     };
 
     Ok(db)
-}
-
-/// Read KDBX4 VariantDictionary data structures
-fn parse_variant_dictionary(data: &[u8]) -> Result<HashMap<String, VariantDictionaryValue>> {
-    let version = LittleEndian::read_u16(&data[0..2]);
-
-    if version != 0x100 {
-        return Err(DatabaseIntegrityError::InvalidVariantDictionaryVersion { version }.into());
-    }
-
-    let mut pos = 2;
-    let mut out = HashMap::new();
-
-    while pos < data.len() - 9 {
-        let value_type = data[pos];
-        pos += 1;
-
-        let key_length = LittleEndian::read_u32(&data[pos..(pos + 4)]) as usize;
-        pos += 4;
-
-        let key = std::str::from_utf8(&data[pos..(pos + key_length)])
-            .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?
-            .to_owned();
-        pos += key_length;
-
-        let value_length = LittleEndian::read_u32(&data[pos..(pos + 4)]) as usize;
-        pos += 4;
-
-        let value_buffer = &data[pos..(pos + value_length)];
-        pos += value_length;
-
-        let value = match value_type {
-            0x04 => VariantDictionaryValue::UInt32(LittleEndian::read_u32(value_buffer)),
-            0x05 => VariantDictionaryValue::UInt64(LittleEndian::read_u64(value_buffer)),
-            0x08 => VariantDictionaryValue::Bool(value_buffer != [0]),
-            0x0c => VariantDictionaryValue::Int32(LittleEndian::read_i32(value_buffer)),
-            0x0d => VariantDictionaryValue::Int64(LittleEndian::read_i64(value_buffer)),
-            0x18 => VariantDictionaryValue::String(
-                std::str::from_utf8(value_buffer)
-                    .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?
-                    .into(),
-            ),
-            0x42 => VariantDictionaryValue::ByteArray(value_buffer.to_vec()),
-            _ => {
-                return Err(DatabaseIntegrityError::InvalidVariantDictionaryValueType {
-                    value_type,
-                }
-                .into());
-            }
-        };
-
-        out.insert(key, value);
-    }
-
-    Ok(out)
 }

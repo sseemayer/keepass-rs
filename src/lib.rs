@@ -53,6 +53,7 @@ mod decompress;
 mod hmac_block_stream;
 mod keyfile;
 pub mod result;
+mod variant_dictionary;
 mod xml_parse;
 
 pub(crate) mod parse;

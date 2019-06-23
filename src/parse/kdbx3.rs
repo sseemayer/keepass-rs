@@ -1,5 +1,5 @@
 use crate::{
-    crypt,
+    crypt::{self, kdf::Kdf},
     db::{Compression, Database, Group, Header, InnerCipherSuite, InnerHeader, OuterCipherSuite},
     result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
@@ -178,11 +178,12 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = crypt::calculate_sha256(&key_elements)?;
-    let transformed_key = crypt::transform_key_aes(
-        header.transform_seed.as_ref(),
-        header.transform_rounds,
-        &composite_key,
-    )?;
+
+    let kdf = crypt::kdf::AesKdf {
+        seed: header.transform_seed.clone(),
+        rounds: header.transform_rounds,
+    };
+    let transformed_key = kdf.transform_key(&composite_key)?;
 
     let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
 

@@ -1,7 +1,8 @@
-use hex_literal::hex;
 use secstr::SecStr;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+
+use hex_literal::hex;
 
 use crate::{
     crypt, decompress,
@@ -23,9 +24,9 @@ pub enum OuterCipherSuite {
 }
 
 impl OuterCipherSuite {
-    pub(crate) fn get_cipher(&self, key: &[u8], iv: &[u8]) -> Result<Box<crypt::Cipher>> {
+    pub(crate) fn get_cipher(&self, key: &[u8], iv: &[u8]) -> Result<Box<crypt::cipher::Cipher>> {
         match self {
-            OuterCipherSuite::AES256 => Ok(Box::new(crypt::AES256Cipher::new(key, iv)?)),
+            OuterCipherSuite::AES256 => Ok(Box::new(crypt::cipher::AES256Cipher::new(key, iv)?)),
         }
     }
 }
@@ -42,162 +43,6 @@ impl TryFrom<&[u8]> for OuterCipherSuite {
 }
 
 #[derive(Debug)]
-pub(crate) enum VariantDictionaryValue {
-    UInt32(u32),
-    UInt64(u64),
-    Bool(bool),
-    Int32(i32),
-    Int64(i64),
-    String(String),
-    ByteArray(Vec<u8>),
-}
-
-impl VariantDictionaryValue {
-    pub(crate) fn get_u32(&self) -> Option<u32> {
-        if let VariantDictionaryValue::UInt32(v) = self {
-            Some(v.clone())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn get_u64(&self) -> Option<u64> {
-        if let VariantDictionaryValue::UInt64(v) = self {
-            Some(v.clone())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn _get_bool(&self) -> Option<bool> {
-        if let VariantDictionaryValue::Bool(v) = self {
-            Some(v.clone())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn _get_i32(&self) -> Option<i32> {
-        if let VariantDictionaryValue::Int32(v) = self {
-            Some(v.clone())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn _get_i64(&self) -> Option<i64> {
-        if let VariantDictionaryValue::Int64(v) = self {
-            Some(v.clone())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn _get_string(&self) -> Option<String> {
-        if let VariantDictionaryValue::String(v) = self {
-            Some(v.clone())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn get_bytearray(&self) -> Option<Vec<u8>> {
-        if let VariantDictionaryValue::ByteArray(v) = self {
-            Some(v.clone())
-        } else {
-            None
-        }
-    }
-}
-
-const _KDF_AES_KDBX3: [u8; 16] = hex!("c9d9f39a628a4460bf740d08c18a4fea");
-const _KDF_AES_KDBX4: [u8; 16] = hex!("7c02bb8279a74ac0927d114a00648238");
-const KDF_ARGON2: [u8; 16] = hex!("ef636ddf8c29444b91f7a9a403e30a0c");
-
-#[derive(Debug)]
-pub enum KDFSettings {
-    //AESKDBX3 {
-    //    seed: [u8; 8],
-    //    rounds: u64,
-    //},
-    //AESKDBX4 {
-    //    seed: [u8; 8],
-    //    rounds: u64,
-    //},
-    Argon2 {
-        memory: u64,      // M
-        salt: [u8; 32],   // S
-        iterations: u64,  // I
-        parallelism: u32, // P
-        version: u32,     // V
-    },
-}
-
-impl KDFSettings {
-    pub(crate) fn derive_key(
-        &self,
-        composite_key: &crypt::GenericArray<u8, crypt::U32>,
-    ) -> Result<crypt::GenericArray<u8, crypt::U32>> {
-        match self {
-            KDFSettings::Argon2 {
-                memory,
-                salt,
-                iterations,
-                parallelism,
-                version,
-            } => crypt::transform_key_argon2(
-                *memory,
-                salt,
-                *iterations,
-                *parallelism,
-                *version,
-                composite_key,
-            ),
-        }
-    }
-}
-
-/// Convenience method for accessing VariantDictionary values
-fn get_vd<R, F>(dict: &HashMap<String, VariantDictionaryValue>, key: &str, f: F) -> Result<R>
-where
-    F: FnOnce(&VariantDictionaryValue) -> Option<R>,
-{
-    dict.get(key).and_then(f).ok_or(
-        DatabaseIntegrityError::MissingKDFParams {
-            key: key.to_owned(),
-        }
-        .into(),
-    )
-}
-
-impl TryFrom<&HashMap<String, VariantDictionaryValue>> for KDFSettings {
-    type Error = Error;
-
-    fn try_from(v: &HashMap<String, VariantDictionaryValue>) -> Result<KDFSettings> {
-        let uuid = get_vd(v, "$UUID", VariantDictionaryValue::get_bytearray)?;
-
-        if uuid == KDF_ARGON2 {
-            let memory = get_vd(v, "M", VariantDictionaryValue::get_u64)?;
-            let salt =
-                crypt::u8_32_from_slice(&get_vd(v, "S", VariantDictionaryValue::get_bytearray)?);
-            let iterations = get_vd(v, "I", VariantDictionaryValue::get_u64)?;
-            let parallelism = get_vd(v, "P", VariantDictionaryValue::get_u32)?;
-            let version = get_vd(v, "V", VariantDictionaryValue::get_u32)?;
-
-            Ok(KDFSettings::Argon2 {
-                memory,
-                salt,
-                iterations,
-                parallelism,
-                version,
-            })
-        } else {
-            return Err(DatabaseIntegrityError::InvalidKDFUUID { uuid }.into());
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum InnerCipherSuite {
     Plain,
     Salsa20,
@@ -205,11 +50,11 @@ pub enum InnerCipherSuite {
 }
 
 impl InnerCipherSuite {
-    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<crypt::Cipher>> {
+    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<crypt::cipher::Cipher>> {
         match self {
-            InnerCipherSuite::Plain => Ok(Box::new(crypt::PlainCipher::new(key)?)),
-            InnerCipherSuite::Salsa20 => Ok(Box::new(crypt::Salsa20Cipher::new(key)?)),
-            InnerCipherSuite::ChaCha20 => Ok(Box::new(crypt::ChaCha20Cipher::new(key)?)),
+            InnerCipherSuite::Plain => Ok(Box::new(crypt::cipher::PlainCipher::new(key)?)),
+            InnerCipherSuite::Salsa20 => Ok(Box::new(crypt::cipher::Salsa20Cipher::new(key)?)),
+            InnerCipherSuite::ChaCha20 => Ok(Box::new(crypt::cipher::ChaCha20Cipher::new(key)?)),
         }
     }
 }

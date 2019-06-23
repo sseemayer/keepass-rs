@@ -56,6 +56,9 @@ pub enum DatabaseIntegrityError {
     MissingKDFParams {
         key: String,
     },
+    MistypedKDFParam {
+        key: String,
+    },
     InvalidOuterCipherID {
         cid: Vec<u8>,
     },
@@ -131,6 +134,9 @@ impl std::fmt::Display for DatabaseIntegrityError {
                 }
                 DatabaseIntegrityError::MissingKDFParams { key } => {
                     format!("Missing field in KDF parameters: {}", key)
+                }
+                DatabaseIntegrityError::MistypedKDFParam { key } => {
+                    format!("KDF parameter {} has wrong type", key)
                 }
                 DatabaseIntegrityError::InvalidKDFVersion { version } => {
                     format!("Encountered an invalid KDF version: {}", version)

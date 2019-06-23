@@ -1,4 +1,4 @@
-use crypt::Cipher;
+use crypt::cipher::Cipher;
 use result::{DatabaseIntegrityError, Error, Result};
 
 use base64;
