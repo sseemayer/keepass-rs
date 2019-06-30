@@ -166,17 +166,13 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut Cipher) -> Result<G
                                 // Use the decryptor to decrypt the protected
                                 // and base64-encoded value
                                 //
-                                println!("Found protected string {}", c);
                                 let buf = base64::decode(&c)
                                     .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
 
-                                println!("protected raw {:?}", buf);
                                 let buf_decode = inner_cipher.decrypt(&buf)?;
 
                                 let c_decode = std::str::from_utf8(&buf_decode)
                                     .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
-
-                                println!("Decoded protected string to {}", c_decode);
 
                                 *v = SecStr::from(c_decode);
                             }
