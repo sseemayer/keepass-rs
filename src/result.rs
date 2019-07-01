@@ -163,7 +163,7 @@ impl std::fmt::Display for Error {
             "KDBX error: {}",
             match self {
                 Error::IO { e } => format!("IO error: {}", e),
-                Error::IncorrectKey => "Incorrect key specified".to_owned(),
+                Error::IncorrectKey => "Incorrect password key specified".to_owned(),
                 Error::InvalidKeyFile => "Keyfile format invalid".to_owned(),
                 Error::DatabaseIntegrity { e } => format!("{}", e),
             }
