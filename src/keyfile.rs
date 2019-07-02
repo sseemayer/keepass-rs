@@ -21,7 +21,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>> {
             }
             XmlEvent::Characters(s) => {
                 // Check if we are at KeyFile/Key/Data
-                if tag_stack == &["KeyFile", "Key", "Data"] {
+                if tag_stack == ["KeyFile", "Key", "Data"] {
                     let key_base64 = s.as_bytes().to_vec();
 
                     // Check if the key is base64-encoded. If yes, return decoded bytes
@@ -36,7 +36,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>> {
         }
     }
 
-    Err(Error::InvalidKeyFile.into())
+    Err(Error::InvalidKeyFile)
 }
 
 pub fn parse(source: &mut std::io::Read) -> Result<Vec<u8>> {

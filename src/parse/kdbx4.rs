@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
+use crate::crypt::{self, InnerCipherSuite, OuterCipherSuite};
 use crate::{
-    crypt,
-    db::{
-        Compression, Database, Header, InnerCipherSuite, InnerHeader, KDFSettings,
-        OuterCipherSuite, VariantDictionaryValue,
-    },
+    db::{Compression, Database, Header, InnerHeader, KDFSettings, VariantDictionaryValue},
     hmac_block_stream,
     result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
@@ -53,10 +50,10 @@ pub struct KDBX4InnerHeader {
     body_start: usize,
 }
 
-fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
+fn parse_outer_header(data: &[u8]) -> Result<KDBX4Header> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
-    if version != 0xb54bfb67 || file_major_version != 4 {
+    if version != 0xb54b_fb67 || file_major_version != 4 {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
             file_major_version,
@@ -114,10 +111,10 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
             }
 
             // MASTERSEED - Master seed for deriving the master key
-            4 => master_seed = Some(entry_buffer.clone().to_vec()),
+            4 => master_seed = Some(entry_buffer.to_vec()),
 
             // ENCRYPTIONIV - Initialization Vector for decrypting the payload
-            7 => outer_iv = Some(entry_buffer.clone().to_vec()),
+            7 => outer_iv = Some(entry_buffer.to_vec()),
 
             // KdfParameters
             11 => {
@@ -135,12 +132,12 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     // something is missing
 
     fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
-        v.ok_or(
+        v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteOuterHeader {
                 missing_field: err.into(),
             }
-            .into(),
-        )
+            .into()
+        })
     }
 
     let outer_cipher = get_or_err(outer_cipher, "Outer Cipher ID")?;
@@ -188,7 +185,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
             }
 
             // inner random stream key
-            0x02 => inner_random_stream_key = Some(entry_buffer.clone().to_vec()),
+            0x02 => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
             // binary attachment
             0x03 => {
@@ -203,12 +200,12 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
     }
 
     fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
-        v.ok_or(
+        v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteInnerHeader {
                 missing_field: err.into(),
             }
-            .into(),
-        )
+            .into()
+        })
     }
 
     let inner_random_stream = get_or_err(inner_random_stream, "Inner random stream UUID")?;
@@ -223,7 +220,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and key elements
-pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database> {
+pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     // parse header
     let header = parse_outer_header(data)?;
     let pos = header.body_start;
@@ -240,7 +237,6 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // Turn enums into appropriate trait objects
     let compression = header.compression.get_compression();
-    let outer_cipher = header.outer_cipher.get_cipher();
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let composite_key = crypt::derive_composite_key(key_elements);
@@ -256,7 +252,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"]);
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(usize::max_value(), &hmac_key);
     if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key) {
-        return Err(Error::IncorrectKey.into());
+        return Err(Error::IncorrectKey);
     }
 
     // read encrypted payload from hmac-verified block stream
@@ -264,7 +260,9 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
         hmac_block_stream::read_hmac_block_stream(&hmac_block_stream, &hmac_key)?;
 
     // Decrypt and decompress encrypted payload
-    let mut outer_decryptor = outer_cipher.new(&master_key, header.outer_iv.as_ref());
+    let mut outer_decryptor = header
+        .outer_cipher
+        .get_decryptor(&master_key, header.outer_iv.as_ref());
     let payload_compressed = crypt::decrypt(&mut *outer_decryptor, &payload_encrypted)?;
     let payload = compression.decompress(&payload_compressed)?;
 
@@ -272,8 +270,9 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let inner_header = parse_inner_header(&payload)?;
 
     // Initialize inner decryptor from inner header params
-    let inner_cipher = inner_header.inner_random_stream.get_cipher();
-    let mut inner_decryptor = inner_cipher.new(&inner_header.inner_random_stream_key);
+    let mut inner_decryptor = inner_header
+        .inner_random_stream
+        .get_decryptor(&inner_header.inner_random_stream_key);
 
     // after inner header is one XML document
     let xml = &payload[inner_header.body_start..];

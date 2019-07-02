@@ -10,6 +10,38 @@ use crypto::mac::Mac;
 use crypto::salsa20::Salsa20;
 use crypto::sha2::{Sha256, Sha512};
 use crypto::symmetriccipher::{Decryptor, SymmetricCipherError};
+use hex_literal::hex;
+use std::convert::Into;
+use std::convert::TryFrom;
+
+const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
+const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
+const _CIPHERSUITE_TWOFISH: [u8; 16] = hex!("ad68f29f576f4bb9a36ad47af965346c");
+const _CIPHERSUITE_CHACHA20: [u8; 16] = hex!("d6038a2b8b6f4cb5a524339a31dbb59a");
+
+#[derive(Debug)]
+pub enum OuterCipherSuite {
+    AES256,
+}
+
+impl OuterCipherSuite {
+    pub(crate) fn get_decryptor(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor> {
+        match self {
+            OuterCipherSuite::AES256 => cbc_decryptor(KeySize::KeySize256, key, iv, PkcsPadding),
+        }
+    }
+}
+
+impl TryFrom<&[u8]> for OuterCipherSuite {
+    type Error = Error;
+    fn try_from(v: &[u8]) -> Result<OuterCipherSuite> {
+        if v == CIPHERSUITE_AES256 {
+            Ok(OuterCipherSuite::AES256)
+        } else {
+            Err(DatabaseIntegrityError::InvalidOuterCipherID { cid: v.to_vec() }.into())
+        }
+    }
+}
 
 pub(crate) fn u8_32_from_slice(bytes: &[u8]) -> [u8; 32] {
     let mut array = [0; 32];
@@ -18,45 +50,39 @@ pub(crate) fn u8_32_from_slice(bytes: &[u8]) -> [u8; 32] {
     array
 }
 
-pub(crate) trait OuterCipher {
-    fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor>;
+#[derive(Debug)]
+pub enum InnerCipherSuite {
+    Plain,
+    Salsa20,
+    ChaCha20,
 }
 
-pub(crate) struct AES256Cipher;
-
-impl OuterCipher for AES256Cipher {
-    fn new(&self, key: &[u8], iv: &[u8]) -> Box<Decryptor> {
-        cbc_decryptor(KeySize::KeySize256, key, iv, PkcsPadding)
+impl InnerCipherSuite {
+    pub(crate) fn get_decryptor(&self, key: &[u8]) -> Box<Decryptor> {
+        match self {
+            InnerCipherSuite::Plain => Box::new(NoOpDecryptor),
+            InnerCipherSuite::Salsa20 => {
+                let iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
+                Box::new(Salsa20::new(key, iv))
+            }
+            InnerCipherSuite::ChaCha20 => {
+                let iv = calculate_sha512(&[key]);
+                Box::new(ChaCha20::new(&iv[0..32], &iv[32..44]))
+            }
+        }
     }
 }
 
-pub(crate) trait InnerCipher {
-    fn new(&self, key: &[u8]) -> Box<Decryptor>;
-}
+impl TryFrom<u32> for InnerCipherSuite {
+    type Error = Error;
 
-pub(crate) struct Salsa20Cipher;
-
-impl InnerCipher for Salsa20Cipher {
-    fn new(&self, key: &[u8]) -> Box<Decryptor> {
-        let iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
-        Box::new(Salsa20::new(key, iv))
-    }
-}
-
-pub(crate) struct ChaCha20Cipher;
-
-impl InnerCipher for ChaCha20Cipher {
-    fn new(&self, key: &[u8]) -> Box<Decryptor> {
-        let iv = calculate_sha512(&[key]);
-
-        Box::new(ChaCha20::new(&iv[0..32], &iv[32..44]))
-    }
-}
-
-pub(crate) struct PlainCipher;
-impl InnerCipher for PlainCipher {
-    fn new(&self, _: &[u8]) -> Box<Decryptor> {
-        Box::new(NoOpDecryptor)
+    fn try_from(v: u32) -> Result<InnerCipherSuite> {
+        match v {
+            0 => Ok(InnerCipherSuite::Plain),
+            2 => Ok(InnerCipherSuite::Salsa20),
+            3 => Ok(InnerCipherSuite::ChaCha20),
+            _ => Err(DatabaseIntegrityError::InvalidInnerCipherID { cid: v }.into()),
+        }
     }
 }
 
@@ -143,7 +169,7 @@ pub(crate) fn decrypt(decryptor: &mut Decryptor, data: &[u8]) -> Result<Vec<u8>>
     Ok(final_result)
 }
 
-pub(crate) fn derive_composite_key(elements: &Vec<Vec<u8>>) -> [u8; 32] {
+pub(crate) fn derive_composite_key(elements: &[Vec<u8>]) -> [u8; 32] {
     let mut digest = Sha256::new();
     for element in elements {
         digest.input(&element);
@@ -159,7 +185,7 @@ pub(crate) fn transform_key_aes(
     transform_rounds: u64,
     composite_key: [u8; 32],
 ) -> Result<[u8; 32]> {
-    let mut key: [u8; 32] = composite_key.clone();
+    let mut key: [u8; 32] = composite_key;
 
     for _ in 0..transform_rounds {
         let mut buffer = [0u8; 32];
@@ -197,7 +223,7 @@ pub(crate) fn transform_key_argon2(
     let version = match version {
         0x10 => argon2::Version::Version10,
         0x13 => argon2::Version::Version13,
-        _ => return Err(DatabaseIntegrityError::InvalidKDFVersion { version: version }.into()),
+        _ => return Err(DatabaseIntegrityError::InvalidKDFVersion { version }.into()),
     };
 
     let config = argon2::Config {

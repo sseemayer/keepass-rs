@@ -12,35 +12,6 @@ use crate::{
     result::{DatabaseIntegrityError, Error, Result},
 };
 
-const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
-const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
-const _CIPHERSUITE_TWOFISH: [u8; 16] = hex!("ad68f29f576f4bb9a36ad47af965346c");
-const _CIPHERSUITE_CHACHA20: [u8; 16] = hex!("d6038a2b8b6f4cb5a524339a31dbb59a");
-
-#[derive(Debug)]
-pub enum OuterCipherSuite {
-    AES256,
-}
-
-impl OuterCipherSuite {
-    pub(crate) fn get_cipher(&self) -> Box<crypt::OuterCipher> {
-        match self {
-            OuterCipherSuite::AES256 => Box::new(crypt::AES256Cipher),
-        }
-    }
-}
-
-impl TryFrom<&[u8]> for OuterCipherSuite {
-    type Error = Error;
-    fn try_from(v: &[u8]) -> Result<OuterCipherSuite> {
-        if v == CIPHERSUITE_AES256 {
-            Ok(OuterCipherSuite::AES256)
-        } else {
-            Err(DatabaseIntegrityError::InvalidOuterCipherID { cid: v.to_vec() }.into())
-        }
-    }
-}
-
 #[derive(Debug)]
 pub(crate) enum VariantDictionaryValue {
     UInt32(u32),
@@ -55,7 +26,7 @@ pub(crate) enum VariantDictionaryValue {
 impl VariantDictionaryValue {
     pub(crate) fn get_u32(&self) -> Option<u32> {
         if let VariantDictionaryValue::UInt32(v) = self {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -63,7 +34,7 @@ impl VariantDictionaryValue {
 
     pub(crate) fn get_u64(&self) -> Option<u64> {
         if let VariantDictionaryValue::UInt64(v) = self {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -71,7 +42,7 @@ impl VariantDictionaryValue {
 
     pub(crate) fn _get_bool(&self) -> Option<bool> {
         if let VariantDictionaryValue::Bool(v) = self {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -79,7 +50,7 @@ impl VariantDictionaryValue {
 
     pub(crate) fn _get_i32(&self) -> Option<i32> {
         if let VariantDictionaryValue::Int32(v) = self {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -87,7 +58,7 @@ impl VariantDictionaryValue {
 
     pub(crate) fn _get_i64(&self) -> Option<i64> {
         if let VariantDictionaryValue::Int64(v) = self {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -159,12 +130,12 @@ fn get_vd<R, F>(dict: &HashMap<String, VariantDictionaryValue>, key: &str, f: F)
 where
     F: FnOnce(&VariantDictionaryValue) -> Option<R>,
 {
-    dict.get(key).and_then(f).ok_or(
+    dict.get(key).and_then(f).ok_or_else(|| {
         DatabaseIntegrityError::MissingKDFParams {
             key: key.to_owned(),
         }
-        .into(),
-    )
+        .into()
+    })
 }
 
 impl TryFrom<&HashMap<String, VariantDictionaryValue>> for KDFSettings {
@@ -189,37 +160,7 @@ impl TryFrom<&HashMap<String, VariantDictionaryValue>> for KDFSettings {
                 version,
             })
         } else {
-            return Err(DatabaseIntegrityError::InvalidKDFUUID { uuid }.into());
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum InnerCipherSuite {
-    Plain,
-    Salsa20,
-    ChaCha20,
-}
-
-impl InnerCipherSuite {
-    pub(crate) fn get_cipher(&self) -> Box<crypt::InnerCipher> {
-        match self {
-            InnerCipherSuite::Plain => Box::new(crypt::PlainCipher),
-            InnerCipherSuite::Salsa20 => Box::new(crypt::Salsa20Cipher),
-            InnerCipherSuite::ChaCha20 => Box::new(crypt::ChaCha20Cipher),
-        }
-    }
-}
-
-impl TryFrom<u32> for InnerCipherSuite {
-    type Error = Error;
-
-    fn try_from(v: u32) -> Result<InnerCipherSuite> {
-        match v {
-            0 => Ok(InnerCipherSuite::Plain),
-            2 => Ok(InnerCipherSuite::Salsa20),
-            3 => Ok(InnerCipherSuite::ChaCha20),
-            _ => Err(DatabaseIntegrityError::InvalidInnerCipherID { cid: v }.into()),
+            Err(DatabaseIntegrityError::InvalidKDFUUID { uuid }.into())
         }
     }
 }
@@ -296,18 +237,17 @@ impl Database {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
-        let (version, file_major_version, file_minor_version) =
-            crate::parse::get_kdbx_version(data.as_ref())?;
-
-        match file_major_version {
-            3 => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
-            4 => crate::parse::kdbx4::parse(data.as_ref(), &key_elements),
-            _ => Err(DatabaseIntegrityError::InvalidKDBXVersion {
-                version,
-                file_major_version,
-                file_minor_version,
+        match crate::parse::get_kdbx_version(data.as_ref())? {
+            (_, 3, _) => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
+            (_, 4, _) => crate::parse::kdbx4::parse(data.as_ref(), &key_elements),
+            (version, file_major_version, file_minor_version) => {
+                Err(DatabaseIntegrityError::InvalidKDBXVersion {
+                    version,
+                    file_major_version,
+                    file_minor_version,
+                }
+                .into())
             }
-            .into()),
         }
     }
 }
@@ -339,7 +279,7 @@ impl Group {
     /// }
     /// ```
     pub fn get(&self, path: &[&str]) -> Option<Node> {
-        if path.len() == 0 {
+        if path.is_empty() {
             Some(Node::GroupNode(self))
         } else {
             let p = path[0];
