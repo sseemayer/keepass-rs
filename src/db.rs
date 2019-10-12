@@ -254,7 +254,7 @@ impl Database {
 }
 
 /// A database group with child groups and entries
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct Group {
     /// The name of the group
     pub name: String,
@@ -304,21 +304,21 @@ impl Group {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Value {
     Unprotected(String),
     Protected(SecStr),
 }
 
 /// A database entry containing several key-value fields.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct Entry {
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
 }
 
 /// An AutoType setting associated with an Entry
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct AutoType {
     pub enabled: bool,
     pub sequence: Option<String>,
@@ -326,12 +326,13 @@ pub struct AutoType {
 }
 
 /// A window association associated with an AutoType setting
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct AutoTypeAssociation {
     pub window: Option<String>,
     pub sequence: Option<String>,
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum Node<'a> {
     Group(&'a Group),
     Entry(&'a Entry),
