@@ -39,7 +39,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>> {
     Err(Error::InvalidKeyFile.into())
 }
 
-pub fn parse(source: &mut std::io::Read) -> Result<Vec<u8>> {
+pub fn parse(source: &mut dyn std::io::Read) -> Result<Vec<u8>> {
     let mut buffer = Vec::new();
     source.read_to_end(&mut buffer)?;
 

@@ -1,9 +1,6 @@
 use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
 
-use aes::{
-    block_cipher_trait::generic_array::{typenum::U12, GenericArray},
-    Aes256,
-};
+use aes::{block_cipher_trait::generic_array::GenericArray, Aes256};
 use block_modes::{block_padding::Pkcs7, BlockMode, Cbc};
 use stream_cipher::{NewStreamCipher, StreamCipher};
 

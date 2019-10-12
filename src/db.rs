@@ -25,7 +25,11 @@ pub enum OuterCipherSuite {
 }
 
 impl OuterCipherSuite {
-    pub(crate) fn get_cipher(&self, key: &[u8], iv: &[u8]) -> Result<Box<crypt::cipher::Cipher>> {
+    pub(crate) fn get_cipher(
+        &self,
+        key: &[u8],
+        iv: &[u8],
+    ) -> Result<Box<dyn crypt::cipher::Cipher>> {
         match self {
             OuterCipherSuite::AES256 => Ok(Box::new(crypt::cipher::AES256Cipher::new(key, iv)?)),
         }
@@ -51,7 +55,7 @@ pub enum InnerCipherSuite {
 }
 
 impl InnerCipherSuite {
-    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<crypt::cipher::Cipher>> {
+    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn crypt::cipher::Cipher>> {
         match self {
             InnerCipherSuite::Plain => Ok(Box::new(crypt::cipher::PlainCipher::new(key)?)),
             InnerCipherSuite::Salsa20 => Ok(Box::new(crypt::cipher::Salsa20Cipher::new(key)?)),
@@ -89,7 +93,7 @@ pub enum KdfSettings {
 }
 
 impl KdfSettings {
-    pub(crate) fn get_kdf(&self) -> Box<crypt::kdf::Kdf> {
+    pub(crate) fn get_kdf(&self) -> Box<dyn crypt::kdf::Kdf> {
         match self {
             KdfSettings::Aes { seed, rounds } => Box::new(crypt::kdf::AesKdf {
                 seed: seed.clone(),
@@ -164,7 +168,7 @@ pub enum Compression {
 }
 
 impl Compression {
-    pub(crate) fn get_compression(&self) -> Box<decompress::Decompress> {
+    pub(crate) fn get_compression(&self) -> Box<dyn decompress::Decompress> {
         match self {
             Compression::None => Box::new(decompress::NoCompression),
             Compression::GZip => Box::new(decompress::GZipCompression),
@@ -212,9 +216,9 @@ pub struct Database {
 impl Database {
     /// Parse a database from a std::io::Read
     pub fn open(
-        source: &mut std::io::Read,
+        source: &mut dyn std::io::Read,
         password: Option<&str>,
-        keyfile: Option<&mut std::io::Read>,
+        keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<Database> {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
