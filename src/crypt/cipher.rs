@@ -1,9 +1,11 @@
 use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
 
-use aes::Aes256;
+use aes::{
+    block_cipher_trait::generic_array::{typenum::U12, GenericArray},
+    Aes256,
+};
 use block_modes::{block_padding::Pkcs7, BlockMode, Cbc};
-use crypto;
-use crypto::buffer::{ReadBuffer, WriteBuffer};
+use stream_cipher::{NewStreamCipher, StreamCipher};
 
 pub(crate) trait Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>>;
@@ -38,69 +40,51 @@ impl Cipher for AES256Cipher {
     }
 }
 
-/// Utility method to work with crypto::symmetriccipher::Decryptor
-fn decrypt_stream(
-    decryptor: &mut crypto::symmetriccipher::Decryptor,
-    data: &[u8],
-) -> Result<Vec<u8>> {
-    let mut out: Vec<u8> = Vec::new();
-
-    let mut buf = [0u8; 4096];
-    let mut reader = crypto::buffer::RefReadBuffer::new(data);
-    let mut writer = crypto::buffer::RefWriteBuffer::new(&mut buf);
-
-    loop {
-        let res = {
-            decryptor
-                .decrypt(&mut reader, &mut writer, true)
-                .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?
-        };
-
-        out.extend_from_slice(writer.take_read_buffer().take_remaining());
-
-        if let crypto::buffer::BufferResult::BufferUnderflow = res {
-            break;
-        }
-    }
-
-    Ok(out)
-}
-
 pub(crate) struct Salsa20Cipher {
-    cipher: crypto::salsa20::Salsa20,
+    cipher: salsa20::Salsa20,
 }
 
 impl Salsa20Cipher {
     pub(crate) fn new(key: &[u8]) -> Result<Self> {
-        let iv = &[0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A];
+        let key = GenericArray::from_slice(key);
+        let iv = GenericArray::from([0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A]);
+
         Ok(Salsa20Cipher {
-            cipher: crypto::salsa20::Salsa20::new(key, iv),
+            cipher: salsa20::Salsa20::new(&key, &iv),
         })
     }
 }
 
 impl Cipher for Salsa20Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        decrypt_stream(&mut self.cipher, ciphertext)
+        let mut buffer = Vec::from(ciphertext);
+        self.cipher.decrypt(&mut buffer);
+        Ok(buffer)
     }
 }
 
 pub(crate) struct ChaCha20Cipher {
-    cipher: crypto::chacha20::ChaCha20,
+    cipher: chacha20::ChaCha20,
 }
 
 impl ChaCha20Cipher {
     pub(crate) fn new(key: &[u8]) -> Result<Self> {
         let iv = crate::crypt::calculate_sha512(&[key])?;
+
+        let key = GenericArray::from_slice(&iv[0..32]);
+        let nonce = GenericArray::from_slice(&iv[32..44]);
+
         Ok(ChaCha20Cipher {
-            cipher: crypto::chacha20::ChaCha20::new(&iv[0..32], &iv[32..44]),
+            cipher: chacha20::ChaCha20::new(&key, &nonce),
         })
     }
 }
 
 impl Cipher for ChaCha20Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        decrypt_stream(&mut self.cipher, ciphertext)
+        let mut buffer = Vec::from(ciphertext);
+        self.cipher.decrypt(&mut buffer);
+        Ok(buffer)
     }
 }
 

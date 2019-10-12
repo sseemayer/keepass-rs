@@ -6,7 +6,7 @@ homepage = "https://github.com/sseemayer/keepass-rs"
 repository = "https://github.com/sseemayer/keepass-rs"
 documentation = "https://sseemayer.github.io/keepass-rs/"
 
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Stefan Seemayer <stefan@seemayer.de>"]
 license = "MIT"
 
@@ -24,4 +24,7 @@ sha2 = "0.8.0"
 aes = "0.3.2"
 block-modes = "0.3.3"
 hmac = "0.7.0"
-rust-crypto = "0.2.36"
+salsa20 = "0.3.0"
+chacha20 = "0.2.1"
+stream-cipher = "0.3.2"
+generic-array = "0.13.1"

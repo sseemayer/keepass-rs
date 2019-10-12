@@ -14,9 +14,6 @@ pub enum CryptoError {
     BlockMode {
         e: block_modes::BlockModeError,
     },
-    SymmetricCipher {
-        e: crypto::symmetriccipher::SymmetricCipherError,
-    },
 }
 
 #[derive(Debug)]
@@ -205,7 +202,6 @@ impl std::fmt::Display for CryptoError {
                 CryptoError::InvalidKeyIvLength { e } => format!("Invalid key / IV length: {}", e),
                 CryptoError::InvalidKeyLength { e } => format!("Invalid key length: {}", e),
                 CryptoError::BlockMode { e } => format!("Block mode error: {}", e),
-                CryptoError::SymmetricCipher { e } => format!("Symmetric Cipher Error: {:?}", e),
             }
         )
     }
@@ -218,7 +214,6 @@ impl std::error::Error for CryptoError {
             CryptoError::InvalidKeyIvLength { e } => Some(e),
             CryptoError::InvalidKeyLength { .. } => None, // TODO pass this through once e implements Error
             CryptoError::BlockMode { e } => Some(e),
-            CryptoError::SymmetricCipher { .. } => None, // TODO pass this through once https://github.com/DaGenix/rust-crypto/pull/452 is merged
         }
     }
 }
@@ -284,12 +279,6 @@ impl From<block_modes::InvalidKeyIvLength> for CryptoError {
 impl From<block_modes::BlockModeError> for CryptoError {
     fn from(e: block_modes::BlockModeError) -> Self {
         CryptoError::BlockMode { e }
-    }
-}
-
-impl From<crypto::symmetriccipher::SymmetricCipherError> for CryptoError {
-    fn from(e: crypto::symmetriccipher::SymmetricCipherError) -> Self {
-        CryptoError::SymmetricCipher { e }
     }
 }
 

@@ -38,12 +38,15 @@ extern crate argon2;
 extern crate base64;
 extern crate block_modes;
 extern crate byteorder;
-extern crate crypto;
+extern crate chacha20;
 extern crate flate2;
+extern crate generic_array;
 extern crate hex_literal;
 extern crate hmac;
+extern crate salsa20;
 extern crate secstr;
 extern crate sha2;
+extern crate stream_cipher;
 extern crate xml;
 
 mod crypt;
