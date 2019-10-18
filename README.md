@@ -50,6 +50,12 @@ Add the following to the `dependencies` section of your `Cargo.toml`:
 keepass = "*"
 ```
 
+**Performance note:** Please set the `RUSTFLAGS` environment variable when compiling to enable CPU-specific optimizations (this greatly affects the speed of the AES key derivation):
+
+```bash
+export RUSTFLAGS='-C target-cpu=native'
+```
+
 ## [Documentation](https://docs.rs/keepass)
 
 ## License
