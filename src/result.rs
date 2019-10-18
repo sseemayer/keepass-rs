@@ -93,6 +93,7 @@ pub enum Error {
     InvalidKeyFile,
 }
 
+#[cfg_attr(tarpaulin, skip)]
 impl std::fmt::Display for DatabaseIntegrityError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
@@ -181,6 +182,7 @@ impl std::fmt::Display for DatabaseIntegrityError {
 }
 
 impl std::fmt::Display for Error {
+    #[cfg_attr(tarpaulin, skip)]
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
@@ -196,6 +198,7 @@ impl std::fmt::Display for Error {
 }
 
 impl std::fmt::Display for CryptoError {
+    #[cfg_attr(tarpaulin, skip)]
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
@@ -214,6 +217,7 @@ impl std::fmt::Display for CryptoError {
 }
 
 impl std::error::Error for CryptoError {
+    #[cfg_attr(tarpaulin, skip)]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             CryptoError::Argon2 { e } => Some(e),
@@ -226,6 +230,7 @@ impl std::error::Error for CryptoError {
 }
 
 impl std::error::Error for DatabaseIntegrityError {
+    #[cfg_attr(tarpaulin, skip)]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             DatabaseIntegrityError::Crypto { e } => Some(e),
@@ -238,6 +243,7 @@ impl std::error::Error for DatabaseIntegrityError {
 }
 
 impl std::error::Error for Error {
+    #[cfg_attr(tarpaulin, skip)]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::IO { e } => Some(e),
@@ -248,66 +254,77 @@ impl std::error::Error for Error {
 }
 
 impl From<DatabaseIntegrityError> for Error {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: DatabaseIntegrityError) -> Self {
         Error::DatabaseIntegrity { e }
     }
 }
 
 impl From<CryptoError> for DatabaseIntegrityError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: CryptoError) -> Self {
         DatabaseIntegrityError::Crypto { e }
     }
 }
 
 impl From<std::io::Error> for Error {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: std::io::Error) -> Self {
         Error::IO { e }
     }
 }
 
 impl From<argon2::Error> for CryptoError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: argon2::Error) -> Self {
         CryptoError::Argon2 { e }
     }
 }
 
 impl From<hmac::crypto_mac::InvalidKeyLength> for CryptoError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: hmac::crypto_mac::InvalidKeyLength) -> Self {
         CryptoError::InvalidKeyLength { e }
     }
 }
 
 impl From<stream_cipher::InvalidKeyNonceLength> for CryptoError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: stream_cipher::InvalidKeyNonceLength) -> Self {
         CryptoError::InvalidKeyNonceLength { e }
     }
 }
 
 impl From<block_modes::InvalidKeyIvLength> for CryptoError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: block_modes::InvalidKeyIvLength) -> Self {
         CryptoError::InvalidKeyIvLength { e }
     }
 }
 
 impl From<block_modes::BlockModeError> for CryptoError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: block_modes::BlockModeError) -> Self {
         CryptoError::BlockMode { e }
     }
 }
 
 impl From<xml::reader::Error> for DatabaseIntegrityError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: xml::reader::Error) -> Self {
         DatabaseIntegrityError::XMLParsing { e }
     }
 }
 
 impl From<std::str::Utf8Error> for DatabaseIntegrityError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: std::str::Utf8Error) -> Self {
         DatabaseIntegrityError::UTF8 { e }
     }
 }
 
 impl From<base64::DecodeError> for DatabaseIntegrityError {
+    #[cfg_attr(tarpaulin, skip)]
     fn from(e: base64::DecodeError) -> Self {
         DatabaseIntegrityError::Base64 { e }
     }
