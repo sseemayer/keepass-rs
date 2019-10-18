@@ -94,6 +94,7 @@ pub(crate) struct ChaCha20Cipher {
 }
 
 impl ChaCha20Cipher {
+    /// Create as an inner cipher by splitting up a SHA512 hash
     pub(crate) fn new(key: &[u8]) -> Result<Self> {
         let iv = crate::crypt::calculate_sha512(&[key])?;
 
@@ -102,6 +103,14 @@ impl ChaCha20Cipher {
 
         Ok(ChaCha20Cipher {
             cipher: chacha20::ChaCha20::new(&key, &nonce),
+        })
+    }
+
+    /// Create as an outer cipher by separately-specified key and iv
+    pub(crate) fn new_key_iv(key: &[u8], iv: &[u8]) -> Result<Self> {
+        Ok(ChaCha20Cipher {
+            cipher: chacha20::ChaCha20::new_var(&key, &iv)
+                .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?,
         })
     }
 }

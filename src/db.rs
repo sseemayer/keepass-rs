@@ -17,12 +17,13 @@ use crate::{
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
 const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
 const CIPHERSUITE_TWOFISH: [u8; 16] = hex!("ad68f29f576f4bb9a36ad47af965346c");
-const _CIPHERSUITE_CHACHA20: [u8; 16] = hex!("d6038a2b8b6f4cb5a524339a31dbb59a");
+const CIPHERSUITE_CHACHA20: [u8; 16] = hex!("d6038a2b8b6f4cb5a524339a31dbb59a");
 
 #[derive(Debug)]
 pub enum OuterCipherSuite {
     AES256,
     Twofish,
+    ChaCha20,
 }
 
 impl OuterCipherSuite {
@@ -34,6 +35,9 @@ impl OuterCipherSuite {
         match self {
             OuterCipherSuite::AES256 => Ok(Box::new(crypt::cipher::AES256Cipher::new(key, iv)?)),
             OuterCipherSuite::Twofish => Ok(Box::new(crypt::cipher::TwofishCipher::new(key, iv)?)),
+            OuterCipherSuite::ChaCha20 => Ok(Box::new(crypt::cipher::ChaCha20Cipher::new_key_iv(
+                key, iv,
+            )?)),
         }
     }
 }
@@ -45,6 +49,8 @@ impl TryFrom<&[u8]> for OuterCipherSuite {
             Ok(OuterCipherSuite::AES256)
         } else if v == CIPHERSUITE_TWOFISH {
             Ok(OuterCipherSuite::Twofish)
+        } else if v == CIPHERSUITE_CHACHA20 {
+            Ok(OuterCipherSuite::ChaCha20)
         } else {
             Err(DatabaseIntegrityError::InvalidOuterCipherID { cid: v.to_vec() }.into())
         }

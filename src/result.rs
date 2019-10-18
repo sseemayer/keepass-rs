@@ -11,6 +11,9 @@ pub enum CryptoError {
     InvalidKeyIvLength {
         e: block_modes::InvalidKeyIvLength,
     },
+    InvalidKeyNonceLength {
+        e: stream_cipher::InvalidKeyNonceLength,
+    },
     BlockMode {
         e: block_modes::BlockModeError,
     },
@@ -201,6 +204,9 @@ impl std::fmt::Display for CryptoError {
                 CryptoError::Argon2 { e } => format!("Problem deriving key with Argon2: {}", e),
                 CryptoError::InvalidKeyIvLength { e } => format!("Invalid key / IV length: {}", e),
                 CryptoError::InvalidKeyLength { e } => format!("Invalid key length: {}", e),
+                CryptoError::InvalidKeyNonceLength { e } => {
+                    format!("Invalid key / nonce length: {}", e)
+                }
                 CryptoError::BlockMode { e } => format!("Block mode error: {}", e),
             }
         )
@@ -212,6 +218,7 @@ impl std::error::Error for CryptoError {
         match self {
             CryptoError::Argon2 { e } => Some(e),
             CryptoError::InvalidKeyIvLength { e } => Some(e),
+            CryptoError::InvalidKeyNonceLength { .. } => None, // TODO pass this through once e implements Error
             CryptoError::InvalidKeyLength { .. } => None, // TODO pass this through once e implements Error
             CryptoError::BlockMode { e } => Some(e),
         }
@@ -267,6 +274,12 @@ impl From<argon2::Error> for CryptoError {
 impl From<hmac::crypto_mac::InvalidKeyLength> for CryptoError {
     fn from(e: hmac::crypto_mac::InvalidKeyLength) -> Self {
         CryptoError::InvalidKeyLength { e }
+    }
+}
+
+impl From<stream_cipher::InvalidKeyNonceLength> for CryptoError {
+    fn from(e: stream_cipher::InvalidKeyNonceLength) -> Self {
+        CryptoError::InvalidKeyNonceLength { e }
     }
 }
 
