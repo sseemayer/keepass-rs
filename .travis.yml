@@ -33,9 +33,9 @@ script:
 
 after_success:
   - travis-cargo --only stable doc-upload
-  - travis-cargo --only stable tarpaulin --out Xml
   - |
     if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
+      cargo tarpaulin --out Xml
       bash <(curl -s https://codecov.io/bash)
     fi
 
