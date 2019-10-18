@@ -37,6 +37,35 @@ impl Cipher for AES256Cipher {
     }
 }
 
+type TwofishCbc = Cbc<twofish::Twofish, Pkcs7>;
+pub(crate) struct TwofishCipher {
+    key: Vec<u8>,
+    iv: Vec<u8>,
+}
+
+impl TwofishCipher {
+    pub(crate) fn new(key: &[u8], iv: &[u8]) -> Result<Self> {
+        Ok(TwofishCipher {
+            key: Vec::from(key),
+            iv: Vec::from(iv),
+        })
+    }
+}
+
+impl Cipher for TwofishCipher {
+    fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>> {
+        let cipher = TwofishCbc::new_var(&self.key, &self.iv)
+            .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
+
+        let mut buf = ciphertext.to_vec();
+        cipher
+            .decrypt(&mut buf)
+            .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
+
+        Ok(buf)
+    }
+}
+
 pub(crate) struct Salsa20Cipher {
     cipher: salsa20::Salsa20,
 }
