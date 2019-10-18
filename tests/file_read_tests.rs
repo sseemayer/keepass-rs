@@ -124,8 +124,8 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx4_with_password() -> Result<()> {
-        let path = Path::new("tests/resources/test_db_kdbx4_with_password.kdbx");
+    fn open_kdbx4_with_password_kdf_argon2_cipher_aes() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2.kdbx");
 
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
 
@@ -136,6 +136,20 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn open_kdbx4_with_password_kdf_aes_cipher_aes() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
+        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.entries.len(), 1);
+
+        Ok(())
+    }
+
 
     #[test]
     fn open_kdbx4_with_keyfile() -> Result<()> {
@@ -154,5 +168,19 @@ mod tests {
         assert_eq!(db.root.entries.len(), 1);
 
         Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = r#"InvalidKDBXIdentifier"#)]
+    fn open_broken_random_data() {
+        let path = Path::new("tests/resources/broken_random_data.kdbx");
+        Database::open(&mut File::open(path).unwrap(), None, None).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = r#"InvalidKDBXVersion"#)]
+    fn open_broken_kdbx_version() {
+        let path = Path::new("tests/resources/broken_kdbx_version.kdbx");
+        Database::open(&mut File::open(path).unwrap(), None, None).unwrap();
     }
 }
