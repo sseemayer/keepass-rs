@@ -27,6 +27,7 @@ before_script:
 script:
   - |
       export RUSTFLAGS='-C target-feature=+aes,+sse2 -C target-cpu=native'
+      export RUSTDOCFLAGS='-C target-feature=+aes,+sse2 -C target-cpu=native'
       travis-cargo build &&
       travis-cargo test &&
       travis-cargo bench &&
@@ -37,6 +38,7 @@ after_success:
   - |
     if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
       export RUSTFLAGS='-C target-feature=+aes,+sse2 -C target-cpu=native'
+      export RUSTDOCFLAGS='-C target-feature=+aes,+sse2 -C target-cpu=native'
       cargo tarpaulin --out Xml
       bash <(curl -s https://codecov.io/bash)
     fi
