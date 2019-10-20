@@ -52,10 +52,10 @@ pub struct KDBX4InnerHeader {
     body_start: usize,
 }
 
-fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
+fn parse_outer_header(data: &[u8]) -> Result<KDBX4Header> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
-    if version != 0xb54bfb67 || file_major_version != 4 {
+    if version != 0xb54b_fb67 || file_major_version != 4 {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
             file_major_version,
@@ -113,10 +113,10 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
             }
 
             // MASTERSEED - Master seed for deriving the master key
-            4 => master_seed = Some(entry_buffer.clone().to_vec()),
+            4 => master_seed = Some(entry_buffer.to_vec()),
 
             // ENCRYPTIONIV - Initialization Vector for decrypting the payload
-            7 => outer_iv = Some(entry_buffer.clone().to_vec()),
+            7 => outer_iv = Some(entry_buffer.to_vec()),
 
             // KDF Parameters
             11 => {
@@ -134,12 +134,12 @@ fn parse_outer_header<'a>(data: &[u8]) -> Result<KDBX4Header> {
     // something is missing
 
     fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
-        v.ok_or(
+        v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteOuterHeader {
                 missing_field: err.into(),
             }
-            .into(),
-        )
+            .into()
+        })
     }
 
     let outer_cipher = get_or_err(outer_cipher, "Outer Cipher ID")?;
@@ -187,7 +187,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
             }
 
             // inner random stream key
-            0x02 => inner_random_stream_key = Some(entry_buffer.clone().to_vec()),
+            0x02 => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
             // binary attachment
             0x03 => {
@@ -202,12 +202,12 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
     }
 
     fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
-        v.ok_or(
+        v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteInnerHeader {
                 missing_field: err.into(),
             }
-            .into(),
-        )
+            .into()
+        })
     }
 
     let inner_random_stream = get_or_err(inner_random_stream, "Inner random stream UUID")?;
@@ -222,7 +222,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and key elements
-pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database> {
+pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     // parse header
     let header = parse_outer_header(data)?;
     let pos = header.body_start;
@@ -252,7 +252,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
     let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"])?;
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(usize::max_value(), &hmac_key)?;
     if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key)?.as_slice() {
-        return Err(Error::IncorrectKey.into());
+        return Err(Error::IncorrectKey);
     }
 
     // read encrypted payload from hmac-verified block stream

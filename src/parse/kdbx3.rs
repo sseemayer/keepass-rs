@@ -30,7 +30,7 @@ pub struct KDBX3Header {
 fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
-    if version != 0xb54bfb67 || file_major_version != 3 {
+    if version != 0xb54b_fb67 || file_major_version != 3 {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
             file_major_version,
@@ -92,22 +92,22 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
             }
 
             // MASTERSEED - Master seed for deriving the master key
-            4 => master_seed = Some(entry_buffer.clone().to_vec()),
+            4 => master_seed = Some(entry_buffer.to_vec()),
 
             // TRANSFORMSEED - Seed used in deriving the transformed key
-            5 => transform_seed = Some(entry_buffer.clone().to_vec()),
+            5 => transform_seed = Some(entry_buffer.to_vec()),
 
             // TRANSFORMROUNDS - Number of rounds used in derivation of transformed key
             6 => transform_rounds = Some(LittleEndian::read_u64(entry_buffer)),
 
             // ENCRYPTIONIV - Initialization Vector for decrypting the payload
-            7 => outer_iv = Some(entry_buffer.clone().to_vec()),
+            7 => outer_iv = Some(entry_buffer.to_vec()),
 
             // PROTECTEDSTREAMKEY - Key for decrypting the inner protected values
-            8 => protected_stream_key = Some(entry_buffer.clone().to_vec()),
+            8 => protected_stream_key = Some(entry_buffer.to_vec()),
 
             // STREAMSTARTBYTES - First bytes of decrypted payload (to check correct decryption)
-            9 => stream_start = Some(entry_buffer.clone().to_vec()),
+            9 => stream_start = Some(entry_buffer.to_vec()),
 
             // INNERRANDOMSTREAMID - specifies which cipher suite
             //                       to use for decrypting the inner protected values
@@ -127,12 +127,12 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     // something is missing
 
     fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
-        v.ok_or(
+        v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteOuterHeader {
                 missing_field: err.into(),
             }
-            .into(),
-        )
+            .into()
+        })
     }
 
     let outer_cipher = get_or_err(outer_cipher, "Outer Cipher ID")?;
@@ -163,7 +163,7 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database> {
+pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     // parse header
     let header = parse_header(data)?;
 
@@ -196,7 +196,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &Vec<Vec<u8>>) -> Result<Database
 
     // Check if we decrypted correctly
     if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
-        return Err(Error::IncorrectKey.into());
+        return Err(Error::IncorrectKey);
     }
 
     // Derive stream key for decrypting inner protected values and set up decryption context

@@ -48,9 +48,8 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Value" => {
                         // Are we encountering a protected value?
                         if attributes
-                            .into_iter()
-                            .filter(|oa| oa.name.local_name == "Protected")
-                            .next()
+                            .iter()
+                            .find(|oa| oa.name.local_name == "Protected")
                             .map(|oa| &oa.value)
                             .map_or(false, |v| v.to_lowercase().parse::<bool>().unwrap_or(false))
                         {
@@ -92,16 +91,20 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         }
 
                         Node::Group(finished_group) => {
-                            if let Some(&mut Node::Group(Group {
-                                ref mut child_groups,
-                                ..
-                            })) = parsed_stack_head
-                            {
-                                // A Group was finished - add Group to parent Group's child groups
-                                child_groups.insert(finished_group.name.clone(), finished_group);
-                            } else if let None = parsed_stack_head {
-                                // There is no more parent nodes left -> we are at the root
-                                root_group = finished_group;
+                            match parsed_stack_head {
+                                Some(&mut Node::Group(Group {
+                                    ref mut child_groups,
+                                    ..
+                                })) => {
+                                    // A Group was finished - add Group to parent Group's child groups
+                                    child_groups
+                                        .insert(finished_group.name.clone(), finished_group);
+                                }
+                                None => {
+                                    // There is no more parent nodes left -> we are at the root
+                                    root_group = finished_group;
+                                }
+                                _ => {}
                             }
                         }
 

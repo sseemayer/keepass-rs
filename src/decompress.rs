@@ -10,7 +10,7 @@ pub struct NoCompression;
 
 impl Decompress for NoCompression {
     fn decompress(&self, in_buffer: &[u8]) -> Result<Vec<u8>> {
-        Ok(in_buffer.into_iter().cloned().collect())
+        Ok(in_buffer.to_vec())
     }
 }
 

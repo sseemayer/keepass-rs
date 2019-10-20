@@ -75,12 +75,12 @@ impl VariantDictionary {
             }));
         };
 
-        T::from_variant_dictionary_value(vdv).ok_or(
+        T::from_variant_dictionary_value(vdv).ok_or_else(|| {
             DatabaseIntegrityError::MistypedKDFParam {
                 key: key.to_owned(),
             }
-            .into(),
-        )
+            .into()
+        })
     }
 }
 
@@ -91,7 +91,7 @@ pub(crate) trait FromVariantDictionaryValue<T> {
 impl FromVariantDictionaryValue<u32> for u32 {
     fn from_variant_dictionary_value(vdv: &VariantDictionaryValue) -> Option<u32> {
         if let VariantDictionaryValue::UInt32(v) = vdv {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -101,7 +101,7 @@ impl FromVariantDictionaryValue<u32> for u32 {
 impl FromVariantDictionaryValue<u64> for u64 {
     fn from_variant_dictionary_value(vdv: &VariantDictionaryValue) -> Option<u64> {
         if let VariantDictionaryValue::UInt64(v) = vdv {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -111,7 +111,7 @@ impl FromVariantDictionaryValue<u64> for u64 {
 impl FromVariantDictionaryValue<bool> for bool {
     fn from_variant_dictionary_value(vdv: &VariantDictionaryValue) -> Option<bool> {
         if let VariantDictionaryValue::Bool(v) = vdv {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -121,7 +121,7 @@ impl FromVariantDictionaryValue<bool> for bool {
 impl FromVariantDictionaryValue<i32> for i32 {
     fn from_variant_dictionary_value(vdv: &VariantDictionaryValue) -> Option<i32> {
         if let VariantDictionaryValue::Int32(v) = vdv {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }
@@ -131,7 +131,7 @@ impl FromVariantDictionaryValue<i32> for i32 {
 impl FromVariantDictionaryValue<i64> for i64 {
     fn from_variant_dictionary_value(vdv: &VariantDictionaryValue) -> Option<i64> {
         if let VariantDictionaryValue::Int64(v) = vdv {
-            Some(v.clone())
+            Some(*v)
         } else {
             None
         }

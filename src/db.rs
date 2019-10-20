@@ -290,7 +290,7 @@ impl Group {
     /// }
     /// ```
     pub fn get(&self, path: &[&str]) -> Option<Node> {
-        if path.len() == 0 {
+        if path.is_empty() {
             Some(Node::Group(self))
         } else {
             let p = path[0];

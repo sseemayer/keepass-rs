@@ -70,7 +70,7 @@ impl Kdf for Argon2Kdf {
         let key = argon2::hash_raw(composite_key, &self.salt, &config)
             .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
 
-        Ok(GenericArray::from_slice(&key).clone())
+        Ok(*GenericArray::from_slice(&key))
     }
 }
 
