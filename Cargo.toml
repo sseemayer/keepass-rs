@@ -14,7 +14,7 @@ readme = "README.md"
 
 [dependencies]
 byteorder = "^1"
-flate2 = "^0.2"
+flate2 = "^1.0"
 secstr = "^0.3"
 xml-rs = "^0.6"
 base64 = "^0.6"
