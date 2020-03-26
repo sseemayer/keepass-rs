@@ -19,7 +19,7 @@ pub struct GZipCompression;
 impl Decompress for GZipCompression {
     fn decompress(&self, in_buffer: &[u8]) -> Result<Vec<u8>> {
         let mut res = Vec::new();
-        let mut decoder = GzDecoder::new(in_buffer)?;
+        let mut decoder = GzDecoder::new(in_buffer);
         decoder.read_to_end(&mut res)?;
         Ok(res)
     }
