@@ -40,7 +40,6 @@ extern crate block_modes;
 extern crate byteorder;
 extern crate chacha20;
 extern crate flate2;
-extern crate generic_array;
 extern crate hex_literal;
 extern crate hmac;
 extern crate salsa20;

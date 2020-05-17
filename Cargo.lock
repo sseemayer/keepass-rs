@@ -251,7 +251,6 @@ dependencies = [
  "byteorder",
  "chacha20",
  "flate2",
- "generic-array",
  "hex-literal",
  "hmac",
  "rust-argon2",
