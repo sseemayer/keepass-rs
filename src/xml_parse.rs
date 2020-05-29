@@ -162,6 +162,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         // Update the KeyValue's value
 
                         match *ev {
+                            Value::Bytes(_) => {} // not possible
                             Value::Unprotected(ref mut v) => {
                                 *v = c;
                             }

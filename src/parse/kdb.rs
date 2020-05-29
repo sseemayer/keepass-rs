@@ -246,7 +246,7 @@ fn parse_entries(
                 // BinaryData
                 entry.fields.insert(
                     String::from("BinaryData"),
-                    Value::Unprotected(String::from("<unsupported>")),
+                    Value::Bytes(field_value.to_vec()),
                 );
             }
             0xffff => {
