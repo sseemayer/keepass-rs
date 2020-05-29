@@ -7,6 +7,7 @@ use hex_literal::hex;
 use crate::{
     crypt, decompress,
     parse::{
+        kdb::KDBHeader,
         kdbx3::KDBX3Header,
         kdbx4::{KDBX4Header, KDBX4InnerHeader},
     },
@@ -200,6 +201,7 @@ impl TryFrom<u32> for Compression {
 
 #[derive(Debug)]
 pub enum Header {
+    KDB(KDBHeader),
     KDBX3(KDBX3Header),
     KDBX4(KDBX4Header),
 }
@@ -250,9 +252,15 @@ impl Database {
         let (version, file_major_version, file_minor_version) =
             crate::parse::get_kdbx_version(data.as_ref())?;
 
-        match file_major_version {
-            3 => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
-            4 => crate::parse::kdbx4::parse(data.as_ref(), &key_elements),
+        match version {
+            0xb54bfb65 => crate::parse::kdb::parse(data.as_ref(), &key_elements),
+            // 0xb54bfb66 => alpha/beta kbd 2.x
+            0xb54bfb67 if file_major_version == 3 => {
+                crate::parse::kdbx3::parse(data.as_ref(), &key_elements)
+            }
+            0xb54bfb67 if file_major_version == 4 => {
+                crate::parse::kdbx4::parse(data.as_ref(), &key_elements)
+            }
             _ => Err(DatabaseIntegrityError::InvalidKDBXVersion {
                 version,
                 file_major_version,

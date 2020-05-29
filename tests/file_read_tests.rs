@@ -210,4 +210,40 @@ mod tests {
         let path = Path::new("tests/resources/broken_kdbx_version.kdbx");
         Database::open(&mut File::open(path).unwrap(), None, None).unwrap();
     }
+
+    #[test]
+    fn open_kdb_with_password() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdb_with_password.kdb");
+        let db = Database::open(&mut File::open(path)?, Some("foobar"), None)?;
+
+        println!("{:?} DB Opened", db);
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.child_groups.len(), 3);
+        assert_eq!(db.root.entries.len(), 0);
+
+        let mut total_groups = 0;
+        let mut total_entries = 0;
+        for node in &db.root {
+            match node {
+                Node::Group(g) => {
+                    println!("Saw group '{0}'", g.name);
+                    total_groups += 1;
+                }
+                Node::Entry(e) => {
+                    let title = e.get_title().unwrap();
+                    let user = e.get_username().unwrap();
+                    let pass = e.get_password().unwrap();
+                    println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
+                    total_entries += 1;
+                }
+            }
+        }
+
+        assert_eq!(total_groups, 12);
+        assert_eq!(total_entries, 4);
+
+        println!("{:?}", db);
+
+        Ok(())
+    }
 }
