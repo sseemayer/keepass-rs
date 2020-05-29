@@ -35,6 +35,9 @@ pub enum DatabaseIntegrityError {
         file_major_version: u16,
         file_minor_version: u16,
     },
+    InvalidFixedHeader {
+        size: usize,
+    },
     InvalidOuterHeaderEntry {
         entry_type: u8,
     },
@@ -59,6 +62,9 @@ pub enum DatabaseIntegrityError {
     MistypedKDFParam {
         key: String,
     },
+    InvalidFixedCipherID {
+        cid: u32,
+    },
     InvalidOuterCipherID {
         cid: Vec<u8>,
     },
@@ -74,6 +80,29 @@ pub enum DatabaseIntegrityError {
     InvalidVariantDictionaryValueType {
         value_type: u8,
     },
+    InvalidKDBFieldLength {
+        field_type: u16,
+        field_size: u32,
+        expected_field_size: u32,
+    },
+    InvalidKDBGroupFieldType {
+        field_type: u16,
+    },
+    InvalidKDBEntryFieldType {
+        field_type: u16,
+    },
+    MissingKDBGroupId,
+    InvalidKDBGroupId {
+        group_id: u32,
+    },
+    MissingKDBGroupLevel,
+    InvalidKDBGroupLevel {
+        group_level: u16,
+        current_level: u16,
+    },
+    IncompleteKDBGroup,
+    IncompleteKDBEntry,
+    MissingKDBEntryTitle,
     XMLParsing {
         e: xml::reader::Error,
     },
@@ -119,6 +148,8 @@ impl std::fmt::Display for DatabaseIntegrityError {
                     "Invalid KDBX Version (version: {:0x} file version {}.{})",
                     version, file_major_version, file_minor_version
                 ),
+                DatabaseIntegrityError::InvalidFixedHeader { size } =>
+                    format!("Invalid KBD Header (size: {})", size),
                 DatabaseIntegrityError::InvalidOuterHeaderEntry { entry_type } => format!(
                     "Encountered an invalid outer header entry with type {}",
                     entry_type
@@ -145,6 +176,9 @@ impl std::fmt::Display for DatabaseIntegrityError {
                 DatabaseIntegrityError::InvalidKDFUUID { uuid } => {
                     format!("Encountered an invalid KDF UUID: {:0x?}", uuid)
                 }
+                DatabaseIntegrityError::InvalidFixedCipherID { cid } => {
+                    format!("Encountered an invalid KBD cipher ID: {:0x?}", cid)
+                }
                 DatabaseIntegrityError::InvalidOuterCipherID { cid } => {
                     format!("Encountered an invalid outer cipher ID: {:0x?}", cid)
                 }
@@ -164,6 +198,31 @@ impl std::fmt::Display for DatabaseIntegrityError {
                         value_type
                     )
                 }
+                DatabaseIntegrityError::InvalidKDBFieldLength { field_type, field_size, expected_field_size } =>
+                    format!("Encountered a field with an invalid size: expected {}, got {} for field type {}", expected_field_size, field_size, field_type),
+                DatabaseIntegrityError::InvalidKDBGroupFieldType { field_type } =>
+                    format!("Encountered an invalid group field type: {}", field_type),
+                DatabaseIntegrityError::InvalidKDBEntryFieldType { field_type } =>
+                    format!("Encountered an invalid entry field type: {}", field_type),
+                DatabaseIntegrityError::MissingKDBGroupId =>
+                    format!("Encountered a group/entry without a GroupId"),
+                DatabaseIntegrityError::InvalidKDBGroupId { group_id } =>
+                    format!("Encountered an entry with an invalid GroupId: {}", group_id),
+                DatabaseIntegrityError::MissingKDBGroupLevel =>
+                    format!("Encountered a group without a Level"),
+                DatabaseIntegrityError::InvalidKDBGroupLevel {
+                    group_level,
+                    current_level,
+                } => format!(
+                    "Encountered a group with an invalid Level: {} (current: {})",
+                    group_level, current_level
+                ),
+                DatabaseIntegrityError::IncompleteKDBGroup =>
+                    format!("Encountered an incomplete group"),
+                DatabaseIntegrityError::IncompleteKDBEntry =>
+                    format!("Encountered an incomplete entry"),
+                DatabaseIntegrityError::MissingKDBEntryTitle =>
+                    format!("Encountered an entry without a title"),
                 DatabaseIntegrityError::XMLParsing { e } => format!(
                     "Encountered an error when parsing the inner XML payload: {}",
                     e

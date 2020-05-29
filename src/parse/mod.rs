@@ -1,3 +1,4 @@
+pub(crate) mod kdb;
 pub(crate) mod kdbx3;
 pub(crate) mod kdbx4;
 
