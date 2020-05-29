@@ -324,6 +324,7 @@ impl Group {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Value {
+    Bytes(Vec<u8>),
     Unprotected(String),
     Protected(SecStr),
 }
@@ -365,8 +366,19 @@ impl<'a> Entry {
     /// Get a field by name, taking care of unprotecting Protected values automatically
     pub fn get(&'a self, key: &str) -> Option<&'a str> {
         match self.fields.get(key) {
+            Some(&Value::Bytes(_)) => None,
             Some(&Value::Protected(ref pv)) => std::str::from_utf8(pv.unsecure()).ok(),
             Some(&Value::Unprotected(ref uv)) => Some(&uv),
+            None => None,
+        }
+    }
+
+    /// Get a bytes field by name
+    pub fn get_bytes(&'a self, key: &str) -> Option<&'a [u8]> {
+        match self.fields.get(key) {
+            Some(&Value::Bytes(ref b)) => Some(&b),
+            Some(&Value::Protected(_)) => None,
+            Some(&Value::Unprotected(_)) => None,
             None => None,
         }
     }
