@@ -56,6 +56,10 @@ keepass = "*"
 export RUSTFLAGS='-C target-cpu=native'
 ```
 
+For best results, also compile in Release mode.
+
+Alternatively, you can add a `.cargo/config.toml` like in this project to ensure that rustflags are always set.
+
 ## [Documentation](https://docs.rs/keepass)
 
 ## License
