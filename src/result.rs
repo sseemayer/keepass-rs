@@ -205,11 +205,11 @@ impl std::fmt::Display for DatabaseIntegrityError {
                 DatabaseIntegrityError::InvalidKDBEntryFieldType { field_type } =>
                     format!("Encountered an invalid entry field type: {}", field_type),
                 DatabaseIntegrityError::MissingKDBGroupId =>
-                    format!("Encountered a group/entry without a GroupId"),
+                    "Encountered a group/entry without a GroupId".to_string(),
                 DatabaseIntegrityError::InvalidKDBGroupId { group_id } =>
                     format!("Encountered an entry with an invalid GroupId: {}", group_id),
                 DatabaseIntegrityError::MissingKDBGroupLevel =>
-                    format!("Encountered a group without a Level"),
+                    "Encountered a group without a Level".to_string(),
                 DatabaseIntegrityError::InvalidKDBGroupLevel {
                     group_level,
                     current_level,
@@ -218,11 +218,11 @@ impl std::fmt::Display for DatabaseIntegrityError {
                     group_level, current_level
                 ),
                 DatabaseIntegrityError::IncompleteKDBGroup =>
-                    format!("Encountered an incomplete group"),
+                    "Encountered an incomplete group".to_string(),
                 DatabaseIntegrityError::IncompleteKDBEntry =>
-                    format!("Encountered an incomplete entry"),
+                    "Encountered an incomplete entry".to_string(),
                 DatabaseIntegrityError::MissingKDBEntryTitle =>
-                    format!("Encountered an entry without a title"),
+                    "Encountered an entry without a title".to_string(),
                 DatabaseIntegrityError::XMLParsing { e } => format!(
                     "Encountered an error when parsing the inner XML payload: {}",
                     e
