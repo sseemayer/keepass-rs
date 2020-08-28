@@ -42,7 +42,7 @@ fn parse_header(data: &[u8]) -> Result<KDBHeader> {
     }
 
     Ok(KDBHeader {
-        version: version,
+        version,
         flags: LittleEndian::read_u32(&data[8..]),
         subversion: LittleEndian::read_u32(&data[12..]),
         master_seed: data[16..32].to_vec(),
@@ -154,7 +154,7 @@ fn parse_groups(root: &mut Group, header_num_groups: u32, data: &mut &[u8]) -> R
                 // Update the current group tree branch (collapse previous sub-branch, initiate
                 // current sub-branch)
                 if level < branch.len() {
-                    group_path.split_off(level);
+                    group_path.truncate(level);
                     collapse_tail_groups(&mut branch, level, root);
                 }
                 if level == branch.len() {
