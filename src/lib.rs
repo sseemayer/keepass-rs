@@ -42,6 +42,7 @@ extern crate chacha20;
 extern crate flate2;
 extern crate hex_literal;
 extern crate hmac;
+extern crate indexmap;
 extern crate salsa20;
 extern crate secstr;
 extern crate sha2;
