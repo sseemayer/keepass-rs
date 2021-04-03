@@ -282,6 +282,9 @@ pub struct Group {
 
     /// The list of entries in this group
     pub entries: HashMap<String, Entry>,
+
+    /// The expiration setting of the group
+    pub expiration:  Expiration,
 }
 
 impl Group {
@@ -334,6 +337,8 @@ pub enum Value {
 pub struct Entry {
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
+    pub expiration:  Expiration,
+    pub db_report_exclude:  bool,
 }
 
 /// An AutoType setting associated with an Entry
@@ -348,6 +353,12 @@ pub struct AutoType {
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct AutoTypeAssociation {
     pub window: Option<String>,
+    pub sequence: Option<String>,
+}
+/// An Expiration setting associated with an Entry or a Group
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct Expiration {
+    pub enabled: bool,
     pub sequence: Option<String>,
 }
 
