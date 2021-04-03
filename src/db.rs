@@ -1,5 +1,6 @@
 use secstr::SecStr;
 use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::convert::TryFrom;
 
 use hex_literal::hex;
@@ -278,7 +279,7 @@ pub struct Group {
     pub name: String,
 
     /// The list of child groups
-    pub child_groups: HashMap<String, Group>,
+    pub child_groups: IndexMap<String, Group>,
 
     /// The list of entries in this group
     pub entries: HashMap<String, Entry>,
