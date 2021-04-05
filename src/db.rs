@@ -359,7 +359,7 @@ pub struct AutoTypeAssociation {
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct Expiration {
     pub enabled: bool,
-    pub sequence: Option<String>,
+    pub xmldatetime: String,
 }
 
 #[derive(Debug, Eq, PartialEq)]
