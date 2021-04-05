@@ -152,6 +152,20 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         // Update the Group's name
                         *name = c;
                     }
+                    // Group and Entry matching may be collapsalbe once or-patterns syntax is finalized.
+                    // Currently, attempting to combine them in the match throws error[E0658].
+                    (Some("ExpiryTime"), Some(&mut Node::Group(Group {ref mut expiration, .. }))) => {
+                        expiration.xmldatetime = c ;
+                    }
+                    (Some("Expires"), Some(&mut Node::Group(Group {ref mut expiration, .. }))) => {
+                        expiration.enabled = c == "True";
+                    }
+                    (Some("ExpiryTime"), Some(&mut Node::Entry(Entry {ref mut expiration, .. }))) => {
+                        expiration.xmldatetime = c ;
+                    }
+                    (Some("Expires"), Some(&mut Node::Entry(Entry {ref mut expiration, .. }))) => {
+                        expiration.enabled = c == "True";
+                    }                                        
                     (Some("Key"), Some(&mut Node::KeyValue(ref mut k, _))) => {
                         // Got a "Key" element with a Node::KeyValue on the parsed_stack
                         // Update the KeyValue's key
