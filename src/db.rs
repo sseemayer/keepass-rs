@@ -282,7 +282,7 @@ pub struct Group {
     pub child_groups: IndexMap<String, Group>,
 
     /// The list of entries in this group
-    pub entries: HashMap<String, Entry>,
+    pub entries: IndexMap<String, Entry>,
 }
 
 impl Group {
