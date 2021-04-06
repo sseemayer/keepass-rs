@@ -404,7 +404,9 @@ impl<'a> Iterator for NodeIter<'a> {
     type Item = Node<'a>;
 
     fn next(&mut self) -> Option<Node<'a>> {
-        let res = self.queue.pop();
+        let res = if let Some((i, _)) = self.queue.iter().enumerate().next() {
+            Some(self.queue.remove(i))
+        } else { None };
 
         if let Some(Node::Group(ref g)) = res {
             self.queue
