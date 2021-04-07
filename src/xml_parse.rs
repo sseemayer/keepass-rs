@@ -70,7 +70,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
                     "Expires" => parsed_stack.push(Node::Expires(bool::default())),
-                    "CustomData" => parsed_stack.push(Node::CustomData(false,false,false)),                    
+                    "CustomData" => parsed_stack.push(Node::CustomData(false,false,false)),
                     _ => {}
                 }
             }
@@ -145,45 +145,38 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 associations.push(ata);
                             }
                         }
-                        
+
                         Node::ExpiryTime(et) => {
                             if let Some(&mut Node::Entry(Entry { ref mut expiration, .. })) =
                                 parsed_stack_head
                             {
                                 expiration.xmldatetime = et.to_owned() ;
-                                
-                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) = 
-                                parsed_stack_head 
+                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) =
+                                parsed_stack_head
                             {
                                 expiration.xmldatetime = et.to_owned() ;
-                            } else {
-                                println!("XmlEvent::EndElement::ExpiryTime else!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") ;
                             }
                         }
-                        
+
                         Node::Expires(es) => {
                             if let Some(&mut Node::Entry(Entry { ref mut expiration, .. })) =
                                 parsed_stack_head
                             {
                                 expiration.enabled = es ;
-                                
-                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) = 
+                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) =
                                 parsed_stack_head
                             {
                                 expiration.enabled = es ;
-                            } else {
-                                println!("XmlEvent::EndElement::Expires else!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") ;
                             }
                         }
-                        
-                         Node::CustomData(_, cd, _) => { // Minimal implemmentation just to get KnownBad value                            
+
+                         Node::CustomData(_, cd, _) => { // Minimal implemmentation just to get KnownBad value
                             if let Some(&mut Node::Entry(Entry { ref mut db_report_exclude, .. })) =
                                 parsed_stack_head
                             {
-                                println!("Set db_report_exclude from {:?}", finished_node);
-                                *db_report_exclude = cd ;                                
-                            }                             
-                        } 
+                                *db_report_exclude = cd ;
+                            }
+                        }
                     }
                 }
             }
@@ -202,7 +195,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     (Some("Expires"), Some(&mut Node::Expires(ref mut es))) => {
                         *es = c == "True";
-                    }                                        
+                    }
                     (Some("Key"), Some(&mut Node::KeyValue(ref mut k, _))) => {
                         // Got a "Key" element with a Node::KeyValue on the parsed_stack
                         // Update the KeyValue's key
@@ -251,18 +244,17 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     // Minimal parsing for CustomData just to get KnownBad value
                     (Some("Key"), Some(&mut Node::CustomData(ref mut k, _, _))) => {
                         *k = c == "KnownBad" ; // Have we found a KnownBad Item/Key?
-                        println!("Set CustomData.KnownBad = {:?} for Key = {:?}", k, c);
                     }
                     (Some("Value"), Some(&mut Node::CustomData(ref k, ref mut v, ref mut done))) => {
                         if *k && !*done {// Are we in the KnownBad Item/Key and looking for its value?
-                            println!("Set CustomData.KnownBad and stop looking");
                             *v = c == "true" ;
-                            *done = false ; // Stop looking for KnownBad value                            
+                            *done = false ; // Stop looking for KnownBad value
                         }
                     } // End:  Minimal parsing for CustomData just to get KnownBad value
                     _ => {}
                 }
             }
+
             _ => {}
         }
     }
