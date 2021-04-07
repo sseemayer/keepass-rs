@@ -16,6 +16,9 @@ enum Node {
     KeyValue(String, Value),
     AutoType(AutoType),
     AutoTypeAssociation(AutoTypeAssociation),
+    ExpiryTime(String),
+    Expires(bool),
+//    CustomData(String, bool), // Minimal implemmentation just to get KnownBad value
 }
 
 pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Result<Group> {
@@ -65,6 +68,9 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Association" => {
                         parsed_stack.push(Node::AutoTypeAssociation(Default::default()))
                     }
+                    "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
+                    "Expires" => parsed_stack.push(Node::Expires(bool::default())),
+//                    "CustomData" => parsed_stack.push(Node::CustomData(String::new(),bool::default())),                    
                     _ => {}
                 }
             }
@@ -74,7 +80,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
             } => {
                 xml_stack.pop();
 
-                if ["Group", "Entry", "String", "AutoType", "Association"]
+                if ["Group", "Entry", "String", "AutoType", "Association", "ExpiryTime", "Expires"]
                     .contains(&&local_name[..])
                 {
                     let finished_node = parsed_stack.pop().unwrap();
@@ -139,6 +145,44 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 associations.push(ata);
                             }
                         }
+                        
+                        Node::ExpiryTime(et) => {
+                            if let Some(&mut Node::Entry(Entry { ref mut expiration, .. })) =
+                                parsed_stack_head
+                            {
+                                expiration.xmldatetime = et.to_owned() ;
+                                
+                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) = 
+                                parsed_stack_head 
+                            {
+                                expiration.xmldatetime = et.to_owned() ;
+                            } else {
+                                println!("XmlEvent::EndElement::ExpiryTime else!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") ;
+                            }
+                        }
+                        
+                        Node::Expires(es) => {
+                            if let Some(&mut Node::Entry(Entry { ref mut expiration, .. })) =
+                                parsed_stack_head
+                            {
+                                expiration.enabled = es ;
+                                
+                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) = 
+                                parsed_stack_head
+                            {
+                                expiration.enabled = es ;
+                            } else {
+                                println!("XmlEvent::EndElement::Expires else!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") ;
+                            }
+                        }
+                        
+/*                         Node::CustomData(_, cd) => { // Minimal implemmentation just to get KnownBad value
+                            if let Some(&mut Node::Entry(Entry { ref mut db_report_exclude, .. })) =
+                                parsed_stack_head
+                            {
+                                *db_report_exclude = cd ;                                
+                            } 
+                        } */
                     }
                 }
             }
@@ -152,19 +196,11 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         // Update the Group's name
                         *name = c;
                     }
-                    // Group and Entry matching may be collapsalbe once or-patterns syntax is finalized.
-                    // Currently, attempting to combine them in the match throws error[E0658].
-                    (Some("ExpiryTime"), Some(&mut Node::Group(Group {ref mut expiration, .. }))) => {
-                        expiration.xmldatetime = c ;
+                    (Some("ExpiryTime"), Some(&mut Node::ExpiryTime(ref mut et))) => {
+                        *et = c ;
                     }
-                    (Some("Expires"), Some(&mut Node::Group(Group {ref mut expiration, .. }))) => {
-                        expiration.enabled = c == "True";
-                    }
-                    (Some("ExpiryTime"), Some(&mut Node::Entry(Entry {ref mut expiration, .. }))) => {
-                        expiration.xmldatetime = c ;
-                    }
-                    (Some("Expires"), Some(&mut Node::Entry(Entry {ref mut expiration, .. }))) => {
-                        expiration.enabled = c == "True";
+                    (Some("Expires"), Some(&mut Node::Expires(ref mut es))) => {
+                        *es = c == "True";
                     }                                        
                     (Some("Key"), Some(&mut Node::KeyValue(ref mut k, _))) => {
                         // Got a "Key" element with a Node::KeyValue on the parsed_stack
@@ -211,6 +247,16 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     ) => {
                         ata.sequence = Some(c.to_owned());
                     }
+                    // Minimal implemmentation for CustomData just to get KnownBad value
+/*                     (Some("KnownBad"), Some(&mut Node::CustomData(ref mut k, _))) => {
+                        *k = "KnownBad".to_string() ;
+                    }
+                    (Some("true"), Some(&mut Node::CustomData(ref k, ref mut v))) => {
+                        if k == "KnownBad" {
+                            *v = true;
+                        }
+                    }
+ */
                     _ => {}
                 }
             }
