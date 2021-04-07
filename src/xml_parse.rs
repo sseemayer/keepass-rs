@@ -18,7 +18,7 @@ enum Node {
     AutoTypeAssociation(AutoTypeAssociation),
     ExpiryTime(String),
     Expires(bool),
-//    CustomData(String, bool), // Minimal implemmentation just to get KnownBad value
+    CustomData(bool, bool, bool), // Minimal implemmentation just to get KnownBad value
 }
 
 pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Result<Group> {
@@ -70,7 +70,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
                     "Expires" => parsed_stack.push(Node::Expires(bool::default())),
-//                    "CustomData" => parsed_stack.push(Node::CustomData(String::new(),bool::default())),                    
+                    "CustomData" => parsed_stack.push(Node::CustomData(false,false,false)),                    
                     _ => {}
                 }
             }
@@ -80,7 +80,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
             } => {
                 xml_stack.pop();
 
-                if ["Group", "Entry", "String", "AutoType", "Association", "ExpiryTime", "Expires"]
+                if ["Group", "Entry", "String", "AutoType", "Association", "ExpiryTime", "Expires", "CustomData"]
                     .contains(&&local_name[..])
                 {
                     let finished_node = parsed_stack.pop().unwrap();
@@ -176,13 +176,14 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             }
                         }
                         
-/*                         Node::CustomData(_, cd) => { // Minimal implemmentation just to get KnownBad value
+                         Node::CustomData(_, cd, _) => { // Minimal implemmentation just to get KnownBad value                            
                             if let Some(&mut Node::Entry(Entry { ref mut db_report_exclude, .. })) =
                                 parsed_stack_head
                             {
+                                println!("Set db_report_exclude from {:?}", finished_node);
                                 *db_report_exclude = cd ;                                
-                            } 
-                        } */
+                            }                             
+                        } 
                     }
                 }
             }
@@ -247,20 +248,21 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     ) => {
                         ata.sequence = Some(c.to_owned());
                     }
-                    // Minimal implemmentation for CustomData just to get KnownBad value
-/*                     (Some("KnownBad"), Some(&mut Node::CustomData(ref mut k, _))) => {
-                        *k = "KnownBad".to_string() ;
+                    // Minimal parsing for CustomData just to get KnownBad value
+                    (Some("Key"), Some(&mut Node::CustomData(ref mut k, _, _))) => {
+                        *k = c == "KnownBad" ; // Have we found a KnownBad Item/Key?
+                        println!("Set CustomData.KnownBad = {:?} for Key = {:?}", k, c);
                     }
-                    (Some("true"), Some(&mut Node::CustomData(ref k, ref mut v))) => {
-                        if k == "KnownBad" {
-                            *v = true;
+                    (Some("Value"), Some(&mut Node::CustomData(ref k, ref mut v, ref mut done))) => {
+                        if *k && !*done {// Are we in the KnownBad Item/Key and looking for its value?
+                            println!("Set CustomData.KnownBad and stop looking");
+                            *v = c == "true" ;
+                            *done = false ; // Stop looking for KnownBad value                            
                         }
-                    }
- */
+                    } // End:  Minimal parsing for CustomData just to get KnownBad value
                     _ => {}
                 }
             }
-
             _ => {}
         }
     }
