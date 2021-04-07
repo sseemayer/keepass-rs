@@ -15,12 +15,12 @@ mod tests {
             assert_eq!(e.get_username(), Some("User Name"));
             assert_eq!(e.get_password(), Some("Password"));
             assert_eq!(e.get("custom attribute"), Some("data for custom attribute"));
-
+            assert_eq!(e.get("URL"), Some("http://keepass.info/"));
             if let Some(ref at) = e.autotype {
                 if let Some(ref s) = at.sequence {
                     assert_eq!(s, "{USERNAME}{TAB}{TAB}{PASSWORD}{ENTER}");
                 } else {
-                    panic!("Expected a sequenceQ")
+                    panic!("Expected a sequence")
                 }
             } else {
                 panic!("Expected an AutoType entry");
@@ -36,6 +36,34 @@ mod tests {
         } else {
             panic!("Expected an entry");
         }
+
+        Ok(())
+    }
+
+        #[test]
+        fn entry_kdbx4() -> Result<()> {
+            let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
+            let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+
+            // get an entry on the root node
+            if let Some(Node::Entry(e)) = db.root.get(&["ASDF"]) {
+                assert_eq!(e.get_title(), Some("ASDF"));
+                assert_eq!(e.get_username(), Some("ghj"));
+                assert_eq!(e.get_password(), Some("klmno"));
+                assert_eq!(e.get("custom attribute"), Some("data for custom attribute"));
+                assert_eq!(e.get("URL"), Some("https://keepassxc.org/"));
+                if let Some(ref at) = e.autotype {
+                    if let Some(ref s) = at.sequence {
+                        assert_eq!(s, "{USERNAME}{TAB}{TAB}{PASSWORD}{ENTER}");
+                    } else {
+                        panic!("Expected a sequence")
+                    }
+                } else {
+                    panic!("Expected an AutoType entry");
+                }
+            } else {
+                panic!("Expected an entry");
+            }
 
         Ok(())
     }
