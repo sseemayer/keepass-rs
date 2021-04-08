@@ -355,11 +355,27 @@ pub struct AutoTypeAssociation {
     pub window: Option<String>,
     pub sequence: Option<String>,
 }
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum TimeKDBX {
+    Base64(Vec<u8>),
+    Iso8601(String),
+}
+
 /// An Expiration setting associated with an Entry or a Group
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Expiration {
     pub enabled: bool,
-    pub xmldatetime: String,
+    pub time: TimeKDBX,
+}
+
+impl Default for Expiration {
+    fn default() -> Self {
+        Expiration {
+            enabled: false,
+            time:  TimeKDBX::Iso8601(String::new()),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]

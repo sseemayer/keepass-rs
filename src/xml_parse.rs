@@ -7,7 +7,7 @@ use secstr::SecStr;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
-use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Value};
+use super::db::{AutoType, AutoTypeAssociation, Entry, Group, TimeKDBX, Value};
 
 #[derive(Debug)]
 enum Node {
@@ -147,14 +147,20 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         }
 
                         Node::ExpiryTime(et) => {
+                            // Check if the key is base64-encoded. If not, assume Iso8601 String
+                            let t = match ::base64::decode(&et.as_bytes().to_vec()) {
+                                Ok(b64) => TimeKDBX::Base64(b64) ,
+                                _  => TimeKDBX::Iso8601(et)
+                            } ;
+                            // ToDo:  Can this be colapsed to eliminate the else if?
                             if let Some(&mut Node::Entry(Entry { ref mut expiration, .. })) =
                                 parsed_stack_head
                             {
-                                expiration.xmldatetime = et.to_owned() ;
+                                expiration.time = t ;
                             } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) =
                                 parsed_stack_head
                             {
-                                expiration.xmldatetime = et.to_owned() ;
+                                expiration.time = t ;
                             }
                         }
 
