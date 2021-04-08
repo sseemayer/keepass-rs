@@ -284,7 +284,7 @@ pub struct Group {
     pub entries: HashMap<String, Entry>,
 
     /// The expiration setting of the group
-    pub expiration:  Expiration,
+    pub expiration: Expiration,
 }
 
 impl Group {
@@ -337,8 +337,8 @@ pub enum Value {
 pub struct Entry {
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
-    pub expiration:  Expiration,
-    pub db_report_exclude:  bool,
+    pub expiration: Expiration,
+    pub db_report_exclude: bool,
 }
 
 /// An AutoType setting associated with an Entry
@@ -373,7 +373,7 @@ impl Default for Expiration {
     fn default() -> Self {
         Expiration {
             enabled: false,
-            time:  TimeKDBX::Iso8601(String::new()),
+            time: TimeKDBX::Iso8601(String::new()),
         }
     }
 }

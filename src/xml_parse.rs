@@ -70,7 +70,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
                     "Expires" => parsed_stack.push(Node::Expires(bool::default())),
-                    "CustomData" => parsed_stack.push(Node::CustomData(false,false,false)),
+                    "CustomData" => parsed_stack.push(Node::CustomData(false, false, false)),
                     _ => {}
                 }
             }
@@ -80,8 +80,17 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
             } => {
                 xml_stack.pop();
 
-                if ["Group", "Entry", "String", "AutoType", "Association", "ExpiryTime", "Expires", "CustomData"]
-                    .contains(&&local_name[..])
+                if [
+                    "Group",
+                    "Entry",
+                    "String",
+                    "AutoType",
+                    "Association",
+                    "ExpiryTime",
+                    "Expires",
+                    "CustomData",
+                ]
+                .contains(&&local_name[..])
                 {
                     let finished_node = parsed_stack.pop().unwrap();
                     let parsed_stack_head = parsed_stack.last_mut();
@@ -149,38 +158,45 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         Node::ExpiryTime(et) => {
                             // Check if the key is base64-encoded. If not, assume Iso8601 String
                             let t = match ::base64::decode(&et.as_bytes().to_vec()) {
-                                Ok(b64) => TimeKDBX::Base64(b64) ,
-                                _  => TimeKDBX::Iso8601(et)
-                            } ;
+                                Ok(b64) => TimeKDBX::Base64(b64),
+                                _ => TimeKDBX::Iso8601(et),
+                            };
                             // ToDo:  Can this be colapsed to eliminate the else if?
-                            if let Some(&mut Node::Entry(Entry { ref mut expiration, .. })) =
-                                parsed_stack_head
+                            if let Some(&mut Node::Entry(Entry {
+                                ref mut expiration, ..
+                            })) = parsed_stack_head
                             {
-                                expiration.time = t ;
-                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) =
-                                parsed_stack_head
+                                expiration.time = t;
+                            } else if let Some(&mut Node::Group(Group {
+                                ref mut expiration, ..
+                            })) = parsed_stack_head
                             {
-                                expiration.time = t ;
+                                expiration.time = t;
                             }
                         }
 
                         Node::Expires(es) => {
-                            if let Some(&mut Node::Entry(Entry { ref mut expiration, .. })) =
-                                parsed_stack_head
+                            if let Some(&mut Node::Entry(Entry {
+                                ref mut expiration, ..
+                            })) = parsed_stack_head
                             {
-                                expiration.enabled = es ;
-                            } else if let Some(&mut Node::Group(Group { ref mut expiration, .. })) =
-                                parsed_stack_head
+                                expiration.enabled = es;
+                            } else if let Some(&mut Node::Group(Group {
+                                ref mut expiration, ..
+                            })) = parsed_stack_head
                             {
-                                expiration.enabled = es ;
+                                expiration.enabled = es;
                             }
                         }
 
-                         Node::CustomData(_, cd, _) => { // Minimal implemmentation just to get KnownBad value
-                            if let Some(&mut Node::Entry(Entry { ref mut db_report_exclude, .. })) =
-                                parsed_stack_head
+                        Node::CustomData(_, cd, _) => {
+                            // Minimal implemmentation just to get KnownBad value
+                            if let Some(&mut Node::Entry(Entry {
+                                ref mut db_report_exclude,
+                                ..
+                            })) = parsed_stack_head
                             {
-                                *db_report_exclude = cd ;
+                                *db_report_exclude = cd;
                             }
                         }
                     }
@@ -197,7 +213,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         *name = c;
                     }
                     (Some("ExpiryTime"), Some(&mut Node::ExpiryTime(ref mut et))) => {
-                        *et = c ;
+                        *et = c;
                     }
                     (Some("Expires"), Some(&mut Node::Expires(ref mut es))) => {
                         *es = c == "True";
@@ -249,12 +265,16 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     // Minimal parsing for CustomData just to get KnownBad value
                     (Some("Key"), Some(&mut Node::CustomData(ref mut k, _, _))) => {
-                        *k = c == "KnownBad" ; // Have we found a KnownBad Item/Key?
+                        *k = c == "KnownBad"; // Have we found a KnownBad Item/Key?
                     }
-                    (Some("Value"), Some(&mut Node::CustomData(ref k, ref mut v, ref mut done))) => {
-                        if *k && !*done {// Are we in the KnownBad Item/Key and looking for its value?
-                            *v = c == "true" ;
-                            *done = false ; // Stop looking for KnownBad value
+                    (
+                        Some("Value"),
+                        Some(&mut Node::CustomData(ref k, ref mut v, ref mut done)),
+                    ) => {
+                        if *k && !*done {
+                            // Are we in the KnownBad Item/Key and looking for its value?
+                            *v = c == "true";
+                            *done = false; // Stop looking for KnownBad value
                         }
                     } // End:  Minimal parsing for CustomData just to get KnownBad value
                     _ => {}

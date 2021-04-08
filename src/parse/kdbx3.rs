@@ -210,7 +210,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
             name: "Root".to_owned(),
             child_groups: Default::default(),
             entries: Default::default(),
-            expiration:  Default::default(),
+            expiration: Default::default(),
         },
     };
 
