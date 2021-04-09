@@ -357,6 +357,7 @@ pub struct AutoTypeAssociation {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+/// XML TimeStamp encodings in KDBX database files
 pub enum TimeKDBX {
     Base64(Vec<u8>),
     Iso8601(String),
