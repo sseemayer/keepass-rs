@@ -43,15 +43,43 @@ mod tests {
             assert_eq!(e.get_title(), Some("test entry"));
             assert_eq!(e.get_username(), Some("jdoe"));
             assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
-            assert_eq!(e.db_report_exclude, true);
-            assert_eq!(e.expiration.enabled, true);
+            assert_eq!(e.db_report_exclude, false);
+            assert_eq!(e.expiration.enabled, false);
 
             assert_eq!(
                 match &e.expiration.time {
                     TimeKDBX::Iso8601(t) => t,
                     _ => panic!("Expected an Iso8601 time"),
                 },
-                "2021-04-08T19:56:00Z"
+                "2016-01-28T12:25:36Z"
+            );
+        } else {
+            panic!("Expected an entry");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn expired_entry() -> Result<()> {
+        // Need KDBX4 database to set Exclude from database reorts in KeePassXC
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
+        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let x: Vec<u8> = vec![254, 206, 3, 216, 14, 0, 0, 0];
+
+        // get an entry on the root node
+        if let Some(Node::Entry(e)) = db.root.get(&["ASDF"]) {
+            assert_eq!(e.get_title(), Some("ASDF"));
+            assert_eq!(e.get_username(), Some("ghj"));
+            assert_eq!(e.get_password(), Some("klmno"));
+            assert_eq!(e.db_report_exclude, true);
+            assert_eq!(e.expiration.enabled, true);
+            assert_eq!(
+                match &e.expiration.time {
+                    TimeKDBX::Base64(t) => t,
+                    _ => panic!("Expected a Base64 time"),
+                },
+                (&x)
             );
         } else {
             panic!("Expected an entry");
