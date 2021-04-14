@@ -283,11 +283,8 @@ pub struct Group {
     /// The list of entries in this group
     pub entries: HashMap<String, Entry>,
 
-    /// The expiration setting of the group
-    pub expiration: Expiration,
-
     /// The list time fields for this group
-    /// ToDo:  Make this private
+    /// ToDo:  Make this private?
     pub times: Times,
 }
 
@@ -341,9 +338,10 @@ pub enum Value {
 pub struct Entry {
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
-    pub expiration: Expiration,
+    pub expires: bool,
+    // ToDo:  Refactor this to handle all Custom Data elements as with Times for time elements.
     pub db_report_exclude: bool,
-    // ToDo:  Make this private
+    // ToDo:  Make this private?
     pub times: Times,
 }
 
@@ -426,30 +424,6 @@ impl Times {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-/// XML TimeStamp encodings in KDBX database files
-pub enum TimeKDBX {
-    Base64(Vec<u8>),
-    Iso8601(String),
-}
-
-/// An Expiration setting associated with an Entry or a Group
-/// ToDo:  Make this private after figuring out time conversions
-#[derive(Debug, Eq, PartialEq)]
-pub struct Expiration {
-    pub enabled: bool,
-    pub time: TimeKDBX,
-}
-
-impl Default for Expiration {
-    fn default() -> Self {
-        Expiration {
-            enabled: false,
-            time: TimeKDBX::Iso8601(String::new()),
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
 pub enum Node<'a> {
     Group(&'a Group),
     Entry(&'a Entry),
@@ -481,20 +455,6 @@ impl<'a> Entry {
         }
     }
 
-    /*     /// Get a time field by name
-       pub fn get_time(&'a self, key: &str) -> Option<TimeInfo> {
-           match key {
-               "ExpiryTime" => {
-                   match &self.expiration.time {
-                       TimeKDBX::Iso8601(s) => Some(TimeInfo::ExpiryTime(s.to_owned())),
-                       TimeKDBX::Base64(v) => Some(TimeInfo::ExpiryTime(format!("{:?}", v))),
-                   }
-               }
-               // ToDo:  Consider returning Error() if not TimeInfo variant
-               _  => None
-           }
-       }
-    */
     /// Convenience method for getting the value of the 'Title' field
     pub fn get_title(&'a self) -> Option<&'a str> {
         self.get("Title")

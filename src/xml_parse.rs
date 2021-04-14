@@ -7,7 +7,7 @@ use secstr::SecStr;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
-use super::db::{AutoType, AutoTypeAssociation, Entry, Group, TimeInfo, TimeKDBX, Value};
+use super::db::{AutoType, AutoTypeAssociation, Entry, Group, TimeInfo, Value};
 
 #[derive(Debug)]
 enum Node {
@@ -156,40 +156,26 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         }
 
                         Node::ExpiryTime(et) => {
-                            // Check if the key is base64-encoded. If not, assume Iso8601 String
-                            let t = match ::base64::decode(&et.as_bytes().to_vec()) {
-                                Ok(b64) => TimeKDBX::Base64(b64),
-                                _ => TimeKDBX::Iso8601(et.to_owned()),
-                            };
-                            // ToDo:  Can this be colapsed with only stable Rust features?
-                            if let Some(&mut Node::Entry(Entry {
-                                ref mut expiration,
-                                ref mut times,
-                                ..
-                            })) = parsed_stack_head
+                            // ToDo:  Colapse with only stable Rust features, closure?
+                            // ToDo:  Study the let grabbing pointer reference construct.
+                            if let Some(&mut Node::Entry(Entry { ref mut times, .. })) =
+                                parsed_stack_head
                             {
-                                expiration.time = t;
                                 times.put_time(TimeInfo::ExpiryTime(et.to_string()));
-                            } else if let Some(&mut Node::Group(Group {
-                                ref mut expiration, ..
-                            })) = parsed_stack_head
+                            } else if let Some(&mut Node::Group(Group { ref mut times, .. })) =
+                                parsed_stack_head
                             {
-                                expiration.time = t;
+                                times.put_time(TimeInfo::ExpiryTime(et.to_string()));
                             }
                         }
 
                         Node::Expires(es) => {
-                            // ToDo:  Can this be colapsed with only stable Rust features?
+                            // ToDo:  Colapse with only stable Rust features, closure?
                             if let Some(&mut Node::Entry(Entry {
-                                ref mut expiration, ..
+                                ref mut expires, ..
                             })) = parsed_stack_head
                             {
-                                expiration.enabled = es;
-                            } else if let Some(&mut Node::Group(Group {
-                                ref mut expiration, ..
-                            })) = parsed_stack_head
-                            {
-                                expiration.enabled = es;
+                                *expires = es;
                             }
                         }
 
