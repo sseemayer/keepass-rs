@@ -285,6 +285,10 @@ pub struct Group {
 
     /// The expiration setting of the group
     pub expiration: Expiration,
+
+    /// The list time fields for this group
+    /// ToDo:  Make this private
+    pub times: Times,
 }
 
 impl Group {
@@ -339,6 +343,8 @@ pub struct Entry {
     pub autotype: Option<AutoType>,
     pub expiration: Expiration,
     pub db_report_exclude: bool,
+    // ToDo:  Make this private
+    pub times: Times,
 }
 
 /// An AutoType setting associated with an Entry
@@ -357,6 +363,69 @@ pub struct AutoTypeAssociation {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+/// All KeePass time fields available from this crate
+pub enum TimeInfo {
+    ExpiryTime(String),
+}
+
+/// KeePass time fields for a specific struct
+#[derive(Debug, Default, Eq, PartialEq)]
+// ToDo:  Make this private?
+pub struct Times {
+    times: HashMap<String, TimeInfo>,
+}
+
+impl Times {
+    pub fn put_time(&mut self, t: TimeInfo) {
+        match t {
+            TimeInfo::ExpiryTime(_) => {
+                &self.times.insert("ExpiryTime".to_string(), t);
+            }
+        }
+    }
+
+    /// ToDo:  What datatype should this return when released?
+    ///        String in XML (ISO 8601) format?
+    ///        Raw String from the database?
+    ///        chrono::DateTime?
+    ///        Something else?  (If so, please advise.)
+    pub fn get_time(&self, key: &str) -> Option<String> {
+        match key {
+            "ExpiryTime" => match &self.times.get(key) {
+                Some(TimeInfo::ExpiryTime(t)) => Some(t.to_string()),
+                _ => None,
+            },
+            // The following are just for illustration during development.
+            // ToDo:  Remove before releasing
+            "ExpiryTimeVec" | "ExpiryTimeInt" => match &self.times.get("ExpiryTime") {
+                Some(TimeInfo::ExpiryTime(t)) => {
+                    match ::base64::decode(t.as_bytes().to_vec()) {
+                        Ok(v) => match key {
+                            "ExpiryTimeVec" => Some(format!("{:?}", v)),
+                            "ExpiryTimeInt" => {
+                                //Some("ExpiryTimeInt Not imlemented yet".to_string()),
+                                let mut d: u64 = 0;
+                                let b: u64 = 64;
+                                for (i, e) in v.iter().enumerate() {
+                                    d += u64::pow(b, u32::try_from(i).unwrap())
+                                        * u64::try_from(*e).unwrap();
+                                }
+                                Some(format!("{}", d))
+                            }
+                            z => Some(format!("Something bad {}", z)),
+                        },
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            // ToDo:  Consider returning Error() if not TimeInfo variant
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 /// XML TimeStamp encodings in KDBX database files
 pub enum TimeKDBX {
     Base64(Vec<u8>),
@@ -364,6 +433,7 @@ pub enum TimeKDBX {
 }
 
 /// An Expiration setting associated with an Entry or a Group
+/// ToDo:  Make this private after figuring out time conversions
 #[derive(Debug, Eq, PartialEq)]
 pub struct Expiration {
     pub enabled: bool,
@@ -411,6 +481,20 @@ impl<'a> Entry {
         }
     }
 
+    /*     /// Get a time field by name
+       pub fn get_time(&'a self, key: &str) -> Option<TimeInfo> {
+           match key {
+               "ExpiryTime" => {
+                   match &self.expiration.time {
+                       TimeKDBX::Iso8601(s) => Some(TimeInfo::ExpiryTime(s.to_owned())),
+                       TimeKDBX::Base64(v) => Some(TimeInfo::ExpiryTime(format!("{:?}", v))),
+                   }
+               }
+               // ToDo:  Consider returning Error() if not TimeInfo variant
+               _  => None
+           }
+       }
+    */
     /// Convenience method for getting the value of the 'Title' field
     pub fn get_title(&'a self) -> Option<&'a str> {
         self.get("Title")

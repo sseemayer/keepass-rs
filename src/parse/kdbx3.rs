@@ -211,6 +211,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
             child_groups: Default::default(),
             entries: Default::default(),
             expiration: Default::default(),
+            times: Default::default(),
         },
     };
 

@@ -7,7 +7,7 @@ use secstr::SecStr;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
-use super::db::{AutoType, AutoTypeAssociation, Entry, Group, TimeKDBX, Value};
+use super::db::{AutoType, AutoTypeAssociation, Entry, Group, TimeInfo, TimeKDBX, Value};
 
 #[derive(Debug)]
 enum Node {
@@ -159,14 +159,17 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             // Check if the key is base64-encoded. If not, assume Iso8601 String
                             let t = match ::base64::decode(&et.as_bytes().to_vec()) {
                                 Ok(b64) => TimeKDBX::Base64(b64),
-                                _ => TimeKDBX::Iso8601(et),
+                                _ => TimeKDBX::Iso8601(et.to_owned()),
                             };
-                            // ToDo:  Can this be colapsed to eliminate the else if?
+                            // ToDo:  Can this be colapsed with only stable Rust features?
                             if let Some(&mut Node::Entry(Entry {
-                                ref mut expiration, ..
+                                ref mut expiration,
+                                ref mut times,
+                                ..
                             })) = parsed_stack_head
                             {
                                 expiration.time = t;
+                                times.put_time(TimeInfo::ExpiryTime(et.to_string()));
                             } else if let Some(&mut Node::Group(Group {
                                 ref mut expiration, ..
                             })) = parsed_stack_head
@@ -176,6 +179,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         }
 
                         Node::Expires(es) => {
+                            // ToDo:  Can this be colapsed with only stable Rust features?
                             if let Some(&mut Node::Entry(Entry {
                                 ref mut expiration, ..
                             })) = parsed_stack_head
