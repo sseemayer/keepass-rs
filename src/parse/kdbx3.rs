@@ -261,7 +261,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     // Re-root db.root if it contains only one child (if there was only one block)
     if db.root.child_groups.len() == 1 {
         let mut new_root = Default::default();
-        for (_, v) in db.root.child_groups.drain() {
+        for (_, v) in db.root.child_groups.drain(..) {
             new_root = v
         }
         db.root = new_root;

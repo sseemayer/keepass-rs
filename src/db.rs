@@ -1,5 +1,6 @@
 use secstr::SecStr;
 use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::convert::TryFrom;
 
 use hex_literal::hex;
@@ -278,7 +279,7 @@ pub struct Group {
     pub name: String,
 
     /// The list of child groups
-    pub child_groups: HashMap<String, Group>,
+    pub child_groups: IndexMap<String, Group>,
 
     /// The list of entries in this group
     pub entries: IndexMap<String, Entry>,
@@ -475,7 +476,9 @@ impl<'a> Iterator for NodeIter<'a> {
     type Item = Node<'a>;
 
     fn next(&mut self) -> Option<Node<'a>> {
-        let res = self.queue.pop();
+        let res = if let Some((i, _)) = self.queue.iter().enumerate().next() {
+            Some(self.queue.remove(i))
+        } else { None };
 
         if let Some(Node::Group(ref g)) = res {
             self.queue
