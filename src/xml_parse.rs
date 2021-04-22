@@ -9,6 +9,8 @@ use xml::reader::{EventReader, XmlEvent};
 
 use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Value};
 
+extern crate chrono;
+
 #[derive(Debug)]
 enum Node {
     Entry(Entry),
@@ -16,6 +18,30 @@ enum Node {
     KeyValue(String, Value),
     AutoType(AutoType),
     AutoTypeAssociation(AutoTypeAssociation),
+    ExpiryTime(String),
+    Expires(bool),
+}
+
+fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime> {
+    match chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%SZ") {
+        // Prior to KDBX4 file format, timestamps were stored as ISO 8601 strings
+        Ok(ndt) => Ok(ndt),
+        // In KDBX4, timestamps are stored as seconds, Base64 encoded, since 0001-01-01 00:00:00
+        // So, if we don't have a valid ISO 8601 string, assume we have found a Base64 encoded int.
+        _ => {
+            let v = base64::decode(t).map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
+            // Cast the Vec created by base64::decode into the array expected by i64::from_le_bytes
+            let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+            for (i, u) in v.iter().enumerate() {
+                a[i] = *u;
+            }
+            let ndt =
+                chrono::NaiveDateTime::parse_from_str("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")
+                    .unwrap()
+                    + chrono::Duration::seconds(i64::from_le_bytes(a));
+            Ok(ndt)
+        }
+    }
 }
 
 pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Result<Group> {
@@ -65,6 +91,8 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Association" => {
                         parsed_stack.push(Node::AutoTypeAssociation(Default::default()))
                     }
+                    "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
+                    "Expires" => parsed_stack.push(Node::Expires(bool::default())),
                     _ => {}
                 }
             }
@@ -74,7 +102,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
             } => {
                 xml_stack.pop();
 
-                if ["Group", "Entry", "String", "AutoType", "Association"]
+                if ["Group", "Entry", "String", "AutoType", "Association", "ExpiryTime", "Expires"]
                     .contains(&&local_name[..])
                 {
                     let finished_node = parsed_stack.pop().unwrap();
@@ -139,6 +167,40 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 associations.push(ata);
                             }
                         }
+
+                        Node::ExpiryTime(et) => {
+                            // Currently ingoring any Err() from parse_xml_timestamp()
+                            // Ignoring Err() to avoid possible regressions for existing users
+                            if let Some(&mut Node::Entry(Entry { ref mut times, .. })) =
+                                parsed_stack_head
+                            {
+                                match parse_xml_timestamp(&et) {
+                                    Ok(t) => times.insert("ExpiryTime".to_owned(), t),
+                                    _ => None,
+                                };
+                            } else if let Some(&mut Node::Group(Group { ref mut times, .. })) =
+                                parsed_stack_head
+                            {
+                                match parse_xml_timestamp(&et) {
+                                    Ok(t) => times.insert("ExpiryTime".to_owned(), t),
+                                    _ => None,
+                                };
+                            }
+                        }
+
+                        Node::Expires(es) => {
+                            if let Some(&mut Node::Entry(Entry {
+                                ref mut expires, ..
+                            })) = parsed_stack_head
+                            {
+                                *expires = es;
+                            } else if let Some(&mut Node::Group(Group {
+                                ref mut expires, ..
+                            })) = parsed_stack_head
+                            {
+                                *expires = es;
+                            }
+                        }
                     }
                 }
             }
@@ -151,6 +213,12 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         // Got a "Name" element with a Node::Group on the parsed_stack
                         // Update the Group's name
                         *name = c;
+                    }
+                    (Some("ExpiryTime"), Some(&mut Node::ExpiryTime(ref mut et))) => {
+                        *et = c;
+                    }
+                    (Some("Expires"), Some(&mut Node::Expires(ref mut es))) => {
+                        *es = c == "True";
                     }
                     (Some("Key"), Some(&mut Node::KeyValue(ref mut k, _))) => {
                         // Got a "Key" element with a Node::KeyValue on the parsed_stack

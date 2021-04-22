@@ -292,6 +292,8 @@ fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group> {
         name: "Root".to_owned(),
         child_groups: Default::default(),
         entries: Default::default(),
+        expires: Default::default(),
+        times: Default::default(),
     };
 
     let mut pos = &data[..];
