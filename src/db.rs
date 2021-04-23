@@ -2,6 +2,7 @@ use secstr::SecStr;
 use std::collections::HashMap;
 use indexmap::IndexMap;
 use std::convert::TryFrom;
+extern crate chrono;
 
 use hex_literal::hex;
 
@@ -283,6 +284,17 @@ pub struct Group {
 
     /// The list of entries in this group
     pub entries: IndexMap<String, Entry>,
+
+    /// The list of time fields for this group
+    ///
+    /// Using chrono::NaiveDateTime which does not include timezone
+    /// or UTC offset because KeePass clients typically store timestamps
+    /// relative to the local time on the machine writing the data without
+    /// including accurate UTC offset or timezone information.
+    pub times: HashMap<String, chrono::NaiveDateTime>,
+
+    /// Does this group expire
+    pub expires: bool,
 }
 
 impl Group {
@@ -321,6 +333,21 @@ impl Group {
             }
         }
     }
+
+    /// Get a timestamp field by name
+    ///
+    /// Returning the chrono::NaiveDateTime which does not include timezone
+    /// or UTC offset because KeePass clients typically store timestamps
+    /// relative to the local time on the machine writing the data without
+    /// including accurate UTC offset or timezone information.
+    pub fn get_time(&self, key: &str) -> Option<&chrono::NaiveDateTime> {
+        self.times.get(key)
+    }
+
+    /// Convenience method for getting the value of the 'ExpiryTime' timestamp
+    pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
+        self.get_time("ExpiryTime")
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -335,6 +362,8 @@ pub enum Value {
 pub struct Entry {
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
+    pub expires: bool,
+    pub times: HashMap<String, chrono::NaiveDateTime>,
 }
 
 /// An AutoType setting associated with an Entry
@@ -382,6 +411,22 @@ impl<'a> Entry {
             Some(&Value::Unprotected(_)) => None,
             None => None,
         }
+    }
+
+    /// Get a timestamp field by name
+    ///
+    /// Returning the chrono::NaiveDateTime which does not include timezone
+    /// or UTC offset because KeePass clients typically store timestamps
+    /// relative to the local time on the machine writing the data without
+    /// including accurate UTC offset or timezone information.
+    pub fn get_time(&self, key: &str) -> Option<&chrono::NaiveDateTime> {
+        self.times.get(key)
+    }
+
+    /// Convenience method for getting the value of the 'ExpiryTime' timestamp
+    /// This value is usually only meaningful/useful when expires == true
+    pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
+        self.get_time("ExpiryTime")
     }
 
     /// Convenience method for getting the value of the 'Title' field
