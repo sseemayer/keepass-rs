@@ -32,9 +32,7 @@ fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime> {
             let v = base64::decode(t).map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
             // Cast the Vec created by base64::decode into the array expected by i64::from_le_bytes
             let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-            for (i, u) in v.iter().enumerate() {
-                a[i] = *u;
-            }
+            a.copy_from_slice(&v[0..8]);
             let ndt =
                 chrono::NaiveDateTime::parse_from_str("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")
                     .unwrap()

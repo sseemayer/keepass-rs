@@ -286,6 +286,11 @@ pub struct Group {
     pub entries: IndexMap<String, Entry>,
 
     /// The list of time fields for this group
+    ///
+    /// Using chrono::NaiveDateTime which does not include timezone
+    /// or UTC offset because KeePass clients typically store timestamps
+    /// relative to the local time on the machine writing the data without
+    /// including accurate UTC offset or timezone information.
     pub times: HashMap<String, chrono::NaiveDateTime>,
 
     /// Does this group expire
@@ -330,11 +335,18 @@ impl Group {
     }
 
     /// Get a timestamp field by name
+    ///
+    /// Returning the chrono::NaiveDateTime which does not include timezone
+    /// or UTC offset because KeePass clients typically store timestamps
+    /// relative to the local time on the machine writing the data without
+    /// including accurate UTC offset or timezone information.
     pub fn get_time(&self, key: &str) -> Option<&chrono::NaiveDateTime> {
-        match self.times.get(key) {
-            Some(ref t) => Some(t),
-            _ => None,
-        }
+        self.times.get(key)
+    }
+
+    /// Convenience method for getting the value of the 'ExpiryTime' timestamp
+    pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
+        self.get_time("ExpiryTime")
     }
 }
 
@@ -402,11 +414,19 @@ impl<'a> Entry {
     }
 
     /// Get a timestamp field by name
+    ///
+    /// Returning the chrono::NaiveDateTime which does not include timezone
+    /// or UTC offset because KeePass clients typically store timestamps
+    /// relative to the local time on the machine writing the data without
+    /// including accurate UTC offset or timezone information.
     pub fn get_time(&self, key: &str) -> Option<&chrono::NaiveDateTime> {
-        match self.times.get(key) {
-            Some(ref t) => Some(t),
-            _ => None,
-        }
+        self.times.get(key)
+    }
+
+    /// Convenience method for getting the value of the 'ExpiryTime' timestamp
+    /// This value is usually only meaningful/useful when expires == true
+    pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
+        self.get_time("ExpiryTime")
     }
 
     /// Convenience method for getting the value of the 'Title' field
