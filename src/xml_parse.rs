@@ -100,8 +100,16 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
             } => {
                 xml_stack.pop();
 
-                if ["Group", "Entry", "String", "AutoType", "Association", "ExpiryTime", "Expires"]
-                    .contains(&&local_name[..])
+                if [
+                    "Group",
+                    "Entry",
+                    "String",
+                    "AutoType",
+                    "Association",
+                    "ExpiryTime",
+                    "Expires",
+                ]
+                .contains(&&local_name[..])
                 {
                     let finished_node = parsed_stack.pop().unwrap();
                     let parsed_stack_head = parsed_stack.last_mut();
