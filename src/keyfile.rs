@@ -1,5 +1,5 @@
-use crypt;
-use result::{Error, Result};
+use crate::crypt;
+use crate::result::{Error, Result};
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
