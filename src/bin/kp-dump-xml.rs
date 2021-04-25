@@ -1,8 +1,4 @@
 /// utility to dump keepass database internal XML data.
-extern crate clap;
-extern crate keepass;
-extern crate rpassword;
-
 use std::fs::File;
 use std::io::{Read, Write};
 

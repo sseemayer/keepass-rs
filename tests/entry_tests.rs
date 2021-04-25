@@ -1,6 +1,3 @@
-extern crate chrono;
-extern crate keepass;
-
 mod tests {
     use keepass::{result::*, *};
     use std::{fs::File, path::Path};

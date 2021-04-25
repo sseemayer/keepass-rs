@@ -8,8 +8,6 @@ use xml::reader::{EventReader, XmlEvent};
 
 use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Value};
 
-extern crate chrono;
-
 #[derive(Debug)]
 enum Node {
     Entry(Entry),
