@@ -1,7 +1,6 @@
 use crate::crypt::cipher::Cipher;
 use crate::result::{DatabaseIntegrityError, Error, Result};
 
-use base64;
 use secstr::SecStr;
 
 use xml::name::OwnedName;
