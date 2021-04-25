@@ -1,10 +1,9 @@
 use std::convert::TryFrom;
 
 use crate::{
+    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     crypt,
-    db::{
-        Compression, Database, Header, InnerCipherSuite, InnerHeader, KdfSettings, OuterCipherSuite,
-    },
+    db::{Database, Header, InnerHeader},
     hmac_block_stream,
     result::{DatabaseIntegrityError, Error, Result},
     variant_dictionary::VariantDictionary,

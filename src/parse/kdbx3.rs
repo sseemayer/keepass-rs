@@ -1,6 +1,7 @@
 use crate::{
+    config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
-    db::{Compression, Database, Group, Header, InnerCipherSuite, InnerHeader, OuterCipherSuite},
+    db::{Database, Group, Header, InnerHeader},
     result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
 };
