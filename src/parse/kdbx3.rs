@@ -164,6 +164,50 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
 
 /// Open, decrypt and parse a KeePass database from a source and a password
 pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
+    let (header, xml_blocks) = decrypt_xml(data, key_elements)?;
+
+    // Derive stream key for decrypting inner protected values and set up decryption context
+    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()])?;
+    let mut inner_decryptor = header.inner_cipher.get_cipher(&stream_key)?;
+
+    let mut root = Group {
+        name: "Root".to_owned(),
+        child_groups: Default::default(),
+        entries: Default::default(),
+        expires: Default::default(),
+        times: Default::default(),
+    };
+
+    // Parse XML data blocks
+    for block_buffer in xml_blocks {
+        let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
+        root.child_groups
+            .insert(block_group.name.clone(), block_group);
+    }
+
+    // Re-root db.root if it contains only one child (if there was only one block)
+    if root.child_groups.len() == 1 {
+        let mut new_root = Default::default();
+        for (_, v) in root.child_groups.drain(..) {
+            new_root = v
+        }
+        root = new_root;
+    }
+
+    let db = Database {
+        header: Header::KDBX3(header),
+        inner_header: InnerHeader::None,
+        root,
+    };
+
+    Ok(db)
+}
+
+/// Open and decrypt a KeePass KDBX3 database from a source and a password
+pub(crate) fn decrypt_xml(
+    data: &[u8],
+    key_elements: &[Vec<u8>],
+) -> Result<(KDBX3Header, Vec<Vec<u8>>)> {
     // parse header
     let header = parse_header(data)?;
 
@@ -199,21 +243,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
         return Err(Error::IncorrectKey);
     }
 
-    // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()])?;
-    let mut inner_decryptor = header.inner_cipher.get_cipher(&stream_key)?;
-
-    let mut db = Database {
-        header: Header::KDBX3(header),
-        inner_header: InnerHeader::None,
-        root: Group {
-            name: "Root".to_owned(),
-            child_groups: Default::default(),
-            entries: Default::default(),
-            expires: Default::default(),
-            times: Default::default(),
-        },
-    };
+    let mut xml_blocks = Vec::new();
 
     pos = 32;
     let mut block_index = 0;
@@ -249,24 +279,11 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
         // Decompress block_buffer_compressed
         let block_buffer = compression.decompress(block_buffer_compressed)?;
 
-        // Parse XML data
-        let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
-        db.root
-            .child_groups
-            .insert(block_group.name.clone(), block_group);
+        xml_blocks.push(block_buffer.to_vec());
 
         pos += 40 + block_size;
         block_index += 1;
     }
 
-    // Re-root db.root if it contains only one child (if there was only one block)
-    if db.root.child_groups.len() == 1 {
-        let mut new_root = Default::default();
-        for (_, v) in db.root.child_groups.drain(..) {
-            new_root = v
-        }
-        db.root = new_root;
-    }
-
-    Ok(db)
+    Ok((header, xml_blocks))
 }

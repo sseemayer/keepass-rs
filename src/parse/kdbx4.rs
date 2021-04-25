@@ -223,6 +223,29 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
 
 /// Open, decrypt and parse a KeePass database from a source and key elements
 pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
+    let (header, inner_header, xml) = decrypt_xml(data, key_elements)?;
+
+    // Initialize inner decryptor from inner header params
+    let mut inner_decryptor = inner_header
+        .inner_random_stream
+        .get_cipher(&inner_header.inner_random_stream_key)?;
+
+    let root = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor)?;
+
+    let db = Database {
+        header: Header::KDBX4(header),
+        inner_header: InnerHeader::KDBX4(inner_header),
+        root,
+    };
+
+    Ok(db)
+}
+
+/// Open and decrypt a KeePass KDBX4 database from a source and key elements
+pub(crate) fn decrypt_xml(
+    data: &[u8],
+    key_elements: &[Vec<u8>],
+) -> Result<(KDBX4Header, KDBX4InnerHeader, Vec<u8>)> {
     // parse header
     let header = parse_outer_header(data)?;
     let pos = header.body_start;
@@ -272,20 +295,8 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     // KDBX4 has inner header, too - parse it
     let inner_header = parse_inner_header(&payload)?;
 
-    // Initialize inner decryptor from inner header params
-    let mut inner_decryptor = inner_header
-        .inner_random_stream
-        .get_cipher(&inner_header.inner_random_stream_key)?;
-
     // after inner header is one XML document
     let xml = &payload[inner_header.body_start..];
-    let root = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor)?;
 
-    let db = Database {
-        header: Header::KDBX4(header),
-        inner_header: InnerHeader::KDBX4(inner_header),
-        root,
-    };
-
-    Ok(db)
+    Ok((header, inner_header, xml.to_vec()))
 }
