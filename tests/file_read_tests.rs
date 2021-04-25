@@ -1,5 +1,3 @@
-extern crate keepass;
-
 mod tests {
     use keepass::result::*;
     use keepass::*;

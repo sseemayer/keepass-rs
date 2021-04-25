@@ -1,7 +1,6 @@
 use indexmap::IndexMap;
 use secstr::SecStr;
 use std::collections::HashMap;
-extern crate chrono;
 
 use crate::{
     crypt,
