@@ -1,6 +1,6 @@
+use indexmap::IndexMap;
 use secstr::SecStr;
 use std::collections::HashMap;
-use indexmap::IndexMap;
 use std::convert::TryFrom;
 extern crate chrono;
 
@@ -271,6 +271,55 @@ impl Database {
             .into()),
         }
     }
+
+    /// Helper function to load a database into its internal XML chunks
+    pub fn get_xml_chunks(
+        source: &mut dyn std::io::Read,
+        password: Option<&str>,
+        keyfile: Option<&mut dyn std::io::Read>,
+    ) -> Result<Vec<Vec<u8>>> {
+        let mut key_elements: Vec<Vec<u8>> = Vec::new();
+
+        if let Some(p) = password {
+            key_elements.push(
+                crypt::calculate_sha256(&[p.as_bytes()])?
+                    .as_slice()
+                    .to_vec(),
+            );
+        }
+
+        if let Some(f) = keyfile {
+            key_elements.push(::keyfile::parse(f)?);
+        }
+
+        let mut data = Vec::new();
+        source.read_to_end(&mut data)?;
+
+        let (version, file_major_version, file_minor_version) =
+            crate::parse::get_kdbx_version(data.as_ref())?;
+
+        let data = match version {
+            0xb54bfb65 => panic!("Dumping XML from KDB databases not supported"),
+            // 0xb54bfb66 => alpha/beta kbd 2.x
+            0xb54bfb67 if file_major_version == 3 => {
+                crate::parse::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
+            }
+            0xb54bfb67 if file_major_version == 4 => {
+                vec![crate::parse::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
+            }
+            _ => {
+                return Err(Error::DatabaseIntegrity {
+                    e: DatabaseIntegrityError::InvalidKDBXVersion {
+                        version,
+                        file_major_version,
+                        file_minor_version,
+                    },
+                })
+            }
+        };
+
+        Ok(data)
+    }
 }
 
 /// A database group with child groups and entries
@@ -451,7 +500,9 @@ impl<'a> Iterator for NodeIter<'a> {
     fn next(&mut self) -> Option<Node<'a>> {
         let res = if let Some((i, _)) = self.queue.iter().enumerate().next() {
             Some(self.queue.remove(i))
-        } else { None };
+        } else {
+            None
+        };
 
         if let Some(Node::Group(ref g)) = res {
             self.queue

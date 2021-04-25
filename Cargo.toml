@@ -12,6 +12,11 @@ license = "MIT"
 
 readme = "README.md"
 
+[features]
+utilities = ["clap", "rpassword"]
+
+default = []
+
 [dependencies]
 byteorder = "1"
 flate2 = "1"
@@ -30,3 +35,11 @@ stream-cipher = "0.3.2"
 twofish = "0.2.0"
 indexmap = "1.6.2"
 chrono = "0.4"
+
+# dependencies for command-line utilities
+clap = { version = "2.33.0", optional = true }
+rpassword = { version = "5.0.1", optional = true }
+
+[[bin]]
+name = "kp-dump-xml"
+required-features = ["utilities"]
