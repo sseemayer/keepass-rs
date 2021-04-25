@@ -1,5 +1,5 @@
-use crypt::cipher::Cipher;
-use result::{DatabaseIntegrityError, Error, Result};
+use crate::crypt::cipher::Cipher;
+use crate::result::{DatabaseIntegrityError, Error, Result};
 
 use base64;
 use secstr::SecStr;

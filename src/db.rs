@@ -245,7 +245,7 @@ impl Database {
         }
 
         if let Some(f) = keyfile {
-            key_elements.push(::keyfile::parse(f)?);
+            key_elements.push(crate::keyfile::parse(f)?);
         }
 
         let mut data = Vec::new();
@@ -289,7 +289,7 @@ impl Database {
         }
 
         if let Some(f) = keyfile {
-            key_elements.push(::keyfile::parse(f)?);
+            key_elements.push(crate::keyfile::parse(f)?);
         }
 
         let mut data = Vec::new();
