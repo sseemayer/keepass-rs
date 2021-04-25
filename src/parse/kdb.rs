@@ -1,6 +1,7 @@
 use crate::{
+    config::OuterCipherSuite,
     crypt::{self, kdf::Kdf, GenericArray},
-    db::{Database, Entry, Group, Header, InnerHeader, OuterCipherSuite, Value},
+    db::{Database, Entry, Group, Header, InnerHeader, Value},
     result::{DatabaseIntegrityError, Error, Result},
 };
 

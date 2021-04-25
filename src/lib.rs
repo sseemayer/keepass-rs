@@ -49,6 +49,7 @@ extern crate sha2;
 extern crate stream_cipher;
 extern crate xml;
 
+mod config;
 mod crypt;
 mod db;
 mod decompress;
