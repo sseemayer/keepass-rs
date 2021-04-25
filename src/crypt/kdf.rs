@@ -1,6 +1,5 @@
 use aes::block_cipher_trait::generic_array::{typenum::U32, GenericArray};
 use aes::Aes256;
-use argon2;
 use block_modes::{block_padding::ZeroPadding, BlockMode, Ecb};
 
 use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
