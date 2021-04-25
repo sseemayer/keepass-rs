@@ -62,5 +62,16 @@ Alternatively, you can add a `.cargo/config.toml` like in this project to ensure
 
 ## [Documentation](https://docs.rs/keepass)
 
+## Developer Tools
+
+### `kp-dump-xml`
+This library contains an optionally-compiled command line application to dump out the internal XML representation from a KDBX database. This can be useful for implementing additional features for the XML parser.
+
+Since the tool depends on additional crates, it is not compiled until you specify the `utilities` feature, e.g.
+
+```
+cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database.kdbx
+```
+
 ## License
 MIT
