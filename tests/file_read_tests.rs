@@ -10,18 +10,17 @@ mod tests {
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "sample");
-        assert_eq!(db.root.child_groups.len(), 3);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root.children.len(), 4);
 
         let mut total_groups = 0;
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::Group(g) => {
+                NodeRef::Group(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::Entry(e) => {
+                NodeRef::Entry(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();
@@ -51,18 +50,17 @@ mod tests {
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.child_groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root.children.len(), 1);
 
         let mut total_groups = 0;
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::Group(g) => {
+                NodeRef::Group(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::Entry(e) => {
+                NodeRef::Entry(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();
@@ -92,18 +90,17 @@ mod tests {
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.child_groups.len(), 2);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root.children.len(), 4);
 
         let mut total_groups = 0;
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::Group(g) => {
+                NodeRef::Group(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::Entry(e) => {
+                NodeRef::Entry(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();
@@ -130,7 +127,7 @@ mod tests {
         println!("{:?} DB Opened", db);
 
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root.children.len(), 1);
 
         Ok(())
     }
@@ -143,7 +140,7 @@ mod tests {
         println!("{:?} DB Opened", db);
 
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root.children.len(), 1);
 
         Ok(())
     }
@@ -157,7 +154,7 @@ mod tests {
         println!("{:?} DB Opened", db);
 
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root.children.len(), 1);
 
         Ok(())
     }
@@ -171,7 +168,7 @@ mod tests {
         println!("{:?} DB Opened", db);
 
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root.children.len(), 1);
 
         Ok(())
     }
@@ -190,7 +187,7 @@ mod tests {
         println!("{:?} DB Opened", db);
 
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root.children.len(), 1);
 
         Ok(())
     }
@@ -216,18 +213,17 @@ mod tests {
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.child_groups.len(), 3);
-        assert_eq!(db.root.entries.len(), 0);
+        assert_eq!(db.root.children.len(), 3);
 
         let mut total_groups = 0;
         let mut total_entries = 0;
         for node in &db.root {
             match node {
-                Node::Group(g) => {
+                NodeRef::Group(g) => {
                     println!("Saw group '{0}'", g.name);
                     total_groups += 1;
                 }
-                Node::Entry(e) => {
+                NodeRef::Entry(e) => {
                     let title = e.get_title().unwrap();
                     let user = e.get_username().unwrap();
                     let pass = e.get_password().unwrap();
@@ -238,7 +234,7 @@ mod tests {
         }
 
         assert_eq!(total_groups, 12);
-        assert_eq!(total_entries, 4);
+        assert_eq!(total_entries, 5);
 
         println!("{:?}", db);
 

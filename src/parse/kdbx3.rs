@@ -1,7 +1,7 @@
 use crate::{
     config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
-    db::{Database, Group, Header, InnerHeader},
+    db::{Database, Group, Header, InnerHeader, Node},
     result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
 };
@@ -173,8 +173,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
 
     let mut root = Group {
         name: "Root".to_owned(),
-        child_groups: Default::default(),
-        entries: Default::default(),
+        children: Default::default(),
         expires: Default::default(),
         times: Default::default(),
     };
@@ -182,17 +181,19 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     // Parse XML data blocks
     for block_buffer in xml_blocks {
         let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
-        root.child_groups
-            .insert(block_group.name.clone(), block_group);
+        root.children.push(Node::Group(block_group));
     }
 
     // Re-root db.root if it contains only one child (if there was only one block)
-    if root.child_groups.len() == 1 {
-        let mut new_root = Default::default();
-        for (_, v) in root.child_groups.drain(..) {
-            new_root = v
+    if root.children.len() == 1 {
+        let new_root = if let Node::Group(g) = root.children.drain(..).next().unwrap() {
+            Some(g)
+        } else {
+            None
+        };
+        if let Some(g) = new_root {
+            root = g;
         }
-        root = new_root;
     }
 
     let db = Database {
