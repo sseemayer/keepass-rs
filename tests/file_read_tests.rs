@@ -10,7 +10,7 @@ mod tests {
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "sample");
-        assert_eq!(db.root.children.len(), 4);
+        assert_eq!(db.root.children.len(), 5);
 
         let mut total_groups = 0;
         let mut total_entries = 0;
@@ -31,7 +31,7 @@ mod tests {
         }
 
         assert_eq!(total_groups, 5);
-        assert_eq!(total_entries, 5);
+        assert_eq!(total_entries, 6);
 
         println!("{:?}", db);
 
@@ -127,7 +127,7 @@ mod tests {
         println!("{:?} DB Opened", db);
 
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.children.len(), 1);
+        assert_eq!(db.root.children.len(), 2);
 
         Ok(())
     }
