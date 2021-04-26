@@ -1,6 +1,5 @@
-use indexmap::IndexMap;
 use secstr::SecStr;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::{
     crypt,
@@ -139,11 +138,8 @@ pub struct Group {
     /// The name of the group
     pub name: String,
 
-    /// The list of child groups
-    pub child_groups: IndexMap<String, Group>,
-
-    /// The list of entries in this group
-    pub entries: IndexMap<String, Entry>,
+    /// The list of child nodes (Groups or Entries)
+    pub children: Vec<Node>,
 
     /// The list of time fields for this group
     ///
@@ -158,38 +154,82 @@ pub struct Group {
 }
 
 impl Group {
-    /// Recursively get a Group or Entry by specifying a path relative to the current Group
+    /// Recursively get a Group or Entry reference by specifying a path relative to the current Group
     /// ```
-    /// use keepass::{Database, Node};
+    /// use keepass::{Database, NodeRef};
     /// use std::{fs::File, path::Path};
     ///
     /// let path = Path::new("tests/resources/test_db_with_password.kdbx");
     /// let db = Database::open(&mut File::open(path).unwrap(), Some("demopass"), None).unwrap();
     ///
-    /// if let Some(Node::Entry(e)) = db.root.get(&["General", "Sample Entry #2"]) {
+    /// if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Sample Entry #2"]) {
     ///     println!("User: {}", e.get_username().unwrap());
     /// }
     /// ```
-    pub fn get(&self, path: &[&str]) -> Option<Node> {
+    pub fn get<'a>(&'a self, path: &[&str]) -> Option<NodeRef<'a>> {
         if path.is_empty() {
-            Some(Node::Group(self))
+            Some(NodeRef::Group(self))
         } else {
-            let p = path[0];
-            let l = path.len();
-
-            if self.entries.contains_key(p) && l == 1 {
-                Some(Node::Entry(&self.entries[p]))
-            } else if self.child_groups.contains_key(p) {
-                let g = &self.child_groups[p];
-
-                if l == 1 {
-                    Some(Node::Group(g))
-                } else {
-                    let r = &path[1..];
-                    g.get(r)
-                }
+            if path.len() == 1 {
+                let head = path[0];
+                self.children
+                    .iter()
+                    .filter_map(|n| match n {
+                        Node::Group(_) => None,
+                        Node::Entry(e) => {
+                            e.get_title()
+                                .and_then(|t| if t == head { Some(n.to_ref()) } else { None })
+                        }
+                    })
+                    .next()
             } else {
-                None
+                let head = path[0];
+                let tail = &path[1..path.len()];
+
+                let head_group = self
+                    .children
+                    .iter()
+                    .filter_map(|n| match n {
+                        Node::Group(g) if g.name == head => Some(g),
+                        _ => None,
+                    })
+                    .next()?;
+
+                head_group.get(tail)
+            }
+        }
+    }
+
+    /// Recursively get a mutable reference to a Group or Entry by specifying a path relative to
+    /// the current Group
+    pub fn get_mut<'a>(&'a mut self, path: &[&str]) -> Option<NodeRefMut<'a>> {
+        if path.is_empty() {
+            Some(NodeRefMut::Group(self))
+        } else {
+            if path.len() == 1 {
+                let head = path[0];
+                self.children
+                    .iter_mut()
+                    .filter(|n| match n {
+                        Node::Group(g) => g.name == head,
+                        Node::Entry(e) => e.get_title().map(|t| t == head).unwrap_or(false),
+                    })
+                    .map(|t| t.to_ref_mut())
+                    .next()
+            } else {
+                let head = path[0];
+                let tail = &path[1..path.len()];
+
+                let head_group: &mut Group = self
+                    .children
+                    .iter_mut()
+                    .filter_map(|n| match n {
+                        Node::Group(g) if g.name == head => Some(g),
+                        _ => None,
+                    })
+                    .next()?;
+
+                head_group.get_mut(tail)
             }
         }
     }
@@ -217,15 +257,6 @@ pub enum Value {
     Protected(SecStr),
 }
 
-/// A database entry containing several key-value fields.
-#[derive(Debug, Default, Eq, PartialEq)]
-pub struct Entry {
-    pub fields: HashMap<String, Value>,
-    pub autotype: Option<AutoType>,
-    pub expires: bool,
-    pub times: HashMap<String, chrono::NaiveDateTime>,
-}
-
 /// An AutoType setting associated with an Entry
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct AutoType {
@@ -242,14 +273,58 @@ pub struct AutoTypeAssociation {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum Node<'a> {
+pub enum Node {
+    Group(Group),
+    Entry(Entry),
+}
+
+impl Node {
+    pub fn to_ref<'a>(&'a self) -> NodeRef<'a> {
+        self.into()
+    }
+
+    pub fn to_ref_mut<'a>(&'a mut self) -> NodeRefMut<'a> {
+        self.into()
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum NodeRef<'a> {
     Group(&'a Group),
     Entry(&'a Entry),
 }
 
-/// An iterator over Groups and Entries
-pub struct NodeIter<'a> {
-    queue: Vec<Node<'a>>,
+impl<'a> std::convert::From<&'a Node> for NodeRef<'a> {
+    fn from(n: &'a Node) -> Self {
+        match n {
+            Node::Group(g) => NodeRef::Group(g),
+            Node::Entry(e) => NodeRef::Entry(e),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum NodeRefMut<'a> {
+    Group(&'a mut Group),
+    Entry(&'a mut Entry),
+}
+
+impl<'a> std::convert::From<&'a mut Node> for NodeRefMut<'a> {
+    fn from(n: &'a mut Node) -> Self {
+        match n {
+            Node::Group(g) => NodeRefMut::Group(g),
+            Node::Entry(e) => NodeRefMut::Entry(e),
+        }
+    }
+}
+
+/// A database entry containing several key-value fields.
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct Entry {
+    pub fields: HashMap<String, Value>,
+    pub autotype: Option<AutoType>,
+    pub expires: bool,
+    pub times: HashMap<String, chrono::NaiveDateTime>,
 }
 
 impl<'a> Entry {
@@ -305,24 +380,22 @@ impl<'a> Entry {
     }
 }
 
+/// An iterator over Groups and Entries
+pub struct NodeIter<'a> {
+    queue: VecDeque<NodeRef<'a>>,
+}
+
 impl<'a> Iterator for NodeIter<'a> {
-    type Item = Node<'a>;
+    type Item = NodeRef<'a>;
 
-    fn next(&mut self) -> Option<Node<'a>> {
-        let res = if let Some((i, _)) = self.queue.iter().enumerate().next() {
-            Some(self.queue.remove(i))
-        } else {
-            None
-        };
+    fn next(&mut self) -> Option<NodeRef<'a>> {
+        let head = self.queue.pop_front()?;
 
-        if let Some(Node::Group(ref g)) = res {
-            self.queue
-                .extend(g.entries.iter().map(|(_, e)| Node::Entry(&e)));
-            self.queue
-                .extend(g.child_groups.iter().map(|(_, g)| Node::Group(&g)));
+        if let NodeRef::Group(ref g) = head {
+            self.queue.extend(g.children.iter().map(|n| n.into()))
         }
 
-        res
+        Some(head)
     }
 }
 
@@ -333,12 +406,13 @@ impl<'a> Group {
 }
 
 impl<'a> IntoIterator for &'a Group {
-    type Item = Node<'a>;
+    type Item = NodeRef<'a>;
     type IntoIter = NodeIter<'a>;
 
     fn into_iter(self) -> NodeIter<'a> {
-        NodeIter {
-            queue: vec![Node::Group(&self)],
-        }
+        let mut queue: VecDeque<NodeRef> = VecDeque::new();
+        queue.push_back(NodeRef::Group(self));
+
+        NodeIter { queue }
     }
 }

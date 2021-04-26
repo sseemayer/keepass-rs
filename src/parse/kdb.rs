@@ -1,7 +1,7 @@
 use crate::{
     config::OuterCipherSuite,
     crypt::{self, kdf::Kdf, GenericArray},
-    db::{Database, Entry, Group, Header, InnerHeader, Value},
+    db::{Database, Entry, Group, Header, InnerHeader, Node, NodeRefMut, Value},
     result::{DatabaseIntegrityError, Error, Result},
 };
 
@@ -97,8 +97,7 @@ fn collapse_tail_groups(branch: &mut Vec<Group>, level: usize, root: &mut Group)
             Some(parent) => parent,
             None => root,
         };
-        let name = leaf.name.clone();
-        parent.child_groups.insert(name, leaf);
+        parent.children.push(Node::Group(leaf));
     }
 }
 
@@ -255,21 +254,23 @@ fn parse_entries(
 
                 let group_id =
                     gid.ok_or_else(|| Error::from(DatabaseIntegrityError::MissingKDBGroupId))?;
-                let group_path = gid_map.get(&group_id).ok_or_else(|| {
-                    Error::from(DatabaseIntegrityError::InvalidKDBGroupId { group_id })
-                })?;
+                let group_path: Vec<&str> = gid_map
+                    .get(&group_id)
+                    .ok_or_else(|| {
+                        Error::from(DatabaseIntegrityError::InvalidKDBGroupId { group_id })
+                    })?
+                    .into_iter()
+                    .map(|v| v.as_str())
+                    .collect();
 
-                // Follow the group path to fetch the corresponding group
-                let mut group: &mut Group = root;
-                for g in group_path.iter() {
-                    group = group.child_groups.get_mut(g).unwrap(); // the group path was built to match the group tree
-                }
+                let group = root.get_mut(group_path.as_slice());
+                let group = if let Some(NodeRefMut::Group(g)) = group {
+                    g
+                } else {
+                    panic!("Follow group_path")
+                };
 
-                // Insert the entry (and reset state for the next entry)
-                let entry_title = entry
-                    .get_title()
-                    .ok_or_else(|| Error::from(DatabaseIntegrityError::MissingKDBEntryTitle))?;
-                group.entries.insert(entry_title.to_owned(), entry);
+                group.children.push(Node::Entry(entry));
                 entry = Default::default();
                 gid = None;
                 num_entries += 1;
@@ -291,8 +292,7 @@ fn parse_entries(
 fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group> {
     let mut root = Group {
         name: "Root".to_owned(),
-        child_groups: Default::default(),
-        entries: Default::default(),
+        children: Default::default(),
         expires: Default::default(),
         times: Default::default(),
     };

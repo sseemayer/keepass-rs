@@ -4,7 +4,7 @@
 //! ```
 //! extern crate keepass;
 //!
-//! use keepass::{Database, Node, Result, Error};
+//! use keepass::{Database, NodeRef, Result, Error};
 //! use std::fs::File;
 //!
 //! fn main() -> Result<()> {
@@ -15,10 +15,10 @@
 //!     // Iterate over all Groups and Nodes
 //!     for node in &db.root {
 //!         match node {
-//!             Node::Group(g) => {
+//!             NodeRef::Group(g) => {
 //!                 println!("Saw group '{0}'", g.name);
 //!             },
-//!             Node::Entry(e) => {
+//!             NodeRef::Entry(e) => {
 //!                 let title = e.get_title().unwrap();
 //!                 let user = e.get_username().unwrap();
 //!                 let pass = e.get_password().unwrap();

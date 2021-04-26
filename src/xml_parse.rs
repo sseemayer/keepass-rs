@@ -124,12 +124,10 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                         Node::Group(finished_group) => {
                             match parsed_stack_head {
                                 Some(&mut Node::Group(Group {
-                                    ref mut child_groups,
-                                    ..
+                                    ref mut children, ..
                                 })) => {
-                                    // A Group was finished - add Group to parent Group's child groups
-                                    child_groups
-                                        .insert(finished_group.name.clone(), finished_group);
+                                    // A Group was finished - add Group to children
+                                    children.push(crate::Node::Group(finished_group));
                                 }
                                 None => {
                                     // There is no more parent nodes left -> we are at the root
@@ -141,14 +139,11 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
 
                         Node::Entry(finished_entry) => {
                             if let Some(&mut Node::Group(Group {
-                                ref mut entries, ..
+                                ref mut children, ..
                             })) = parsed_stack_head
                             {
-                                // A Entry was finished - add Node to parent Group's entries
-                                entries.insert(
-                                    finished_entry.get_title().unwrap().to_owned(),
-                                    finished_entry,
-                                );
+                                // A Entry was finished - add Node to parent Group's children
+                                children.push(crate::Node::Entry(finished_entry))
                             }
                         }
 
