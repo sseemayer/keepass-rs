@@ -43,3 +43,7 @@ rpassword = { version = "5.0.1", optional = true }
 [[bin]]
 name = "kp-dump-xml"
 required-features = ["utilities"]
+
+[[bin]]
+name = "kp-show-db"
+required-features = ["utilities"]
