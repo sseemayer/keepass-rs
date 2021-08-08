@@ -24,11 +24,11 @@ impl OuterCipherSuite {
         &self,
         key: &[u8],
         iv: &[u8],
-    ) -> Result<Box<dyn crypt::cipher::Cipher>> {
+    ) -> Result<Box<dyn crypt::ciphers::Cipher>> {
         match self {
-            OuterCipherSuite::AES256 => Ok(Box::new(crypt::cipher::AES256Cipher::new(key, iv)?)),
-            OuterCipherSuite::Twofish => Ok(Box::new(crypt::cipher::TwofishCipher::new(key, iv)?)),
-            OuterCipherSuite::ChaCha20 => Ok(Box::new(crypt::cipher::ChaCha20Cipher::new_key_iv(
+            OuterCipherSuite::AES256 => Ok(Box::new(crypt::ciphers::AES256Cipher::new(key, iv)?)),
+            OuterCipherSuite::Twofish => Ok(Box::new(crypt::ciphers::TwofishCipher::new(key, iv)?)),
+            OuterCipherSuite::ChaCha20 => Ok(Box::new(crypt::ciphers::ChaCha20Cipher::new_key_iv(
                 key, iv,
             )?)),
         }
@@ -58,11 +58,11 @@ pub enum InnerCipherSuite {
 }
 
 impl InnerCipherSuite {
-    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn crypt::cipher::Cipher>> {
+    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn crypt::ciphers::Cipher>> {
         match self {
-            InnerCipherSuite::Plain => Ok(Box::new(crypt::cipher::PlainCipher::new(key)?)),
-            InnerCipherSuite::Salsa20 => Ok(Box::new(crypt::cipher::Salsa20Cipher::new(key)?)),
-            InnerCipherSuite::ChaCha20 => Ok(Box::new(crypt::cipher::ChaCha20Cipher::new(key)?)),
+            InnerCipherSuite::Plain => Ok(Box::new(crypt::ciphers::PlainCipher::new(key)?)),
+            InnerCipherSuite::Salsa20 => Ok(Box::new(crypt::ciphers::Salsa20Cipher::new(key)?)),
+            InnerCipherSuite::ChaCha20 => Ok(Box::new(crypt::ciphers::ChaCha20Cipher::new(key)?)),
         }
     }
 }
