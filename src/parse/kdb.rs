@@ -1,11 +1,12 @@
 use crate::{
     config::OuterCipherSuite,
-    crypt::{self, kdf::Kdf, GenericArray},
+    crypt::kdf::Kdf,
     db::{Database, Entry, Group, Header, InnerHeader, Node, NodeRefMut, Value},
     result::{DatabaseIntegrityError, Error, Result},
 };
 
 use byteorder::{ByteOrder, LittleEndian};
+use cipher::generic_array::GenericArray;
 
 use std::{collections::HashMap, convert::TryInto, str};
 
@@ -318,17 +319,18 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
         let key_element: [u8; 32] = key_elements[0].try_into().unwrap();
         GenericArray::from(key_element) // single pass of SHA256, already done before the call to parse()
     } else {
-        crypt::calculate_sha256(&key_elements)? // second pass of SHA256
+        crate::crypt::calculate_sha256(&key_elements)? // second pass of SHA256
     };
 
     // KDF the same as for KDBX
-    let transformed_key = crypt::kdf::AesKdf {
+    let transformed_key = crate::crypt::kdf::AesKdf {
         seed: header.transform_seed.clone(),
         rounds: header.transform_rounds as u64,
     }
     .transform_key(&composite_key)?;
 
-    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
+    let master_key =
+        crate::crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
 
     let cipher = if header.flags & 2 != 0 {
         OuterCipherSuite::AES256
@@ -346,7 +348,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     let payload = &payload_padded[..payload_padded.len() - padlen];
 
     // Check if we decrypted correctly
-    let hash = crypt::calculate_sha256(&[&payload])?;
+    let hash = crate::crypt::calculate_sha256(&[&payload])?;
     if header.contents_hash != hash.as_slice() {
         return Err(Error::IncorrectKey);
     }

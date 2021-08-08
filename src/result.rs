@@ -12,7 +12,7 @@ pub enum CryptoError {
         e: block_modes::InvalidKeyIvLength,
     },
     InvalidKeyNonceLength {
-        e: stream_cipher::InvalidKeyNonceLength,
+        e: cipher::errors::InvalidLength,
     },
     BlockMode {
         e: block_modes::BlockModeError,
@@ -347,9 +347,9 @@ impl From<hmac::crypto_mac::InvalidKeyLength> for CryptoError {
     }
 }
 
-impl From<stream_cipher::InvalidKeyNonceLength> for CryptoError {
+impl From<cipher::errors::InvalidLength> for CryptoError {
     #[cfg_attr(tarpaulin, skip)]
-    fn from(e: stream_cipher::InvalidKeyNonceLength) -> Self {
+    fn from(e: cipher::errors::InvalidLength) -> Self {
         CryptoError::InvalidKeyNonceLength { e }
     }
 }

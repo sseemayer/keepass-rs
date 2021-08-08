@@ -1,6 +1,6 @@
-use aes::block_cipher_trait::generic_array::{typenum::U32, GenericArray};
 use aes::Aes256;
 use block_modes::{block_padding::ZeroPadding, BlockMode, Ecb};
+use cipher::generic_array::{typenum::U32, GenericArray};
 
 use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
 
@@ -25,7 +25,7 @@ impl Kdf for AesKdf {
 
         // encrypt the key repeatedly
         for _ in 0..self.rounds {
-            let cipher = Aes256Ecb::new_var(&self.seed, Default::default())
+            let cipher = Aes256Ecb::new_from_slices(&self.seed, Default::default())
                 .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
 
             let key_len = key.len();

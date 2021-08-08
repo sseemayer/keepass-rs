@@ -1,4 +1,4 @@
-use crate::crypt::cipher::Cipher;
+use crate::crypt::ciphers::Cipher;
 use crate::result::{DatabaseIntegrityError, Error, Result};
 
 use secstr::SecStr;

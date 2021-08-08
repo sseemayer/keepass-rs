@@ -1,12 +1,10 @@
-use crate::crypt;
 use crate::result::{DatabaseIntegrityError, Result};
 use byteorder::{ByteOrder, LittleEndian};
 
+use cipher::generic_array::{typenum::U64, GenericArray};
+
 /// Read from a HMAC block stream into a raw buffer
-pub(crate) fn read_hmac_block_stream(
-    data: &[u8],
-    key: &crypt::GenericArray<u8, crypt::U64>,
-) -> Result<Vec<u8>> {
+pub(crate) fn read_hmac_block_stream(data: &[u8], key: &GenericArray<u8, U64>) -> Result<Vec<u8>> {
     // keepassxc src/streams/HmacBlockStream.cpp
 
     let mut out = Vec::new();
@@ -26,8 +24,11 @@ pub(crate) fn read_hmac_block_stream(
         LittleEndian::write_u64(&mut block_index_buf, block_index as u64);
 
         if hmac
-            != crypt::calculate_hmac(&[&block_index_buf, size_bytes, &block], &hmac_block_key)?
-                .as_slice()
+            != crate::crypt::calculate_hmac(
+                &[&block_index_buf, size_bytes, &block],
+                &hmac_block_key,
+            )?
+            .as_slice()
         {
             return Err(DatabaseIntegrityError::BlockHashMismatch { block_index }.into());
         }
@@ -43,8 +44,8 @@ pub(crate) fn read_hmac_block_stream(
 
 pub(crate) fn get_hmac_block_key(
     block_index: usize,
-    key: &crypt::GenericArray<u8, crypt::U64>,
-) -> Result<crypt::GenericArray<u8, crypt::U64>> {
+    key: &GenericArray<u8, U64>,
+) -> Result<GenericArray<u8, U64>> {
     let mut buf = [0u8; 8];
     LittleEndian::write_u64(&mut buf, block_index as u64);
     crate::crypt::calculate_sha512(&[&buf, key])

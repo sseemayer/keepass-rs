@@ -1,8 +1,9 @@
 use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
 
-use aes::{block_cipher_trait::generic_array::GenericArray, Aes256};
+use aes::Aes256;
 use block_modes::{block_padding::Pkcs7, BlockMode, Cbc};
-use stream_cipher::{NewStreamCipher, StreamCipher};
+use cipher::{generic_array::GenericArray, StreamCipher};
+use salsa20::{cipher::NewCipher, Salsa20};
 
 pub(crate) trait Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>>;
@@ -25,7 +26,7 @@ impl AES256Cipher {
 
 impl Cipher for AES256Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        let cipher = Aes256Cbc::new_var(&self.key, &self.iv)
+        let cipher = Aes256Cbc::new_from_slices(&self.key, &self.iv)
             .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
 
         let mut buf = ciphertext.to_vec();
@@ -54,7 +55,7 @@ impl TwofishCipher {
 
 impl Cipher for TwofishCipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        let cipher = TwofishCbc::new_var(&self.key, &self.iv)
+        let cipher = TwofishCbc::new_from_slices(&self.key, &self.iv)
             .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
 
         let mut buf = ciphertext.to_vec();
@@ -76,7 +77,7 @@ impl Salsa20Cipher {
         let iv = GenericArray::from([0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A]);
 
         Ok(Salsa20Cipher {
-            cipher: salsa20::Salsa20::new(&key, &iv),
+            cipher: Salsa20::new(&key, &iv),
         })
     }
 }
@@ -84,7 +85,7 @@ impl Salsa20Cipher {
 impl Cipher for Salsa20Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>> {
         let mut buffer = Vec::from(ciphertext);
-        self.cipher.decrypt(&mut buffer);
+        self.cipher.apply_keystream(&mut buffer);
         Ok(buffer)
     }
 }
@@ -109,7 +110,7 @@ impl ChaCha20Cipher {
     /// Create as an outer cipher by separately-specified key and iv
     pub(crate) fn new_key_iv(key: &[u8], iv: &[u8]) -> Result<Self> {
         Ok(ChaCha20Cipher {
-            cipher: chacha20::ChaCha20::new_var(&key, &iv)
+            cipher: chacha20::ChaCha20::new_from_slices(&key, &iv)
                 .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?,
         })
     }
@@ -118,7 +119,7 @@ impl ChaCha20Cipher {
 impl Cipher for ChaCha20Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>> {
         let mut buffer = Vec::from(ciphertext);
-        self.cipher.decrypt(&mut buffer);
+        self.cipher.apply_keystream(&mut buffer);
         Ok(buffer)
     }
 }
