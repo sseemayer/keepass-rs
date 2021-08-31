@@ -11,7 +11,6 @@ use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Meta, Value};
 #[derive(Debug)]
 enum Node {
     Entry(Entry),
-    UUID(String),
     Group(Group),
     KeyValue(String, Value),
     AutoType(AutoType),
@@ -20,6 +19,7 @@ enum Node {
     Expires(bool),
     Tags(String),
     Meta(Meta),
+    UUID(String),
     RecycleBinUUID(String),
 }
 
@@ -120,6 +120,8 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "RecycleBinUUID",
                     "UUID",
                     "Tags",
+                    "Meta",
+                    "RecycleBinUUID",
                 ]
                 .contains(&&local_name[..])
                 {
