@@ -230,6 +230,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 }
                             }
                         }
+
                         Node::UUID(r) => {
                             if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
                                 parsed_stack_head
