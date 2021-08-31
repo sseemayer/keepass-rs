@@ -240,4 +240,33 @@ mod tests {
 
         Ok(())
     }
+    #[test]
+    fn open_kdbx4_with_password_deleted_entry() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_deleted_entry.kdbx");
+
+        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.meta.recyclebin_uuid, "VjFx/mWYQtyAA/mN3jLocg==");
+
+        let recycle_group: Vec<NodeRef> = db
+            .root
+            .iter()
+            .filter(|child| match child {
+                NodeRef::Group(g) => g.uuid == db.meta.recyclebin_uuid,
+                NodeRef::Entry(_) => false,
+            })
+            .collect();
+
+        assert_eq!(recycle_group.len(), 1);
+        let group = &recycle_group[0];
+        if let NodeRef::Group(g) = group {
+            assert_eq!(g.name, "Recycle Bin");
+        } else {
+            panic!("It should've matched a Group!");
+        }
+        Ok(())
+    }
 }
