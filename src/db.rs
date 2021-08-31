@@ -35,6 +35,9 @@ pub struct Database {
 
     /// Root node of the KeePass database
     pub root: Group,
+
+    // Metadata of the KeePass database
+    pub meta: Meta,
 }
 
 impl Database {
@@ -130,6 +133,12 @@ impl Database {
 
         Ok(data)
     }
+}
+
+/// Database metadata
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct Meta {
+    pub recyclebin_uuid: String,
 }
 
 /// A database group with child groups and entries
