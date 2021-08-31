@@ -6,7 +6,7 @@ use secstr::SecStr;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
-use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Value};
+use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Meta, Value};
 
 #[derive(Debug)]
 enum Node {
@@ -17,6 +17,9 @@ enum Node {
     AutoTypeAssociation(AutoTypeAssociation),
     ExpiryTime(String),
     Expires(bool),
+    Meta(Meta),
+    UUID(String),
+    RecycleBinUUID(String),
 }
 
 fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime> {
@@ -39,7 +42,8 @@ fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime> {
     }
 }
 
-pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Result<Group> {
+pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Result<(Group, Meta)> {
+    // Result<Group, Option<Group>> {
     let parser = EventReader::new(xml);
 
     // Stack of parsed Node objects not yet associated with their parent
@@ -49,6 +53,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
     let mut xml_stack: Vec<String> = vec![];
 
     let mut root_group: Group = Default::default();
+    let mut meta: Meta = Default::default();
 
     for e in parser {
         match e.unwrap() {
@@ -60,6 +65,9 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                 xml_stack.push(local_name.clone());
 
                 match &local_name[..] {
+                    "Meta" => parsed_stack.push(Node::Meta(Default::default())),
+                    "UUID" => parsed_stack.push(Node::UUID(String::new())),
+                    "RecycleBinUUID" => parsed_stack.push(Node::RecycleBinUUID(String::new())),
                     "Group" => parsed_stack.push(Node::Group(Default::default())),
                     "Entry" => parsed_stack.push(Node::Entry(Default::default())),
                     "String" => parsed_stack.push(Node::KeyValue(
@@ -105,6 +113,9 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Association",
                     "ExpiryTime",
                     "Expires",
+                    "Meta",
+                    "RecycleBinUUID",
+                    "UUID",
                 ]
                 .contains(&&local_name[..])
                 {
@@ -199,6 +210,26 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 *expires = es;
                             }
                         }
+                        Node::UUID(r) => {
+                            if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
+                                parsed_stack_head
+                            {
+                                *uuid = r;
+                            }
+                        }
+                        Node::RecycleBinUUID(r) => {
+                            if let Some(&mut Node::Meta(Meta {
+                                ref mut recyclebin_uuid,
+                                ..
+                            })) = parsed_stack_head
+                            {
+                                *recyclebin_uuid = r;
+                            }
+                        }
+
+                        Node::Meta(m) => {
+                            meta = m;
+                        }
                     }
                 }
             }
@@ -248,6 +279,12 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             }
                         }
                     }
+                    (Some("UUID"), Some(&mut Node::UUID(ref mut et))) => {
+                        *et = c;
+                    }
+                    (Some("RecycleBinUUID"), Some(&mut Node::RecycleBinUUID(ref mut et))) => {
+                        *et = c;
+                    }
                     (Some("Enabled"), Some(&mut Node::AutoType(ref mut at))) => {
                         at.enabled = c.parse().unwrap_or(false);
                     }
@@ -271,5 +308,5 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
         }
     }
 
-    Ok(root_group)
+    Ok((root_group, meta))
 }
