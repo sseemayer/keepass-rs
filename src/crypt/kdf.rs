@@ -1,6 +1,7 @@
 use aes::Aes256;
-use block_modes::{block_padding::ZeroPadding, BlockMode, Ecb};
 use cipher::generic_array::{typenum::U32, GenericArray};
+use cipher::{BlockEncrypt, NewBlockCipher};
+use sha2::{Digest, Sha256};
 
 use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
 
@@ -19,25 +20,20 @@ impl Kdf for AesKdf {
         &self,
         composite_key: &GenericArray<u8, U32>,
     ) -> Result<GenericArray<u8, U32>> {
-        type Aes256Ecb = Ecb<Aes256, ZeroPadding>;
-
-        let mut key: Vec<u8> = Vec::from(composite_key.as_slice());
-
-        // encrypt the key repeatedly
+        let cipher = Aes256::new(&GenericArray::clone_from_slice(&self.seed));
+        let mut block1 = GenericArray::clone_from_slice(&composite_key[..16]);
+        let mut block2 = GenericArray::clone_from_slice(&composite_key[16..]);
         for _ in 0..self.rounds {
-            let cipher = Aes256Ecb::new_from_slices(&self.seed, Default::default())
-                .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
-
-            let key_len = key.len();
-            let new_key = cipher
-                .encrypt(&mut key, key_len)
-                .map(Vec::from)
-                .map_err(|e| Error::from(DatabaseIntegrityError::from(CryptoError::from(e))))?;
-
-            key = new_key;
+            cipher.encrypt_block(&mut block1);
+            cipher.encrypt_block(&mut block2);
         }
 
-        crate::crypt::calculate_sha256(&[&key])
+        let mut digest = Sha256::new();
+
+        digest.update(block1);
+        digest.update(block2);
+
+        Ok(digest.finalize())
     }
 }
 
