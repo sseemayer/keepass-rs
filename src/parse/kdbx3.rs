@@ -245,7 +245,7 @@ pub(crate) fn decrypt_xml(
         return Err(Error::IncorrectKey);
     }
 
-    let mut xml_blocks = Vec::new();
+    let mut buf = Vec::new();
 
     pos = 32;
     let mut block_index = 0;
@@ -279,13 +279,13 @@ pub(crate) fn decrypt_xml(
         }
 
         // Decompress block_buffer_compressed
-        let block_buffer = compression.decompress(block_buffer_compressed)?;
-
-        xml_blocks.push(block_buffer.to_vec());
+        buf.append(&mut block_buffer_compressed.to_vec());
 
         pos += 40 + block_size;
         block_index += 1;
     }
+    let mut xml_blocks = Vec::new();
+    xml_blocks.push(compression.decompress(&buf)?.to_vec());
 
     Ok((header, xml_blocks))
 }
