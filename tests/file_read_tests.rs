@@ -240,6 +240,7 @@ mod tests {
 
         Ok(())
     }
+
     #[test]
     fn open_kdbx4_with_password_deleted_entry() -> Result<()> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_deleted_entry.kdbx");
@@ -267,6 +268,40 @@ mod tests {
         } else {
             panic!("It should've matched a Group!");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn open_kdb_with_larger_than_1mb_file_does_not_crash() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdb3_with_file_larger_1mb.kdbx");
+        let db = Database::open(&mut File::open(path)?, Some("samplepassword"), None)?;
+
+        println!("{:?} DB Opened", db);
+        assert_eq!(db.root.children.len(), 1);
+
+        let mut total_groups = 0;
+        let mut total_entries = 0;
+        for node in &db.root {
+            match node {
+                NodeRef::Group(g) => {
+                    println!("Saw group '{0}'", g.name);
+                    total_groups += 1;
+                }
+                NodeRef::Entry(e) => {
+                    let title = e.get_title().unwrap();
+                    let user = e.get_username().unwrap();
+                    let pass = e.get_password().unwrap();
+                    println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
+                    total_entries += 1;
+                }
+            }
+        }
+
+        assert_eq!(total_groups, 1);
+        assert_eq!(total_entries, 1);
+
+        println!("{:?}", db);
+
         Ok(())
     }
 }
