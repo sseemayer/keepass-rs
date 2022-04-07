@@ -5,18 +5,18 @@ pub enum CryptoError {
     Argon2 {
         e: argon2::Error,
     },
-    InvalidKeyLength {
-        e: hmac::crypto_mac::InvalidKeyLength,
-    },
     InvalidKeyIvLength {
         e: block_modes::InvalidKeyIvLength,
     },
-    InvalidKeyNonceLength {
-        e: cipher::errors::InvalidLength,
+    InvalidLength {
+        e: cipher::InvalidLength,
     },
     BlockMode {
         e: block_modes::BlockModeError,
     },
+    InvalidPadding {
+        e: cipher::block_padding::UnpadError
+    }
 }
 
 #[derive(Debug)]
@@ -265,11 +265,9 @@ impl std::fmt::Display for CryptoError {
             match self {
                 CryptoError::Argon2 { e } => format!("Problem deriving key with Argon2: {}", e),
                 CryptoError::InvalidKeyIvLength { e } => format!("Invalid key / IV length: {}", e),
-                CryptoError::InvalidKeyLength { e } => format!("Invalid key length: {}", e),
-                CryptoError::InvalidKeyNonceLength { e } => {
-                    format!("Invalid key / nonce length: {}", e)
-                }
+                CryptoError::InvalidLength { e } => format!("Invalid input length: {}", e),
                 CryptoError::BlockMode { e } => format!("Block mode error: {}", e),
+                CryptoError::InvalidPadding { e } => format!("Padding error: {}", e)
             }
         )
     }
@@ -281,9 +279,9 @@ impl std::error::Error for CryptoError {
         match self {
             CryptoError::Argon2 { e } => Some(e),
             CryptoError::InvalidKeyIvLength { e } => Some(e),
-            CryptoError::InvalidKeyNonceLength { .. } => None, // TODO pass this through once e implements Error
-            CryptoError::InvalidKeyLength { .. } => None, // TODO pass this through once e implements Error
+            CryptoError::InvalidLength { .. } => None, // TODO pass this through once e implements Error
             CryptoError::BlockMode { e } => Some(e),
+            CryptoError::InvalidPadding { .. } => None
         }
     }
 }
@@ -340,19 +338,20 @@ impl From<argon2::Error> for CryptoError {
     }
 }
 
-impl From<hmac::crypto_mac::InvalidKeyLength> for CryptoError {
+impl From<cipher::InvalidLength> for CryptoError {
     #[cfg_attr(tarpaulin, skip)]
-    fn from(e: hmac::crypto_mac::InvalidKeyLength) -> Self {
-        CryptoError::InvalidKeyLength { e }
+    fn from(e: cipher::InvalidLength) -> Self {
+        CryptoError::InvalidLength { e }
     }
 }
 
-impl From<cipher::errors::InvalidLength> for CryptoError {
+impl From<cipher::block_padding::UnpadError> for CryptoError {
     #[cfg_attr(tarpaulin, skip)]
-    fn from(e: cipher::errors::InvalidLength) -> Self {
-        CryptoError::InvalidKeyNonceLength { e }
+    fn from(e: cipher::block_padding::UnpadError) -> Self {
+        CryptoError::InvalidPadding { e }
     }
 }
+
 
 impl From<block_modes::InvalidKeyIvLength> for CryptoError {
     #[cfg_attr(tarpaulin, skip)]

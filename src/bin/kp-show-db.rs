@@ -32,8 +32,8 @@ pub fn main() -> Result<()> {
 
     let mut keyfile: Option<File> = args.value_of("keyfile").and_then(|f| File::open(f).ok());
 
-    let password = rpassword::read_password_from_tty(Some("Password (or blank for none): "))
-        .expect("Read password");
+    let password = rpassword::prompt_password("Password (or blank for none): ")
+        .expect("Could not read password from TTY");
 
     let password = if password.is_empty() {
         None
