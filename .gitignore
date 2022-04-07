@@ -4,6 +4,8 @@
 
 #####=== Rust ===#####
 
+Cargo.lock
+
 # Compiled files
 *.o
 *.so
