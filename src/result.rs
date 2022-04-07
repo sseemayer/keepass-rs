@@ -15,8 +15,8 @@ pub enum CryptoError {
         e: block_modes::BlockModeError,
     },
     InvalidPadding {
-        e: cipher::block_padding::UnpadError
-    }
+        e: cipher::block_padding::UnpadError,
+    },
 }
 
 #[derive(Debug)]
@@ -267,7 +267,7 @@ impl std::fmt::Display for CryptoError {
                 CryptoError::InvalidKeyIvLength { e } => format!("Invalid key / IV length: {}", e),
                 CryptoError::InvalidLength { e } => format!("Invalid input length: {}", e),
                 CryptoError::BlockMode { e } => format!("Block mode error: {}", e),
-                CryptoError::InvalidPadding { e } => format!("Padding error: {}", e)
+                CryptoError::InvalidPadding { e } => format!("Padding error: {}", e),
             }
         )
     }
@@ -281,7 +281,7 @@ impl std::error::Error for CryptoError {
             CryptoError::InvalidKeyIvLength { e } => Some(e),
             CryptoError::InvalidLength { .. } => None, // TODO pass this through once e implements Error
             CryptoError::BlockMode { e } => Some(e),
-            CryptoError::InvalidPadding { .. } => None
+            CryptoError::InvalidPadding { .. } => None,
         }
     }
 }
@@ -351,7 +351,6 @@ impl From<cipher::block_padding::UnpadError> for CryptoError {
         CryptoError::InvalidPadding { e }
     }
 }
-
 
 impl From<block_modes::InvalidKeyIvLength> for CryptoError {
     #[cfg_attr(tarpaulin, skip)]

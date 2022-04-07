@@ -3,7 +3,10 @@ use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
 use aes::Aes256;
 use block_modes::{block_padding::Pkcs7, BlockMode, Cbc as block_modes_cbc};
 use cipher::{generic_array::GenericArray, BlockDecryptMut};
-use salsa20::{cipher::{KeyIvInit, StreamCipher}, Salsa20};
+use salsa20::{
+    cipher::{KeyIvInit, StreamCipher},
+    Salsa20,
+};
 
 pub(crate) trait Cipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>>;
