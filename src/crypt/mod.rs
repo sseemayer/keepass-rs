@@ -4,7 +4,7 @@ use cipher::generic_array::{
     GenericArray,
 };
 
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256, Sha512};
 
 pub(crate) mod ciphers;
