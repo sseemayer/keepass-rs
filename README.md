@@ -12,13 +12,12 @@ KeePass .kdbx database file parser for Rust
 extern crate keepass;
 
 use keepass::{Database, NodeRef, Result, Error};
-use std::fs::File;
 
 fn main() -> Result<()> {
     // Open KeePass database
     let path = std::path::Path::new("tests/resources/test_db_with_password.kdbx");
     let db = Database::open(
-        &mut File::open(path)?,         // the database
+        path,                           // the database
         Some("demopass"),               // password
         None                            // keyfile
     )?;
