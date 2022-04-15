@@ -1,5 +1,7 @@
 use secstr::SecStr;
 use std::collections::{HashMap, VecDeque};
+use std::io::prelude::*;
+use std::fs::File;
 
 use crate::{
     crypt,
@@ -38,12 +40,13 @@ pub struct Database {
 }
 
 impl Database {
-    /// Parse a database from a std::io::Read
+    /// Parse a database from a std::path::Path
     pub fn open(
-        source: &mut dyn std::io::Read,
+        source_path: &std::path::Path,
         password: Option<&str>,
-        keyfile: Option<&mut dyn std::io::Read>,
+        keypath: Option<&std::path::Path>,
     ) -> Result<Database> {
+        let mut source = File::open(source_path)?;
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
@@ -54,8 +57,9 @@ impl Database {
             );
         }
 
-        if let Some(f) = keyfile {
-            key_elements.push(crate::keyfile::parse(f)?);
+        if let Some(p) = keypath {
+            let mut keyfile = File::open(p)?;
+            key_elements.push(crate::keyfile::parse(&mut keyfile)?);
         }
 
         let mut data = Vec::new();
