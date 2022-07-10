@@ -10,6 +10,7 @@ mod keyfile;
 pub(crate) mod variant_dictionary;
 pub(crate) mod xml_parse;
 
+pub mod otp;
 pub(crate) mod parse;
 
 pub use self::db::*;

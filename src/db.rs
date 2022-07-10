@@ -7,6 +7,7 @@ use crate::{
     crypt::{calculate_sha256, CryptographyError},
     hmac_block_stream::BlockStreamError,
     keyfile::KeyfileError,
+    otp::TOTP,
     parse::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
@@ -579,6 +580,20 @@ impl<'a> Entry {
     /// This value is usually only meaningful/useful when expires == true
     pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
         self.get_time("ExpiryTime")
+    }
+
+    /// Convenience method for getting a TOTP from this entry
+    pub fn get_otp(&'a self) -> Option<TOTP> {
+        let otp = self.get("otp");
+        if otp.is_none() {
+            return None;
+        }
+        return TOTP::parse_from_str(otp.unwrap());
+    }
+
+    /// Convenience method for getting the raw value of the 'otp' field
+    pub fn get_raw_otp_value(&'a self) -> Option<&'a str> {
+        self.get("otp")
     }
 
     /// Convenience method for getting the value of the 'Title' field

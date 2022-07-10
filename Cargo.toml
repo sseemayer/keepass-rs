@@ -28,7 +28,6 @@ flate2 = "1"
 xml-rs = "0.8"
 base64 = "0.21"
 hex-literal = "0.3"
-
 secstr = "0.5"
 chrono = "0.4.23"
 
@@ -43,6 +42,9 @@ chacha20 = "0.9"
 cipher = { version = "0.4", features = ["std"] }
 twofish = "0.7"
 cbc = "0.1"
+totp-lite = "2.0.0"
+url = "2.2.2"
+base32 = "0.4.0"
 
 # dependencies for command-line utilities
 anyhow = { version = "1", optional = true }
@@ -65,4 +67,8 @@ required-features = ["utilities"]
 
 [[bin]]
 name = "kp-show-db"
+required-features = ["utilities"]
+
+[[bin]]
+name = "kp-show-otp"
 required-features = ["utilities"]

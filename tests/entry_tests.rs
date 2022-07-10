@@ -1,5 +1,7 @@
 mod tests {
+    use std::error;
     use keepass::*;
+    use keepass::otp::TOTP;
     use std::{fs::File, path::Path};
 
     #[test]
@@ -76,6 +78,46 @@ mod tests {
             } else {
                 panic!("Expected an ExpiryTime");
             }
+        } else {
+            panic!("Expected an entry");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn kdbx4_entry_totp_default() -> Result<(),Box<dyn error::Error>> {
+        // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
+        let path = Path::new("tests/resources/test_db_kdbx4_with_totp_entry.kdbx");
+        let db = Database::open(&mut File::open(path)?, Some("test"), None)?;
+
+        // get an entry on the root node
+        if let Some(NodeRef::Entry(e)) = db.root.get(&["this entry has totp"]) {
+            assert_eq!(e.get_title(), Some("this entry has totp"));
+            let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
+            assert_eq!(e.get_raw_otp_value(), Some(otp_str));
+            assert_eq!(e.get_otp(), TOTP::parse_from_str(otp_str));
+            assert_eq!(e.get_otp().unwrap().current_value().code.len(), 6); // 6 digits
+        } else {
+            panic!("Expected an entry");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn kdbx4_entry_totp_sha512() -> Result<(), Box<dyn error::Error>> {
+        // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
+        let path = Path::new("tests/resources/test_db_kdbx4_with_totp_sha512_entry.kdbx");
+        let db = Database::open(&mut File::open(path)?, Some("test"), None)?;
+
+        // get an entry on the root node
+        if let Some(NodeRef::Entry(e)) = db.root.get(&["sha512 totp"]) {
+            assert_eq!(e.get_title(), Some("sha512 totp"));
+            let otp_str = "otpauth://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA512";
+            assert_eq!(e.get_raw_otp_value(), Some(otp_str));
+            assert_eq!(e.get_otp(), TOTP::parse_from_str(otp_str));
+            assert_eq!(e.get_otp().unwrap().current_value().code.len(), 6); // 6 digits
         } else {
             panic!("Expected an entry");
         }
