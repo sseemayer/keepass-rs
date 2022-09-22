@@ -144,6 +144,9 @@ pub struct Meta {
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct Group {
+    /// The unique identifier of the group
+    pub uuid: String,
+
     /// The name of the group
     pub name: String,
 
@@ -160,9 +163,6 @@ pub struct Group {
 
     /// Does this group expire
     pub expires: bool,
-
-    /// The unique identifier of the group
-    pub uuid: String,
 }
 
 impl Group {
@@ -343,6 +343,7 @@ impl<'a> std::convert::From<&'a mut Node> for NodeRefMut<'a> {
 /// A database entry containing several key-value fields.
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct Entry {
+    pub uuid: String,
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
     pub expires: bool,
@@ -369,6 +370,10 @@ impl<'a> Entry {
             Some(&Value::Unprotected(_)) => None,
             None => None,
         }
+    }
+
+    pub fn get_uuid(&'a self) -> &'a str {
+        &self.uuid
     }
 
     /// Get a timestamp field by name
