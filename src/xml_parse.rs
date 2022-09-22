@@ -11,6 +11,7 @@ use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Meta, Value};
 #[derive(Debug)]
 enum Node {
     Entry(Entry),
+    UUID(String),
     Group(Group),
     KeyValue(String, Value),
     AutoType(AutoType),
@@ -19,7 +20,6 @@ enum Node {
     Expires(bool),
     Tags(String),
     Meta(Meta),
-    UUID(String),
     RecycleBinUUID(String),
 }
 
@@ -119,7 +119,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Meta",
                     "RecycleBinUUID",
                     "UUID",
-                    "Tags",
                 ]
                 .contains(&&local_name[..])
                 {
@@ -232,14 +231,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             }
                         }
 
-                        Node::UUID(r) => {
-                            if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
-                                parsed_stack_head
-                            {
-                                *uuid = r;
-                            }
-                        }
-
                         Node::RecycleBinUUID(r) => {
                             if let Some(&mut Node::Meta(Meta {
                                 ref mut recyclebin_uuid,
@@ -252,6 +243,18 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
 
                         Node::Meta(m) => {
                             meta = m;
+                        }
+
+                        Node::UUID(u) => {
+                            if let Some(&mut Node::Entry(Entry { ref mut uuid, .. })) =
+                                parsed_stack_head
+                            {
+                                *uuid = u;
+                            } else if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
+                                parsed_stack_head
+                            {
+                                *uuid = u;
+                            }
                         }
                     }
                 }
@@ -268,6 +271,9 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     (Some("ExpiryTime"), Some(&mut Node::ExpiryTime(ref mut et))) => {
                         *et = c;
+                    }
+                    (Some("UUID"), Some(&mut Node::UUID(ref mut uuid))) => {
+                        *uuid = c;
                     }
                     (Some("Expires"), Some(&mut Node::Expires(ref mut es))) => {
                         *es = c == "True";
@@ -304,9 +310,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 *v = SecStr::from(c_decode);
                             }
                         }
-                    }
-                    (Some("UUID"), Some(&mut Node::UUID(ref mut et))) => {
-                        *et = c;
                     }
                     (Some("RecycleBinUUID"), Some(&mut Node::RecycleBinUUID(ref mut et))) => {
                         *et = c;

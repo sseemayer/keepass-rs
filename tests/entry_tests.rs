@@ -9,6 +9,7 @@ mod tests {
 
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["Sample Entry"]) {
+            assert_eq!(e.get_uuid(), "Dr7dsu1OUUS8NBowkmalEw==");
             assert_eq!(e.get_title(), Some("Sample Entry"));
             assert_eq!(e.get_username(), Some("User Name"));
             assert_eq!(e.get_password(), Some("Password"));
@@ -37,6 +38,7 @@ mod tests {
         }
 
         if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Subgroup", "test entry"]) {
+            assert_eq!(e.get_uuid(), "XkyK0ZzVOUyQORF43BQLSg==");
             assert_eq!(e.get_title(), Some("test entry"));
             assert_eq!(e.get_username(), Some("jdoe"));
             assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
@@ -62,6 +64,7 @@ mod tests {
 
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["ASDF"]) {
+            assert_eq!(e.get_uuid(), "TzgWvYMwSGWHn6EIoS8oXA==");
             assert_eq!(e.get_title(), Some("ASDF"));
             assert_eq!(e.get_username(), Some("ghj"));
             assert_eq!(e.get_password(), Some("klmno"));
