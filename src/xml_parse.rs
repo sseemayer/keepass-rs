@@ -11,6 +11,7 @@ use super::db::{AutoType, AutoTypeAssociation, Entry, Group, Value};
 #[derive(Debug)]
 enum Node {
     Entry(Entry),
+    UUID(String),
     Group(Group),
     KeyValue(String, Value),
     AutoType(AutoType),
@@ -88,6 +89,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
                     "Expires" => parsed_stack.push(Node::Expires(bool::default())),
+                    "UUID" => parsed_stack.push(Node::UUID(Default::default())),
                     _ => {}
                 }
             }
@@ -105,6 +107,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Association",
                     "ExpiryTime",
                     "Expires",
+                    "UUID",
                 ]
                 .contains(&&local_name[..])
                 {
@@ -199,6 +202,18 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 *expires = es;
                             }
                         }
+
+                        Node::UUID(u) => {
+                            if let Some(&mut Node::Entry(Entry { ref mut uuid, .. })) =
+                                parsed_stack_head
+                            {
+                                *uuid = u;
+                            } else if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
+                                parsed_stack_head
+                            {
+                                *uuid = u;
+                            }
+                        }
                     }
                 }
             }
@@ -214,6 +229,9 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     (Some("ExpiryTime"), Some(&mut Node::ExpiryTime(ref mut et))) => {
                         *et = c;
+                    }
+                    (Some("UUID"), Some(&mut Node::UUID(ref mut uuid))) => {
+                        *uuid = c;
                     }
                     (Some("Expires"), Some(&mut Node::Expires(ref mut es))) => {
                         *es = c == "True";

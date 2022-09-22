@@ -292,6 +292,7 @@ fn parse_entries(
 
 fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group> {
     let mut root = Group {
+        uuid: Default::default(),
         name: "Root".to_owned(),
         children: Default::default(),
         expires: Default::default(),
