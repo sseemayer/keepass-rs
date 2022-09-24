@@ -45,7 +45,7 @@ fn main() -> Result<()> {
 ## Installation
 Add the following to the `dependencies` section of your `Cargo.toml`:
 
-```
+```ignore
 [dependencies]
 keepass = "*"
 ```
@@ -69,7 +69,7 @@ This library contains an optionally-compiled command line application to dump ou
 
 Since the tool depends on additional crates, it is not compiled until you specify the `utilities` feature, e.g.
 
-```
+```ignore
 cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database.kdbx
 ```
 
