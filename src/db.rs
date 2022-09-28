@@ -378,6 +378,11 @@ impl<'a> Entry {
     pub fn get_password(&'a self) -> Option<&'a str> {
         self.get("Password")
     }
+
+    /// Convenience method for getting the value of the 'URL' field
+    pub fn get_url(&'a self) -> Option<&'a str> {
+        self.get("URL")
+    }
 }
 
 /// An iterator over Groups and Entries
