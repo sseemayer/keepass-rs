@@ -30,9 +30,9 @@ fn main() -> Result<()> {
                 println!("Saw group '{0}'", g.name);
             },
             NodeRef::Entry(e) => {
-                let title = e.get_title().unwrap();
-                let user = e.get_username().unwrap();
-                let pass = e.get_password().unwrap();
+                let title = e.get_title().unwrap_or("(no title)");
+                let user = e.get_username().unwrap_or("(no user)");
+                let pass = e.get_password().unwrap_or("(no password)");
                 println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
             }
         }
@@ -59,6 +59,17 @@ export RUSTFLAGS='-C target-cpu=native'
 For best results, also compile in Release mode.
 
 Alternatively, you can add a `.cargo/config.toml` like in this project to ensure that rustflags are always set.
+
+For AArch64 / ARMv8:
+
+The `aes` optimizations are not yet enabled on stable rust. If you want a big performance boost you can build using nightly and enabling the `armv8` feature of the `aes` crate:
+
+```
+[dependencies.aes]
+# Needs at least 0.7.5 for the feature
+version = "0.7.5"
+features = ["armv8"]
+```
 
 ## [Documentation](https://docs.rs/keepass)
 
