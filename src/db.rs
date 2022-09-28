@@ -269,6 +269,16 @@ pub enum Value {
     Protected(SecStr),
 }
 
+impl Value {
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Value::Bytes(b) => b.is_empty(),
+            Value::Unprotected(u) => u.is_empty(),
+            Value::Protected(p) => p.unsecure().is_empty(),
+        }
+    }
+}
+
 /// An AutoType setting associated with an Entry
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct AutoType {
@@ -390,6 +400,11 @@ impl<'a> Entry {
     /// Convenience method for getting the value of the 'Password' field
     pub fn get_password(&'a self) -> Option<&'a str> {
         self.get("Password")
+    }
+
+    /// Convenience method for getting the value of the 'URL' field
+    pub fn get_url(&'a self) -> Option<&'a str> {
+        self.get("URL")
     }
 }
 

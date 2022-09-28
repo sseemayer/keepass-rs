@@ -21,9 +21,9 @@ mod tests {
                     total_groups += 1;
                 }
                 NodeRef::Entry(e) => {
-                    let title = e.get_title().unwrap();
-                    let user = e.get_username().unwrap();
-                    let pass = e.get_password().unwrap();
+                    let title = e.get_title().unwrap_or("(no title)");
+                    let user = e.get_username().unwrap_or("(no user)");
+                    let pass = e.get_password().unwrap_or("(no password)");
                     println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
                     total_entries += 1;
                 }
@@ -238,36 +238,6 @@ mod tests {
 
         println!("{:?}", db);
 
-        Ok(())
-    }
-
-    #[test]
-    fn open_kdbx4_with_password_deleted_entry() -> Result<()> {
-        let path = Path::new("tests/resources/test_db_kdbx4_with_password_deleted_entry.kdbx");
-
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
-
-        println!("{:?} DB Opened", db);
-
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.meta.recyclebin_uuid, "VjFx/mWYQtyAA/mN3jLocg==");
-
-        let recycle_group: Vec<NodeRef> = db
-            .root
-            .iter()
-            .filter(|child| match child {
-                NodeRef::Group(g) => g.uuid == db.meta.recyclebin_uuid,
-                NodeRef::Entry(_) => false,
-            })
-            .collect();
-
-        assert_eq!(recycle_group.len(), 1);
-        let group = &recycle_group[0];
-        if let NodeRef::Group(g) = group {
-            assert_eq!(g.name, "Recycle Bin");
-        } else {
-            panic!("It should've matched a Group!");
-        }
         Ok(())
     }
 
