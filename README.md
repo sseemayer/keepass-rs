@@ -31,7 +31,7 @@ fn main() -> Result<()> {
             },
             NodeRef::Entry(e) => {
                 let title = e.get_title().unwrap_or("(no title)");
-                let user = e.get_username().unwrap_or("(no user)");
+                let user = e.get_username().unwrap_or("(no username)");
                 let pass = e.get_password().unwrap_or("(no password)");
                 println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
             }
