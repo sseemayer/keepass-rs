@@ -122,8 +122,10 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             if let Some(&mut Node::Entry(Entry { ref mut fields, .. })) =
                                 parsed_stack_head
                             {
-                                // A KeyValue was finished inside of an Entry -> add a field
-                                fields.insert(k, v);
+                                if !v.is_empty() {
+                                    // A KeyValue was finished inside of an Entry -> add a field
+                                    fields.insert(k, v);
+                                }
                             }
                         }
 
@@ -222,7 +224,13 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             if let Some(&mut Node::Entry(Entry { ref mut tags, .. })) =
                                 parsed_stack_head
                             {
-                                *tags = t.split(";").map(|x| x.to_owned()).collect();
+                                if !t.is_empty() {
+                                    *tags = t
+                                        .split(|c| c == ';' || c == ',')
+                                        .map(|x| x.to_owned())
+                                        .collect();
+                                    tags.sort()
+                                }
                             }
                         }
                     }
