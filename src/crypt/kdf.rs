@@ -1,8 +1,6 @@
 use aes::Aes256;
-use cipher::{
-    generic_array::{typenum::U32, GenericArray},
-    BlockEncrypt, KeyInit,
-};
+use cipher::generic_array::{typenum::U32, GenericArray};
+use cipher::{BlockEncrypt, KeyInit};
 use sha2::{Digest, Sha256};
 
 use crate::result::{CryptoError, DatabaseIntegrityError, Error, Result};
