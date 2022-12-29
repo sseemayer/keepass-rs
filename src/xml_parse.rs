@@ -216,6 +216,21 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             }
                         }
 
+                        Node::Tags(t) => {
+                            if let Some(&mut Node::Entry(Entry { ref mut tags, .. })) =
+                                parsed_stack_head
+                            {
+                                if !t.is_empty() {
+                                    *tags = t
+                                        .split(|c| c == ';' || c == ',')
+                                        .map(|x| x.to_owned())
+                                        .collect();
+
+                                    tags.sort();
+                                }
+                            }
+                        }
+
                         Node::UUID(r) => {
                             if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
                                 parsed_stack_head
@@ -236,21 +251,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
 
                         Node::Meta(m) => {
                             meta = m;
-                        }
-
-                        Node::Tags(t) => {
-                            if let Some(&mut Node::Entry(Entry { ref mut tags, .. })) =
-                                parsed_stack_head
-                            {
-                                if !t.is_empty() {
-                                    *tags = t
-                                        .split(|c| c == ';' || c == ',')
-                                        .map(|x| x.to_owned())
-                                        .collect();
-
-                                    tags.sort();
-                                }
-                            }
                         }
                     }
                 }
