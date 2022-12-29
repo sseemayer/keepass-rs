@@ -31,7 +31,7 @@ fn main() -> Result<()> {
             },
             NodeRef::Entry(e) => {
                 let title = e.get_title().unwrap_or("(no title)");
-                let user = e.get_username().unwrap_or("(no user)");
+                let user = e.get_username().unwrap_or("(no username)");
                 let pass = e.get_password().unwrap_or("(no password)");
                 println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
             }
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
 ## Installation
 Add the following to the `dependencies` section of your `Cargo.toml`:
 
-```
+```ignore
 [dependencies]
 keepass = "*"
 ```
@@ -64,7 +64,7 @@ For AArch64 / ARMv8:
 
 The `aes` optimizations are not yet enabled on stable rust. If you want a big performance boost you can build using nightly and enabling the `armv8` feature of the `aes` crate:
 
-```
+```ignore
 [dependencies.aes]
 # Needs at least 0.7.5 for the feature
 version = "0.7.5"
@@ -80,7 +80,7 @@ This library contains an optionally-compiled command line application to dump ou
 
 Since the tool depends on additional crates, it is not compiled until you specify the `utilities` feature, e.g.
 
-```
+```ignore
 cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database.kdbx
 ```
 
