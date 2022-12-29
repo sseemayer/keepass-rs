@@ -119,7 +119,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Meta",
                     "RecycleBinUUID",
                     "UUID",
-                    "Tags",
                 ]
                 .contains(&&local_name[..])
                 {
