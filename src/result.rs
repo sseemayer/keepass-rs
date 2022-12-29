@@ -27,7 +27,7 @@ pub enum DatabaseIntegrityError {
     },
     HeaderHashMismatch,
     BlockHashMismatch {
-        block_index: usize,
+        block_index: u64,
     },
     InvalidKDBXIdentifier,
     InvalidKDBXVersion {

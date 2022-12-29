@@ -30,3 +30,6 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test --release --target armv7-unknown-linux-musleabihf tests::kdbx4_entry
