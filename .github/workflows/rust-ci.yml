@@ -39,5 +39,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+      - name: install armv7 target
+        run: rustup target add armv7-unknown-linux-musleabihf
       - name: run cargo test
         run: cargo test --release --target armv7-unknown-linux-musleabihf tests::kdbx4_entry
