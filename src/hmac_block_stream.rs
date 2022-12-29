@@ -10,7 +10,7 @@ pub(crate) fn read_hmac_block_stream(data: &[u8], key: &GenericArray<u8, U64>) -
     let mut out = Vec::new();
 
     let mut pos = 0;
-    let mut block_index = 0;
+    let mut block_index: u64 = 0;
 
     while pos < data.len() {
         let hmac = &data[pos..(pos + 32)];
@@ -43,7 +43,7 @@ pub(crate) fn read_hmac_block_stream(data: &[u8], key: &GenericArray<u8, U64>) -
 }
 
 pub(crate) fn get_hmac_block_key(
-    block_index: usize,
+    block_index: u64,
     key: &GenericArray<u8, U64>,
 ) -> Result<GenericArray<u8, U64>> {
     let mut buf = [0u8; 8];
