@@ -1,6 +1,6 @@
 on: [push, pull_request]
 
-name: Continuous integration
+name: Continuous Integration
 
 jobs:
   check:
@@ -46,3 +46,20 @@ jobs:
           use-cross: true
           command: test
           args: --release --target armv7-unknown-linux-musleabihf tests::kdbx4_entry
+
+  formatting:
+    name: Code Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: running rustfmt
+        run: |
+          files=$(find . -name '*.rs')
+          IFS=$'\n'; for file in $files; do
+            rustfmt --check "$file"
+          done
