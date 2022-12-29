@@ -5,14 +5,8 @@ pub enum CryptoError {
     Argon2 {
         e: argon2::Error,
     },
-    InvalidKeyIvLength {
-        e: block_modes::InvalidKeyIvLength,
-    },
     InvalidLength {
         e: cipher::InvalidLength,
-    },
-    BlockMode {
-        e: block_modes::BlockModeError,
     },
     InvalidPadding {
         e: cipher::block_padding::UnpadError,
@@ -264,9 +258,7 @@ impl std::fmt::Display for CryptoError {
             "Crypto Error: {}",
             match self {
                 CryptoError::Argon2 { e } => format!("Problem deriving key with Argon2: {}", e),
-                CryptoError::InvalidKeyIvLength { e } => format!("Invalid key / IV length: {}", e),
                 CryptoError::InvalidLength { e } => format!("Invalid input length: {}", e),
-                CryptoError::BlockMode { e } => format!("Block mode error: {}", e),
                 CryptoError::InvalidPadding { e } => format!("Padding error: {}", e),
             }
         )
@@ -278,9 +270,7 @@ impl std::error::Error for CryptoError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             CryptoError::Argon2 { e } => Some(e),
-            CryptoError::InvalidKeyIvLength { e } => Some(e),
             CryptoError::InvalidLength { .. } => None, // TODO pass this through once e implements Error
-            CryptoError::BlockMode { e } => Some(e),
             CryptoError::InvalidPadding { .. } => None,
         }
     }
@@ -349,20 +339,6 @@ impl From<cipher::block_padding::UnpadError> for CryptoError {
     #[cfg_attr(tarpaulin, skip)]
     fn from(e: cipher::block_padding::UnpadError) -> Self {
         CryptoError::InvalidPadding { e }
-    }
-}
-
-impl From<block_modes::InvalidKeyIvLength> for CryptoError {
-    #[cfg_attr(tarpaulin, skip)]
-    fn from(e: block_modes::InvalidKeyIvLength) -> Self {
-        CryptoError::InvalidKeyIvLength { e }
-    }
-}
-
-impl From<block_modes::BlockModeError> for CryptoError {
-    #[cfg_attr(tarpaulin, skip)]
-    fn from(e: block_modes::BlockModeError) -> Self {
-        CryptoError::BlockMode { e }
     }
 }
 
