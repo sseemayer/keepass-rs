@@ -273,7 +273,7 @@ pub(crate) fn decrypt_xml(
 
     // verify credentials
     let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"])?;
-    let header_hmac_key = hmac_block_stream::get_hmac_block_key(usize::max_value(), &hmac_key)?;
+    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::max_value(), &hmac_key)?;
     if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key)?.as_slice() {
         return Err(Error::IncorrectKey);
     }
