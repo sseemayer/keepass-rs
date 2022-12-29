@@ -229,7 +229,8 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                         .split(|c| c == ';' || c == ',')
                                         .map(|x| x.to_owned())
                                         .collect();
-                                    tags.sort()
+
+                                    tags.sort();
                                 }
                             }
                         }
