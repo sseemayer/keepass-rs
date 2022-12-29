@@ -97,7 +97,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
                     "Expires" => parsed_stack.push(Node::Expires(bool::default())),
-                    "UUID" => parsed_stack.push(Node::UUID(Default::default())),
                     "Tags" => parsed_stack.push(Node::Tags(Default::default())),
                     _ => {}
                 }
@@ -311,9 +310,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 *v = SecStr::from(c_decode);
                             }
                         }
-                    }
-                    (Some("UUID"), Some(&mut Node::UUID(ref mut et))) => {
-                        *et = c;
                     }
                     (Some("RecycleBinUUID"), Some(&mut Node::RecycleBinUUID(ref mut et))) => {
                         *et = c;
