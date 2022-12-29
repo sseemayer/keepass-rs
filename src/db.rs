@@ -329,6 +329,7 @@ pub struct Entry {
     pub autotype: Option<AutoType>,
     pub expires: bool,
     pub times: HashMap<String, chrono::NaiveDateTime>,
+    pub tags: Vec<String>,
 }
 
 impl<'a> Entry {
