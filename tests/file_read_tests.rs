@@ -1,10 +1,9 @@
 mod tests {
-    use keepass::result::*;
     use keepass::*;
     use std::{fs::File, path::Path};
 
     #[test]
-    fn open_kdbx3_with_password() -> Result<()> {
+    fn open_kdbx3_with_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
 
@@ -39,7 +38,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx3_with_keyfile() -> Result<()> {
+    fn open_kdbx3_with_keyfile() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_keyfile.kdbx");
         let kf_path = Path::new("tests/resources/test_key.key");
         let db = Database::open(
@@ -79,7 +78,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx3_with_keyfile_xml() -> Result<()> {
+    fn open_kdbx3_with_keyfile_xml() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_keyfile_xml.kdbx");
         let kf_path = Path::new("tests/resources/test_key_xml.key");
         let db = Database::open(
@@ -119,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx4_with_password_kdf_argon2_cipher_aes() -> Result<()> {
+    fn open_kdbx4_with_password_kdf_argon2_cipher_aes() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2.kdbx");
 
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
@@ -133,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx4_with_password_kdf_aes_cipher_aes() -> Result<()> {
+    fn open_kdbx4_with_password_kdf_aes_cipher_aes() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
 
@@ -146,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx4_with_password_kdf_argon2_cipher_twofish() -> Result<()> {
+    fn open_kdbx4_with_password_kdf_argon2_cipher_twofish() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2_twofish.kdbx");
 
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
@@ -160,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx4_with_password_kdf_argon2_cipher_chacha20() -> Result<()> {
+    fn open_kdbx4_with_password_kdf_argon2_cipher_chacha20() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2_chacha20.kdbx");
 
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
@@ -174,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx4_with_keyfile() -> Result<()> {
+    fn open_kdbx4_with_keyfile() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_keyfile.kdbx");
         let kf_path = Path::new("tests/resources/test_key.key");
 
@@ -207,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdb_with_password() -> Result<()> {
+    fn open_kdb_with_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdb_with_password.kdb");
         let db = Database::open(&mut File::open(path)?, Some("foobar"), None)?;
 
@@ -242,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdb_with_larger_than_1mb_file_does_not_crash() -> Result<()> {
+    fn open_kdb_with_larger_than_1mb_file_does_not_crash() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdb3_with_file_larger_1mb.kdbx");
         let db = Database::open(&mut File::open(path)?, Some("samplepassword"), None)?;
 
@@ -275,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn open_kdbx4_with_password_deleted_entry() -> Result<()> {
+    fn open_kdbx4_with_password_deleted_entry() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_deleted_entry.kdbx");
 
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;

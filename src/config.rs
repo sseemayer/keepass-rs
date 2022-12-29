@@ -1,9 +1,10 @@
 use hex_literal::hex;
 use std::convert::TryFrom;
+use thiserror::Error;
 
 use crate::{
-    crypt, decompress,
-    result::{DatabaseIntegrityError, Error, Result},
+    crypt::{ciphers, kdf, CryptographyError},
+    decompress,
     variant_dictionary::VariantDictionary,
 };
 
@@ -19,25 +20,34 @@ pub enum OuterCipherSuite {
     ChaCha20,
 }
 
+#[derive(Debug, Error)]
+pub enum OuterCipherSuiteError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Invalid outer cipher ID: {:?}", cid)]
+    InvalidOuterCipherID { cid: Vec<u8> },
+}
+
 impl OuterCipherSuite {
     pub(crate) fn get_cipher(
         &self,
         key: &[u8],
         iv: &[u8],
-    ) -> Result<Box<dyn crypt::ciphers::Cipher>> {
+    ) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
         match self {
-            OuterCipherSuite::AES256 => Ok(Box::new(crypt::ciphers::AES256Cipher::new(key, iv)?)),
-            OuterCipherSuite::Twofish => Ok(Box::new(crypt::ciphers::TwofishCipher::new(key, iv)?)),
-            OuterCipherSuite::ChaCha20 => Ok(Box::new(crypt::ciphers::ChaCha20Cipher::new_key_iv(
-                key, iv,
-            )?)),
+            OuterCipherSuite::AES256 => Ok(Box::new(ciphers::AES256Cipher::new(key, iv)?)),
+            OuterCipherSuite::Twofish => Ok(Box::new(ciphers::TwofishCipher::new(key, iv)?)),
+            OuterCipherSuite::ChaCha20 => {
+                Ok(Box::new(ciphers::ChaCha20Cipher::new_key_iv(key, iv)?))
+            }
         }
     }
 }
 
 impl TryFrom<&[u8]> for OuterCipherSuite {
-    type Error = Error;
-    fn try_from(v: &[u8]) -> Result<OuterCipherSuite> {
+    type Error = OuterCipherSuiteError;
+    fn try_from(v: &[u8]) -> Result<OuterCipherSuite, Self::Error> {
         if v == CIPHERSUITE_AES256 {
             Ok(OuterCipherSuite::AES256)
         } else if v == CIPHERSUITE_TWOFISH {
@@ -45,7 +55,7 @@ impl TryFrom<&[u8]> for OuterCipherSuite {
         } else if v == CIPHERSUITE_CHACHA20 {
             Ok(OuterCipherSuite::ChaCha20)
         } else {
-            Err(DatabaseIntegrityError::InvalidOuterCipherID { cid: v.to_vec() }.into())
+            Err(OuterCipherSuiteError::InvalidOuterCipherID { cid: v.to_vec() }.into())
         }
     }
 }
@@ -57,25 +67,37 @@ pub enum InnerCipherSuite {
     ChaCha20,
 }
 
+#[derive(Debug, Error)]
+pub enum InnerCipherSuiteError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Invalid inner cipher ID: {}", cid)]
+    InvalidInnerCipherID { cid: u32 },
+}
+
 impl InnerCipherSuite {
-    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn crypt::ciphers::Cipher>> {
+    pub(crate) fn get_cipher(
+        &self,
+        key: &[u8],
+    ) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
         match self {
-            InnerCipherSuite::Plain => Ok(Box::new(crypt::ciphers::PlainCipher::new(key)?)),
-            InnerCipherSuite::Salsa20 => Ok(Box::new(crypt::ciphers::Salsa20Cipher::new(key)?)),
-            InnerCipherSuite::ChaCha20 => Ok(Box::new(crypt::ciphers::ChaCha20Cipher::new(key)?)),
+            InnerCipherSuite::Plain => Ok(Box::new(ciphers::PlainCipher::new(key)?)),
+            InnerCipherSuite::Salsa20 => Ok(Box::new(ciphers::Salsa20Cipher::new(key)?)),
+            InnerCipherSuite::ChaCha20 => Ok(Box::new(ciphers::ChaCha20Cipher::new(key)?)),
         }
     }
 }
 
 impl TryFrom<u32> for InnerCipherSuite {
-    type Error = Error;
+    type Error = InnerCipherSuiteError;
 
-    fn try_from(v: u32) -> Result<InnerCipherSuite> {
+    fn try_from(v: u32) -> Result<InnerCipherSuite, Self::Error> {
         match v {
             0 => Ok(InnerCipherSuite::Plain),
             2 => Ok(InnerCipherSuite::Salsa20),
             3 => Ok(InnerCipherSuite::ChaCha20),
-            _ => Err(DatabaseIntegrityError::InvalidInnerCipherID { cid: v }.into()),
+            _ => Err(InnerCipherSuiteError::InvalidInnerCipherID { cid: v }.into()),
         }
     }
 }
@@ -96,9 +118,9 @@ pub enum KdfSettings {
 }
 
 impl KdfSettings {
-    pub(crate) fn get_kdf(&self) -> Box<dyn crypt::kdf::Kdf> {
+    pub(crate) fn get_kdf(&self) -> Box<dyn kdf::Kdf> {
         match self {
-            KdfSettings::Aes { seed, rounds } => Box::new(crypt::kdf::AesKdf {
+            KdfSettings::Aes { seed, rounds } => Box::new(kdf::AesKdf {
                 seed: seed.clone(),
                 rounds: *rounds,
             }),
@@ -108,7 +130,7 @@ impl KdfSettings {
                 iterations,
                 parallelism,
                 version,
-            } => Box::new(crypt::kdf::Argon2Kdf {
+            } => Box::new(kdf::Argon2Kdf {
                 memory: *memory,
                 salt: salt.clone(),
                 iterations: *iterations,
@@ -123,10 +145,22 @@ const KDF_AES_KDBX3: [u8; 16] = hex!("c9d9f39a628a4460bf740d08c18a4fea");
 const KDF_AES_KDBX4: [u8; 16] = hex!("7c02bb8279a74ac0927d114a00648238");
 const KDF_ARGON2: [u8; 16] = hex!("ef636ddf8c29444b91f7a9a403e30a0c");
 
-impl TryFrom<VariantDictionary> for KdfSettings {
-    type Error = Error;
+#[derive(Debug, Error)]
+pub enum KdfSettingsError {
+    #[error("Invalid KDF version: {}", version)]
+    InvalidKDFVersion { version: u32 },
 
-    fn try_from(vd: VariantDictionary) -> Result<KdfSettings> {
+    #[error("Invlaid KDF UUID: {:?}", uuid)]
+    InvalidKDFUUID { uuid: Vec<u8> },
+
+    #[error(transparent)]
+    VariantDictionary(#[from] crate::variant_dictionary::VariantDictionaryError),
+}
+
+impl TryFrom<VariantDictionary> for KdfSettings {
+    type Error = KdfSettingsError;
+
+    fn try_from(vd: VariantDictionary) -> Result<KdfSettings, Self::Error> {
         let uuid: Vec<u8> = vd.get("$UUID")?;
 
         if uuid == KDF_ARGON2 {
@@ -139,11 +173,7 @@ impl TryFrom<VariantDictionary> for KdfSettings {
             let version = match version {
                 0x10 => argon2::Version::Version10,
                 0x13 => argon2::Version::Version13,
-                _ => {
-                    return Err(Error::from(DatabaseIntegrityError::InvalidKDFVersion {
-                        version,
-                    }))
-                }
+                _ => return Err(KdfSettingsError::InvalidKDFVersion { version }),
             };
 
             Ok(KdfSettings::Argon2 {
@@ -159,7 +189,7 @@ impl TryFrom<VariantDictionary> for KdfSettings {
 
             Ok(KdfSettings::Aes { rounds, seed })
         } else {
-            Err(DatabaseIntegrityError::InvalidKDFUUID { uuid }.into())
+            Err(KdfSettingsError::InvalidKDFUUID { uuid })
         }
     }
 }
@@ -168,6 +198,12 @@ impl TryFrom<VariantDictionary> for KdfSettings {
 pub enum Compression {
     None,
     GZip,
+}
+
+#[derive(Debug, Error)]
+pub enum CompressionError {
+    #[error("Invalid compression suite: {}", cid)]
+    InvalidCompressionSuite { cid: u32 },
 }
 
 impl Compression {
@@ -180,13 +216,13 @@ impl Compression {
 }
 
 impl TryFrom<u32> for Compression {
-    type Error = Error;
+    type Error = CompressionError;
 
-    fn try_from(v: u32) -> Result<Compression> {
+    fn try_from(v: u32) -> Result<Compression, Self::Error> {
         match v {
             0 => Ok(Compression::None),
             1 => Ok(Compression::GZip),
-            _ => Err(DatabaseIntegrityError::InvalidCompressionSuite { cid: v }.into()),
+            _ => Err(CompressionError::InvalidCompressionSuite { cid: v }.into()),
         }
     }
 }

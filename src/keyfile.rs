@@ -1,15 +1,30 @@
-use crate::crypt;
-use crate::result::{Error, Result};
+use crate::crypt::{calculate_sha256, CryptographyError};
+use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
-fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>> {
+#[derive(Debug, Error)]
+pub enum KeyfileError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Xml(#[from] xml::reader::Error),
+
+    #[error("Could not obtain a key from the keyfile")]
+    InvalidKeyFile,
+}
+
+fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>, KeyfileError> {
     let parser = EventReader::new(xml);
 
     let mut tag_stack = Vec::new();
 
     for ev in parser {
-        match ev.map_err(|_e| Error::InvalidKeyFile)? {
+        match ev? {
             XmlEvent::StartElement {
                 name: OwnedName { ref local_name, .. },
                 ..
@@ -36,10 +51,10 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>> {
         }
     }
 
-    Err(Error::InvalidKeyFile)
+    Err(KeyfileError::InvalidKeyFile)
 }
 
-pub fn parse(source: &mut dyn std::io::Read) -> Result<Vec<u8>> {
+pub fn parse(source: &mut dyn std::io::Read) -> Result<Vec<u8>, KeyfileError> {
     let mut buffer = Vec::new();
     source.read_to_end(&mut buffer)?;
 
@@ -50,6 +65,6 @@ pub fn parse(source: &mut dyn std::io::Read) -> Result<Vec<u8>> {
         // legacy binary key format
         Ok(buffer.to_vec())
     } else {
-        Ok(crypt::calculate_sha256(&[&buffer])?.as_slice().to_vec())
+        Ok(calculate_sha256(&[&buffer])?.as_slice().to_vec())
     }
 }

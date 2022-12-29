@@ -1,8 +1,8 @@
-use crate::crypt::ciphers::Cipher;
-use crate::result::{DatabaseIntegrityError, Error, Result};
+use crate::crypt::{ciphers::Cipher, CryptographyError};
 
 use secstr::SecStr;
 
+use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
@@ -23,27 +23,42 @@ enum Node {
     RecycleBinUUID(String),
 }
 
-fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime> {
+fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime, XmlParseError> {
     match chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%SZ") {
         // Prior to KDBX4 file format, timestamps were stored as ISO 8601 strings
         Ok(ndt) => Ok(ndt),
         // In KDBX4, timestamps are stored as seconds, Base64 encoded, since 0001-01-01 00:00:00
         // So, if we don't have a valid ISO 8601 string, assume we have found a Base64 encoded int.
         _ => {
-            let v = base64::decode(t).map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
+            let v = base64::decode(t)?;
+
             // Cast the Vec created by base64::decode into the array expected by i64::from_le_bytes
             let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
             a.copy_from_slice(&v[0..8]);
             let ndt =
-                chrono::NaiveDateTime::parse_from_str("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")
-                    .unwrap()
+                chrono::NaiveDateTime::parse_from_str("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")?
                     + chrono::Duration::seconds(i64::from_le_bytes(a));
             Ok(ndt)
         }
     }
 }
 
-pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Result<(Group, Meta)> {
+#[derive(Debug, Error)]
+pub enum XmlParseError {
+    #[error(transparent)]
+    Base64(#[from] base64::DecodeError),
+
+    #[error(transparent)]
+    TimestampFormat(#[from] chrono::ParseError),
+
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+}
+
+pub(crate) fn parse_xml_block(
+    xml: &[u8],
+    inner_cipher: &mut dyn Cipher,
+) -> Result<(Group, Meta), XmlParseError> {
     // Result<Group, Option<Group>> {
     let parser = EventReader::new(xml);
 
@@ -299,13 +314,11 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 // Use the decryptor to decrypt the protected
                                 // and base64-encoded value
                                 //
-                                let buf = base64::decode(&c)
-                                    .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
+                                let buf = base64::decode(&c)?;
 
                                 let buf_decode = inner_cipher.decrypt(&buf)?;
 
-                                let c_decode = std::str::from_utf8(&buf_decode)
-                                    .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?;
+                                let c_decode = String::from_utf8_lossy(&buf_decode).to_string();
 
                                 *v = SecStr::from(c_decode);
                             }

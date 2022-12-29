@@ -1,9 +1,9 @@
 use crate::{
     config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
-    db::{Database, Group, Header, InnerHeader, Meta, Node},
-    result::{DatabaseIntegrityError, Error, Result},
-    xml_parse,
+    db::{Database, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node},
+    hmac_block_stream::BlockStreamError,
+    xml_parse, DatabaseIntegrityError,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -28,14 +28,14 @@ pub struct KDBX3Header {
     pub body_start: usize,
 }
 
-fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
+fn parse_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
     if version != 0xb54b_fb67 || file_major_version != 3 {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
-            file_major_version,
-            file_minor_version,
+            file_major_version: file_major_version as u32,
+            file_minor_version: file_minor_version as u32,
         }
         .into());
     }
@@ -82,14 +82,18 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
             // CIPHERID - a UUID specifying which cipher suite
             //            should be used to encrypt the payload
             2 => {
-                outer_cipher = Some(OuterCipherSuite::try_from(entry_buffer)?);
+                outer_cipher = Some(
+                    OuterCipherSuite::try_from(entry_buffer)
+                        .map_err(|e| DatabaseIntegrityError::from(e))?,
+                );
             }
 
             // COMPRESSIONFLAGS - first byte determines compression of payload
             3 => {
-                compression = Some(Compression::try_from(LittleEndian::read_u32(
-                    &entry_buffer,
-                ))?);
+                compression = Some(
+                    Compression::try_from(LittleEndian::read_u32(&entry_buffer))
+                        .map_err(|e| DatabaseIntegrityError::from(e))?,
+                );
             }
 
             // MASTERSEED - Master seed for deriving the master key
@@ -113,9 +117,10 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
             // INNERRANDOMSTREAMID - specifies which cipher suite
             //                       to use for decrypting the inner protected values
             10 => {
-                inner_cipher = Some(InnerCipherSuite::try_from(LittleEndian::read_u32(
-                    entry_buffer,
-                ))?);
+                inner_cipher = Some(
+                    InnerCipherSuite::try_from(LittleEndian::read_u32(entry_buffer))
+                        .map_err(|e| DatabaseIntegrityError::from(e))?,
+                );
             }
 
             _ => {
@@ -127,7 +132,7 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
     // at this point, the header needs to be fully defined - unwrap options and return errors if
     // something is missing
 
-    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
+    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T, DatabaseIntegrityError> {
         v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteOuterHeader {
                 missing_field: err.into(),
@@ -164,12 +169,16 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
+pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, DatabaseOpenError> {
     let (header, xml_blocks) = decrypt_xml(data, key_elements)?;
 
     // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()])?;
-    let mut inner_decryptor = header.inner_cipher.get_cipher(&stream_key)?;
+    let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()])
+        .map_err(|e| DatabaseIntegrityError::from(e))?;
+    let mut inner_decryptor = header
+        .inner_cipher
+        .get_cipher(&stream_key)
+        .map_err(|e| DatabaseIntegrityError::from(e))?;
     let mut meta = Meta {
         recyclebin_uuid: Default::default(),
     };
@@ -184,8 +193,8 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
 
     // Parse XML data blocks
     for block_buffer in xml_blocks {
-        let (block_group, _meta) =
-            xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
+        let (block_group, _meta) = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)
+            .map_err(|e| DatabaseIntegrityError::from(e))?;
         meta = _meta;
         root.children.push(Node::Group(block_group));
     }
@@ -216,7 +225,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
 pub(crate) fn decrypt_xml(
     data: &[u8],
     key_elements: &[Vec<u8>],
-) -> Result<(KDBX3Header, Vec<Vec<u8>>)> {
+) -> Result<(KDBX3Header, Vec<Vec<u8>>), DatabaseOpenError> {
     // parse header
     let header = parse_header(data)?;
 
@@ -249,7 +258,7 @@ pub(crate) fn decrypt_xml(
 
     // Check if we decrypted correctly
     if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
-        return Err(Error::IncorrectKey);
+        return Err(DatabaseOpenError::IncorrectKey);
     }
 
     let mut buf = Vec::new();
@@ -282,7 +291,7 @@ pub(crate) fn decrypt_xml(
         // Test block hash
         let block_hash_check = crypt::calculate_sha256(&[&block_buffer_compressed])?;
         if block_hash != block_hash_check.as_slice() {
-            return Err(DatabaseIntegrityError::BlockHashMismatch { block_index }.into());
+            return Err(BlockStreamError::BlockHashMismatch { block_index }.into());
         }
 
         // Decompress block_buffer_compressed

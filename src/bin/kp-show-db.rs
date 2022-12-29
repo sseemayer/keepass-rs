@@ -2,9 +2,9 @@
 use std::fs::File;
 use std::io::Read;
 
-use keepass::Result;
+use keepass::DatabaseOpenError;
 
-pub fn parse_args() -> clap::ArgMatches<'static> {
+pub fn parse_args() -> clap::ArgMatches {
     use clap::{App, Arg};
 
     App::new("kp-show-db")
@@ -17,14 +17,14 @@ pub fn parse_args() -> clap::ArgMatches<'static> {
         .arg(
             Arg::with_name("keyfile")
                 .value_name("KEYFILE")
-                .short("k")
+                .short('k')
                 .long("keyfile")
                 .help("Provide a key file"),
         )
         .get_matches()
 }
 
-pub fn main() -> Result<()> {
+pub fn main() -> Result<(), DatabaseOpenError> {
     let args = parse_args();
 
     let source_fn = args.value_of("in_kdbx").unwrap();

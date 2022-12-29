@@ -1,14 +1,19 @@
 use secstr::SecStr;
 use std::collections::{HashMap, VecDeque};
+use thiserror::Error;
 
 use crate::{
-    crypt,
+    config::{CompressionError, InnerCipherSuiteError, KdfSettingsError, OuterCipherSuiteError},
+    crypt::{calculate_sha256, CryptographyError},
+    hmac_block_stream::BlockStreamError,
+    keyfile::KeyfileError,
     parse::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
         kdbx4::{KDBX4Header, KDBX4InnerHeader},
     },
-    result::{DatabaseIntegrityError, Error, Result},
+    variant_dictionary::VariantDictionaryError,
+    xml_parse::XmlParseError,
 };
 
 #[derive(Debug)]
@@ -40,21 +45,186 @@ pub struct Database {
     pub meta: Meta,
 }
 
+#[derive(Debug, Error)]
+pub enum DatabaseOpenError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Keyfile(#[from] KeyfileError),
+
+    #[error(transparent)]
+    DatabaseIntegrity(#[from] DatabaseIntegrityError),
+
+    #[error("Incorrect key")]
+    IncorrectKey,
+}
+
+#[derive(Debug, Error)]
+pub enum DatabaseIntegrityError {
+    #[error("Invalid KDBX identifier")]
+    InvalidKDBXIdentifier,
+
+    #[error(
+        "Invalid KDBX version: {}.{}.{}",
+        version,
+        file_major_version,
+        file_minor_version
+    )]
+    InvalidKDBXVersion {
+        version: u32,
+        file_major_version: u32,
+        file_minor_version: u32,
+    },
+
+    #[error("Invalid header size: {}", size)]
+    InvalidFixedHeader { size: usize },
+
+    #[error(
+        "Invalid field length for type {}: {} (expected {})",
+        field_type,
+        field_size,
+        expected_field_size
+    )]
+    InvalidKDBFieldLength {
+        field_type: u16,
+        field_size: u32,
+        expected_field_size: u32,
+    },
+
+    #[error("Missing group level")]
+    MissingKDBGroupLevel,
+
+    #[error(
+        "Invalid group level {} (current level {})",
+        group_level,
+        current_level
+    )]
+    InvalidKDBGroupLevel {
+        group_level: u16,
+        current_level: u16,
+    },
+
+    #[error("Missing group ID")]
+    MissingKDBGroupId,
+
+    #[error("Invalid group ID {}", group_id)]
+    InvalidKDBGroupId { group_id: u32 },
+
+    #[error("Invalid group field type: {}", field_type)]
+    InvalidKDBGroupFieldType { field_type: u16 },
+
+    #[error("Invalid entry field type: {}", field_type)]
+    InvalidKDBEntryFieldType { field_type: u16 },
+
+    #[error("Incomplete group")]
+    IncompleteKDBGroup,
+
+    #[error("Incomplete entry")]
+    IncompleteKDBEntry,
+
+    #[error("Invalid fixed cipher ID: {}", cid)]
+    InvalidFixedCipherID { cid: u32 },
+
+    #[error("Header hash masmatch")]
+    HeaderHashMismatch,
+
+    #[error("Invalid outer header entry: {}", entry_type)]
+    InvalidOuterHeaderEntry { entry_type: u8 },
+
+    #[error("Incomplete outer header: Missing {}", missing_field)]
+    IncompleteOuterHeader { missing_field: String },
+
+    #[error("Invalid inner header entry: {}", entry_type)]
+    InvalidInnerHeaderEntry { entry_type: u8 },
+
+    #[error("Incomplete outer header: Missing {}", missing_field)]
+    IncompleteInnerHeader { missing_field: String },
+
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error(transparent)]
+    Xml(#[from] XmlParseError),
+
+    #[error(transparent)]
+    OuterCipher(#[from] OuterCipherSuiteError),
+
+    #[error(transparent)]
+    InnerCipher(#[from] InnerCipherSuiteError),
+
+    #[error(transparent)]
+    Compression(#[from] CompressionError),
+
+    #[error(transparent)]
+    BlockStream(#[from] BlockStreamError),
+
+    #[error(transparent)]
+    VariantDictionary(#[from] VariantDictionaryError),
+
+    #[error(transparent)]
+    KdfSettings(#[from] KdfSettingsError),
+}
+
+impl From<CryptographyError> for DatabaseOpenError {
+    fn from(value: CryptographyError) -> Self {
+        value.into()
+    }
+}
+
+impl From<BlockStreamError> for DatabaseOpenError {
+    fn from(value: BlockStreamError) -> Self {
+        value.into()
+    }
+}
+
+impl From<XmlParseError> for DatabaseOpenError {
+    fn from(value: XmlParseError) -> Self {
+        value.into()
+    }
+}
+
+impl From<OuterCipherSuiteError> for DatabaseOpenError {
+    fn from(value: OuterCipherSuiteError) -> Self {
+        value.into()
+    }
+}
+
+impl From<InnerCipherSuiteError> for DatabaseOpenError {
+    fn from(value: InnerCipherSuiteError) -> Self {
+        value.into()
+    }
+}
+
+impl From<KdfSettingsError> for DatabaseOpenError {
+    fn from(value: KdfSettingsError) -> Self {
+        value.into()
+    }
+}
+
+impl From<VariantDictionaryError> for DatabaseOpenError {
+    fn from(value: VariantDictionaryError) -> Self {
+        value.into()
+    }
+}
+
+impl From<CompressionError> for DatabaseOpenError {
+    fn from(value: CompressionError) -> Self {
+        value.into()
+    }
+}
+
 impl Database {
     /// Parse a database from a std::io::Read
     pub fn open(
         source: &mut dyn std::io::Read,
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Database> {
+    ) -> Result<Database, DatabaseOpenError> {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
-            key_elements.push(
-                crypt::calculate_sha256(&[p.as_bytes()])?
-                    .as_slice()
-                    .to_vec(),
-            );
+            key_elements.push(calculate_sha256(&[p.as_bytes()])?.as_slice().to_vec());
         }
 
         if let Some(f) = keyfile {
@@ -78,8 +248,8 @@ impl Database {
             }
             _ => Err(DatabaseIntegrityError::InvalidKDBXVersion {
                 version,
-                file_major_version,
-                file_minor_version,
+                file_major_version: file_major_version as u32,
+                file_minor_version: file_minor_version as u32,
             }
             .into()),
         }
@@ -90,15 +260,11 @@ impl Database {
         source: &mut dyn std::io::Read,
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Vec<Vec<u8>>> {
+    ) -> Result<Vec<Vec<u8>>, DatabaseOpenError> {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
-            key_elements.push(
-                crypt::calculate_sha256(&[p.as_bytes()])?
-                    .as_slice()
-                    .to_vec(),
-            );
+            key_elements.push(calculate_sha256(&[p.as_bytes()])?.as_slice().to_vec());
         }
 
         if let Some(f) = keyfile {
@@ -121,13 +287,12 @@ impl Database {
                 vec![crate::parse::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
             }
             _ => {
-                return Err(Error::DatabaseIntegrity {
-                    e: DatabaseIntegrityError::InvalidKDBXVersion {
-                        version,
-                        file_major_version,
-                        file_minor_version,
-                    },
-                })
+                return Err(DatabaseIntegrityError::InvalidKDBXVersion {
+                    version,
+                    file_major_version: file_major_version as u32,
+                    file_minor_version: file_minor_version as u32,
+                }
+                .into())
             }
         };
 
@@ -184,28 +349,21 @@ impl Group {
         } else {
             if path.len() == 1 {
                 let head = path[0];
-                self.children
-                    .iter()
-                    .filter_map(|n| match n {
-                        Node::Group(_) => None,
-                        Node::Entry(e) => {
-                            e.get_title()
-                                .and_then(|t| if t == head { Some(n.to_ref()) } else { None })
-                        }
-                    })
-                    .next()
+                self.children.iter().find_map(|n| match n {
+                    Node::Group(_) => None,
+                    Node::Entry(e) => {
+                        e.get_title()
+                            .and_then(|t| if t == head { Some(n.to_ref()) } else { None })
+                    }
+                })
             } else {
                 let head = path[0];
                 let tail = &path[1..path.len()];
 
-                let head_group = self
-                    .children
-                    .iter()
-                    .filter_map(|n| match n {
-                        Node::Group(g) if g.name == head => Some(g),
-                        _ => None,
-                    })
-                    .next()?;
+                let head_group = self.children.iter().find_map(|n| match n {
+                    Node::Group(g) if g.name == head => Some(g),
+                    _ => None,
+                })?;
 
                 head_group.get(tail)
             }
@@ -232,14 +390,10 @@ impl Group {
                 let head = path[0];
                 let tail = &path[1..path.len()];
 
-                let head_group: &mut Group = self
-                    .children
-                    .iter_mut()
-                    .filter_map(|n| match n {
-                        Node::Group(g) if g.name == head => Some(g),
-                        _ => None,
-                    })
-                    .next()?;
+                let head_group: &mut Group = self.children.iter_mut().find_map(|n| match n {
+                    Node::Group(g) if g.name == head => Some(g),
+                    _ => None,
+                })?;
 
                 head_group.get_mut(tail)
             }

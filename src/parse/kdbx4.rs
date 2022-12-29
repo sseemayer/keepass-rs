@@ -5,9 +5,8 @@ use crate::{
     crypt,
     db::{Database, Header, InnerHeader},
     hmac_block_stream,
-    result::{DatabaseIntegrityError, Error, Result},
     variant_dictionary::VariantDictionary,
-    xml_parse,
+    xml_parse, DatabaseIntegrityError, DatabaseOpenError,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -32,14 +31,12 @@ pub struct BinaryAttachment {
     content: Vec<u8>,
 }
 
-impl TryFrom<&[u8]> for BinaryAttachment {
-    type Error = Error;
-
-    fn try_from(data: &[u8]) -> Result<Self> {
+impl From<&[u8]> for BinaryAttachment {
+    fn from(data: &[u8]) -> Self {
         let flags = data[0];
         let content = data[1..].to_vec();
 
-        Ok(BinaryAttachment { flags, content })
+        BinaryAttachment { flags, content }
     }
 }
 
@@ -51,14 +48,14 @@ pub struct KDBX4InnerHeader {
     body_start: usize,
 }
 
-fn parse_outer_header(data: &[u8]) -> Result<KDBX4Header> {
+fn parse_outer_header(data: &[u8]) -> Result<KDBX4Header, DatabaseOpenError> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
     if version != 0xb54b_fb67 || file_major_version != 4 {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
-            file_major_version,
-            file_minor_version,
+            file_major_version: file_major_version as u32,
+            file_minor_version: file_minor_version as u32,
         }
         .into());
     }
@@ -132,7 +129,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX4Header> {
     // at this point, the header needs to be fully defined - unwrap options and return errors if
     // something is missing
 
-    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
+    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T, DatabaseIntegrityError> {
         v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteOuterHeader {
                 missing_field: err.into(),
@@ -160,7 +157,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX4Header> {
     })
 }
 
-fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
+fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader, DatabaseOpenError> {
     let mut pos = 0;
 
     let mut inner_random_stream = None;
@@ -190,7 +187,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
 
             // binary attachment
             0x03 => {
-                let binary = BinaryAttachment::try_from(entry_buffer)?;
+                let binary = BinaryAttachment::from(entry_buffer);
                 binaries.push(binary);
             }
 
@@ -200,7 +197,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
         }
     }
 
-    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T> {
+    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T, DatabaseIntegrityError> {
         v.ok_or_else(|| {
             DatabaseIntegrityError::IncompleteInnerHeader {
                 missing_field: err.into(),
@@ -221,7 +218,7 @@ fn parse_inner_header(data: &[u8]) -> Result<KDBX4InnerHeader> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and key elements
-pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
+pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, DatabaseOpenError> {
     let (header, inner_header, xml) = decrypt_xml(data, key_elements)?;
 
     // Initialize inner decryptor from inner header params
@@ -245,7 +242,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
 pub(crate) fn decrypt_xml(
     data: &[u8],
     key_elements: &[Vec<u8>],
-) -> Result<(KDBX4Header, KDBX4InnerHeader, Vec<u8>)> {
+) -> Result<(KDBX4Header, KDBX4InnerHeader, Vec<u8>), DatabaseOpenError> {
     // parse header
     let header = parse_outer_header(data)?;
     let pos = header.body_start;
@@ -275,7 +272,7 @@ pub(crate) fn decrypt_xml(
     let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"])?;
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::max_value(), &hmac_key)?;
     if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key)?.as_slice() {
-        return Err(Error::IncorrectKey);
+        return Err(DatabaseOpenError::IncorrectKey);
     }
 
     // read encrypted payload from hmac-verified block stream

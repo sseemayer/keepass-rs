@@ -19,15 +19,19 @@ utilities = ["clap", "rpassword"]
 default = []
 
 [dependencies]
+thiserror = "1"
+
+# encoding and parsing
 byteorder = "1"
 flate2 = "1"
-
-secstr = "0.5"
-
 xml-rs = "0.8"
 base64 = "0.20"
 hex-literal = "0.3"
 
+secstr = "0.5"
+chrono = "0.4"
+
+# cryptography
 rust-argon2 = "1.0"
 sha2 = "0.10"
 aes = "0.8"
@@ -35,11 +39,9 @@ block-modes = "0.9"
 hmac = "0.12"
 salsa20 = "0.10"
 chacha20 = "0.9"
-cipher = "0.4"
+cipher = { version = "0.4", features = ["std"] }
 twofish = "0.7"
 cbc = "0.1"
-
-chrono = "0.4"
 
 # dependencies for command-line utilities
 clap = { version = "3.1.8", optional = true }

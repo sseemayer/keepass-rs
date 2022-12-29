@@ -1,19 +1,33 @@
-use crate::result::{DatabaseIntegrityError, Error, Result};
 use byteorder::{ByteOrder, LittleEndian};
-
 use std::collections::HashMap;
+use thiserror::Error;
 
 #[derive(Debug)]
 pub(crate) struct VariantDictionary {
     data: HashMap<String, VariantDictionaryValue>,
 }
 
+#[derive(Debug, Error)]
+pub enum VariantDictionaryError {
+    #[error("Invalid variant dictionary version: {}", version)]
+    InvalidVersion { version: u16 },
+
+    #[error("Invalid value type: {}", value_type)]
+    InvalidValueType { value_type: u8 },
+
+    #[error("Missing key: {}", key)]
+    MissingKey { key: String },
+
+    #[error("Mistyped value: {}", key)]
+    Mistyped { key: String },
+}
+
 impl VariantDictionary {
-    pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary> {
+    pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryError> {
         let version = LittleEndian::read_u16(&buffer[0..2]);
 
         if version != 0x100 {
-            return Err(DatabaseIntegrityError::InvalidVariantDictionaryVersion { version }.into());
+            return Err(VariantDictionaryError::InvalidVersion { version });
         }
 
         let mut pos = 2;
@@ -26,9 +40,7 @@ impl VariantDictionary {
             let key_length = LittleEndian::read_u32(&buffer[pos..(pos + 4)]) as usize;
             pos += 4;
 
-            let key = std::str::from_utf8(&buffer[pos..(pos + key_length)])
-                .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?
-                .to_owned();
+            let key = String::from_utf8_lossy(&buffer[pos..(pos + key_length)]).to_string();
             pos += key_length;
 
             let value_length = LittleEndian::read_u32(&buffer[pos..(pos + 4)]) as usize;
@@ -44,16 +56,11 @@ impl VariantDictionary {
                 0x0c => VariantDictionaryValue::Int32(LittleEndian::read_i32(value_buffer)),
                 0x0d => VariantDictionaryValue::Int64(LittleEndian::read_i64(value_buffer)),
                 0x18 => VariantDictionaryValue::String(
-                    std::str::from_utf8(value_buffer)
-                        .map_err(|e| Error::from(DatabaseIntegrityError::from(e)))?
-                        .into(),
+                    String::from_utf8_lossy(value_buffer).to_string(),
                 ),
                 0x42 => VariantDictionaryValue::ByteArray(value_buffer.to_vec()),
                 _ => {
-                    return Err(DatabaseIntegrityError::InvalidVariantDictionaryValueType {
-                        value_type,
-                    }
-                    .into());
+                    return Err(VariantDictionaryError::InvalidValueType { value_type });
                 }
             };
 
@@ -63,23 +70,19 @@ impl VariantDictionary {
         Ok(VariantDictionary { data })
     }
 
-    pub(crate) fn get<T>(&self, key: &str) -> Result<T>
+    pub(crate) fn get<T>(&self, key: &str) -> Result<T, VariantDictionaryError>
     where
         T: FromVariantDictionaryValue<T>,
     {
-        let vdv = if let Some(v) = self.data.get(key) {
-            v
-        } else {
-            return Err(Error::from(DatabaseIntegrityError::MissingKDFParams {
+        let vdv = self
+            .data
+            .get(key)
+            .ok_or_else(|| VariantDictionaryError::MissingKey {
                 key: key.to_owned(),
-            }));
-        };
+            })?;
 
-        T::from_variant_dictionary_value(vdv).ok_or_else(|| {
-            DatabaseIntegrityError::MistypedKDFParam {
-                key: key.to_owned(),
-            }
-            .into()
+        T::from_variant_dictionary_value(vdv).ok_or_else(|| VariantDictionaryError::Mistyped {
+            key: key.to_owned(),
         })
     }
 }

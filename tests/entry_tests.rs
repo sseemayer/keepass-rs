@@ -1,9 +1,9 @@
 mod tests {
-    use keepass::{result::*, *};
+    use keepass::*;
     use std::{fs::File, path::Path};
 
     #[test]
-    fn kdbx3_entry() -> Result<()> {
+    fn kdbx3_entry() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
 
@@ -57,7 +57,7 @@ mod tests {
     }
 
     #[test]
-    fn kdbx4_entry() -> Result<()> {
+    fn kdbx4_entry() -> Result<(), DatabaseOpenError> {
         // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;

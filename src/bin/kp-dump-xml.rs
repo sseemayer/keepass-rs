@@ -2,9 +2,9 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use keepass::Result;
+use keepass::DatabaseOpenError;
 
-pub fn parse_args() -> clap::ArgMatches<'static> {
+pub fn parse_args() -> clap::ArgMatches {
     use clap::{App, Arg};
 
     App::new("kp-dump-xml")
@@ -17,14 +17,14 @@ pub fn parse_args() -> clap::ArgMatches<'static> {
         .arg(
             Arg::with_name("keyfile")
                 .value_name("KEYFILE")
-                .short("k")
+                .short('k')
                 .long("keyfile")
                 .help("Provide a key file"),
         )
         .get_matches()
 }
 
-pub fn main() -> Result<()> {
+pub fn main() -> Result<(), DatabaseOpenError> {
     let args = parse_args();
 
     let source_fn = args.value_of("in_kdbx").unwrap();
@@ -32,8 +32,8 @@ pub fn main() -> Result<()> {
 
     let mut keyfile: Option<File> = args.value_of("keyfile").and_then(|f| File::open(f).ok());
 
-    let password = rpassword::read_password_from_tty(Some("Password (or blank for none): "))
-        .expect("Read password");
+    let password =
+        rpassword::prompt_password("Password (or blank for none): ").expect("Read password");
 
     let password = if password.is_empty() {
         None
