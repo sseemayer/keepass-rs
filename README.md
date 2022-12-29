@@ -64,7 +64,7 @@ For AArch64 / ARMv8:
 
 The `aes` optimizations are not yet enabled on stable rust. If you want a big performance boost you can build using nightly and enabling the `armv8` feature of the `aes` crate:
 
-```
+```ignore
 [dependencies.aes]
 # Needs at least 0.7.5 for the feature
 version = "0.7.5"
