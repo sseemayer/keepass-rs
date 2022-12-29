@@ -175,18 +175,17 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     };
 
     let mut root = Group {
+        uuid: Default::default(),
         name: "Root".to_owned(),
         children: Default::default(),
         expires: Default::default(),
         times: Default::default(),
-        uuid: Default::default(),
     };
 
     // Parse XML data blocks
     for block_buffer in xml_blocks {
         let (block_group, _meta) =
             xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
-        // FIXME: This should only be done when _meta has a meaningful value
         meta = _meta;
         root.children.push(Node::Group(block_group));
     }
