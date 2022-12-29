@@ -7,7 +7,7 @@ homepage = "https://github.com/sseemayer/keepass-rs"
 repository = "https://github.com/sseemayer/keepass-rs"
 documentation = "https://docs.rs/keepass"
 
-version = "0.4.10"
+version = "0.5.0"
 authors = ["Stefan Seemayer <stefan@seemayer.de>"]
 license = "MIT"
 
