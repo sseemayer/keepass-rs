@@ -15,7 +15,9 @@ mod tests {
             assert_eq!(e.get_password(), Some("Password"));
             assert_eq!(e.get_url(), Some("http://keepass.info/"));
             assert_eq!(e.get("custom attribute"), Some("data for custom attribute"));
+            assert_eq!(e.get("URL"), Some("http://keepass.info/"));
             assert_eq!(e.expires, false);
+
             let et =
                 chrono::NaiveDateTime::parse_from_str("2016-01-06 09:43:01", "%Y-%m-%d %H:%M:%S")
                     .unwrap();
@@ -26,7 +28,7 @@ mod tests {
                 if let Some(ref s) = at.sequence {
                     assert_eq!(s, "{USERNAME}{TAB}{TAB}{PASSWORD}{ENTER}");
                 } else {
-                    panic!("Expected a sequenceQ")
+                    panic!("Expected a sequence")
                 }
             } else {
                 panic!("Expected an AutoType entry");

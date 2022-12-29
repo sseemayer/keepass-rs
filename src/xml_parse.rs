@@ -17,10 +17,10 @@ enum Node {
     AutoTypeAssociation(AutoTypeAssociation),
     ExpiryTime(String),
     Expires(bool),
+    Tags(String),
     Meta(Meta),
     UUID(String),
     RecycleBinUUID(String),
-    Tags(String),
 }
 
 fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime> {
@@ -216,18 +216,6 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                             }
                         }
 
-                        Node::UUID(u) => {
-                            if let Some(&mut Node::Entry(Entry { ref mut uuid, .. })) =
-                                parsed_stack_head
-                            {
-                                *uuid = u;
-                            } else if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
-                                parsed_stack_head
-                            {
-                                *uuid = u;
-                            }
-                        }
-
                         Node::Tags(t) => {
                             if let Some(&mut Node::Entry(Entry { ref mut tags, .. })) =
                                 parsed_stack_head
@@ -255,6 +243,18 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
 
                         Node::Meta(m) => {
                             meta = m;
+                        }
+
+                        Node::UUID(u) => {
+                            if let Some(&mut Node::Entry(Entry { ref mut uuid, .. })) =
+                                parsed_stack_head
+                            {
+                                *uuid = u;
+                            } else if let Some(&mut Node::Group(Group { ref mut uuid, .. })) =
+                                parsed_stack_head
+                            {
+                                *uuid = u;
+                            }
                         }
                     }
                 }
