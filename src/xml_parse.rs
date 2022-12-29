@@ -17,6 +17,7 @@ enum Node {
     AutoTypeAssociation(AutoTypeAssociation),
     ExpiryTime(String),
     Expires(bool),
+    Tags(String),
 }
 
 fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime> {
@@ -88,6 +89,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     "ExpiryTime" => parsed_stack.push(Node::ExpiryTime(String::new())),
                     "Expires" => parsed_stack.push(Node::Expires(bool::default())),
+                    "Tags" => parsed_stack.push(Node::Tags(Default::default())),
                     _ => {}
                 }
             }
@@ -105,6 +107,7 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     "Association",
                     "ExpiryTime",
                     "Expires",
+                    "Tags",
                 ]
                 .contains(&&local_name[..])
                 {
@@ -199,6 +202,14 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                                 *expires = es;
                             }
                         }
+
+                        Node::Tags(t) => {
+                            if let Some(&mut Node::Entry(Entry { ref mut tags, .. })) =
+                                parsed_stack_head
+                            {
+                                *tags = t.split(";").map(|x| x.to_owned()).collect();
+                            }
+                        }
                     }
                 }
             }
@@ -217,6 +228,9 @@ pub(crate) fn parse_xml_block(xml: &[u8], inner_cipher: &mut dyn Cipher) -> Resu
                     }
                     (Some("Expires"), Some(&mut Node::Expires(ref mut es))) => {
                         *es = c == "True";
+                    }
+                    (Some("Tags"), Some(&mut Node::Tags(ref mut tags))) => {
+                        *tags = c;
                     }
                     (Some("Key"), Some(&mut Node::KeyValue(ref mut k, _))) => {
                         // Got a "Key" element with a Node::KeyValue on the parsed_stack
