@@ -64,6 +64,7 @@ mod tests {
             assert_eq!(e.get_username(), Some("ghj"));
             assert_eq!(e.get_password(), Some("klmno"));
             assert_eq!(e.get_url(), Some("https://example.com"));
+            assert_eq!(e.tags, vec!["keepass-rs".to_string(), "test".to_string()]);
             assert_eq!(e.expires, true);
             if let Some(t) = e.get_time("ExpiryTime") {
                 assert_eq!(format!("{}", t), "2021-04-10 16:53:18");

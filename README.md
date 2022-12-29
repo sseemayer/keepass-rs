@@ -30,9 +30,9 @@ fn main() -> Result<()> {
                 println!("Saw group '{0}'", g.name);
             },
             NodeRef::Entry(e) => {
-                let title = e.get_title().unwrap();
-                let user = e.get_username().unwrap();
-                let pass = e.get_password().unwrap();
+                let title = e.get_title().unwrap_or("(no title)");
+                let user = e.get_username().unwrap_or("(no user)");
+                let pass = e.get_password().unwrap_or("(no password)");
                 println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
             }
         }
