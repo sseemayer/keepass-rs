@@ -1,7 +1,7 @@
 use crate::{
     config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
-    db::{Database, Group, Header, InnerHeader, Node},
+    db::{Database, Group, Header, InnerHeader, Meta, Node},
     result::{DatabaseIntegrityError, Error, Result},
     xml_parse,
 };
@@ -170,17 +170,24 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
     // Derive stream key for decrypting inner protected values and set up decryption context
     let stream_key = crypt::calculate_sha256(&[header.protected_stream_key.as_ref()])?;
     let mut inner_decryptor = header.inner_cipher.get_cipher(&stream_key)?;
+    let mut meta = Meta {
+        recyclebin_uuid: Default::default(),
+    };
 
     let mut root = Group {
         name: "Root".to_owned(),
         children: Default::default(),
         expires: Default::default(),
         times: Default::default(),
+        uuid: Default::default(),
     };
 
     // Parse XML data blocks
     for block_buffer in xml_blocks {
-        let block_group = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
+        let (block_group, _meta) =
+            xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)?;
+        // FIXME: This should only be done when _meta has a meaningful value
+        meta = _meta;
         root.children.push(Node::Group(block_group));
     }
 
@@ -200,6 +207,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database> {
         header: Header::KDBX3(header),
         inner_header: InnerHeader::None,
         root,
+        meta,
     };
 
     Ok(db)
