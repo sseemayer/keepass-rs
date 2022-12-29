@@ -38,6 +38,7 @@ chacha20 = "0.9"
 cipher = "0.4"
 twofish = "0.7"
 cbc = "0.1"
+
 chrono = "0.4"
 
 # dependencies for command-line utilities
