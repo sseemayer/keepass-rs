@@ -56,6 +56,10 @@ serde_json = { version = "1", optional = true }
 rustfmt = "0.10.0"
 
 [[bin]]
+name = "kp-dump-json"
+required-features = ["utilities"]
+
+[[bin]]
 name = "kp-dump-xml"
 required-features = ["utilities"]
 
