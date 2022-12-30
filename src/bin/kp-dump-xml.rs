@@ -18,7 +18,7 @@ struct Args {
     keyfile: Option<String>,
 }
 
-pub fn main() -> Result<(), DatabaseOpenError> {
+pub fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;
