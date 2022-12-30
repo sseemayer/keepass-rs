@@ -31,11 +31,14 @@ pub enum InnerHeader {
 
 /// A decrypted KeePass database
 #[derive(Debug)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Database {
     /// Header information of the KeePass database
+    #[cfg_attr(feature = "serialization", serde(skip))]
     pub header: Header,
 
     /// Optional inner header information
+    #[cfg_attr(feature = "serialization", serde(skip))]
     pub inner_header: InnerHeader,
 
     /// Root node of the KeePass database
@@ -302,12 +305,14 @@ impl Database {
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Meta {
     pub recyclebin_uuid: String,
 }
 
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Group {
     /// The unique identifier of the group
     pub uuid: String,
@@ -433,8 +438,23 @@ impl Value {
     }
 }
 
+#[cfg(feature = "serialization")]
+impl serde::Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Value::Bytes(b) => serializer.serialize_bytes(b),
+            Value::Unprotected(u) => serializer.serialize_str(u),
+            Value::Protected(p) => serializer.serialize_bytes(p.unsecure()),
+        }
+    }
+}
+
 /// An AutoType setting associated with an Entry
 #[derive(Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoType {
     pub enabled: bool,
     pub sequence: Option<String>,
@@ -443,12 +463,14 @@ pub struct AutoType {
 
 /// A window association associated with an AutoType setting
 #[derive(Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoTypeAssociation {
     pub window: Option<String>,
     pub sequence: Option<String>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum Node {
     Group(Group),
     Entry(Entry),
@@ -496,6 +518,7 @@ impl<'a> std::convert::From<&'a mut Node> for NodeRefMut<'a> {
 
 /// A database entry containing several key-value fields.
 #[derive(Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Entry {
     pub uuid: String,
     pub fields: HashMap<String, Value>,

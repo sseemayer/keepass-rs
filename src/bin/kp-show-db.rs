@@ -2,35 +2,27 @@
 use std::fs::File;
 use std::io::Read;
 
-use keepass::DatabaseOpenError;
+use anyhow::Result;
+use clap::Parser;
 
-pub fn parse_args() -> clap::ArgMatches {
-    use clap::{App, Arg};
+use keepass::Database;
 
-    App::new("kp-show-db")
-        .arg(
-            Arg::with_name("in_kdbx")
-                .value_name("KDBXFILE")
-                .required(true)
-                .help("Provide a .kdbx database"),
-        )
-        .arg(
-            Arg::with_name("keyfile")
-                .value_name("KEYFILE")
-                .short('k')
-                .long("keyfile")
-                .help("Provide a key file"),
-        )
-        .get_matches()
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct Args {
+    /// Provide a .kdbx database
+    in_kdbx: String,
+
+    /// Provide a keyfile
+    #[arg(short = 'k', long)]
+    keyfile: Option<String>,
 }
 
-pub fn main() -> Result<(), DatabaseOpenError> {
-    let args = parse_args();
+pub fn main() -> Result<()> {
+    let args = Args::parse();
 
-    let source_fn = args.value_of("in_kdbx").unwrap();
-    let mut source = File::open(source_fn)?;
-
-    let mut keyfile: Option<File> = args.value_of("keyfile").and_then(|f| File::open(f).ok());
+    let mut source = File::open(args.in_kdbx)?;
+    let mut keyfile: Option<File> = args.keyfile.and_then(|f| File::open(f).ok());
 
     let password = rpassword::prompt_password("Password (or blank for none): ")
         .expect("Could not read password from TTY");

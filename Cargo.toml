@@ -14,7 +14,8 @@ license = "MIT"
 readme = "README.md"
 
 [features]
-utilities = ["clap", "rpassword"]
+utilities = ["anyhow", "clap", "rpassword", "serialization"]
+serialization = ["serde", "serde_json", "chrono/serde"]
 
 default = []
 
@@ -44,8 +45,15 @@ twofish = "0.7"
 cbc = "0.1"
 
 # dependencies for command-line utilities
-clap = { version = "3.1.8", optional = true }
-rpassword = { version = "6.0.1", optional = true }
+anyhow = { version = "1", optional = true }
+clap = { version = "4", optional = true, features = ["derive"] }
+rpassword = { version = "7", optional = true }
+
+# dependencies for serialization (enabled by "serialization" feature)
+serde = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
+
+rustfmt = "0.10.0"
 
 [[bin]]
 name = "kp-dump-xml"
