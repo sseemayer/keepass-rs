@@ -30,7 +30,7 @@ base64 = "0.20"
 hex-literal = "0.3"
 
 secstr = "0.5"
-chrono = "0.4"
+chrono = "0.4.23"
 
 # cryptography
 rust-argon2 = "1.0"
