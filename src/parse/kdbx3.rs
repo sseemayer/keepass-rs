@@ -1,7 +1,7 @@
 use crate::{
     config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
-    db::{Database, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node},
+    db::{Database, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node, KEEPASS_LATEST_ID},
     hmac_block_stream::BlockStreamError,
     xml_parse, DatabaseIntegrityError,
 };
@@ -31,7 +31,7 @@ pub struct KDBX3Header {
 fn parse_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
-    if version != 0xb54b_fb67 || file_major_version != 3 {
+    if version != KEEPASS_LATEST_ID || file_major_version != 3 {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
             file_major_version: file_major_version as u32,
