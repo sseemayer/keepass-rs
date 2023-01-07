@@ -102,6 +102,18 @@ impl TryFrom<u32> for InnerCipherSuite {
     }
 }
 
+// Name of the KDF fields in the variant dictionaries.
+const KDF_ID: &str = "$UUID";
+// KDF fields used by Argon2.
+const KDF_MEMORY: &str = "M";
+const KDF_SALT: &str = "S";
+const KDF_ITERATIONS: &str = "I";
+const KDF_PARALLELISM: &str = "P";
+const KDF_VERSION: &str = "V";
+// KDF fields used by AES.
+const KDF_SEED: &str = "S";
+const KDF_ROUNDS: &str = "R";
+
 #[derive(Debug)]
 pub enum KdfSettings {
     Aes {
@@ -161,14 +173,14 @@ impl TryFrom<VariantDictionary> for KdfSettings {
     type Error = KdfSettingsError;
 
     fn try_from(vd: VariantDictionary) -> Result<KdfSettings, Self::Error> {
-        let uuid: Vec<u8> = vd.get("$UUID")?;
+        let uuid: Vec<u8> = vd.get(KDF_ID)?;
 
         if uuid == KDF_ARGON2 {
-            let memory: u64 = vd.get("M")?;
-            let salt: Vec<u8> = vd.get("S")?;
-            let iterations: u64 = vd.get("I")?;
-            let parallelism: u32 = vd.get("P")?;
-            let version: u32 = vd.get("V")?;
+            let memory: u64 = vd.get(KDF_MEMORY)?;
+            let salt: Vec<u8> = vd.get(KDF_SALT)?;
+            let iterations: u64 = vd.get(KDF_ITERATIONS)?;
+            let parallelism: u32 = vd.get(KDF_PARALLELISM)?;
+            let version: u32 = vd.get(KDF_VERSION)?;
 
             let version = match version {
                 0x10 => argon2::Version::Version10,
@@ -184,8 +196,8 @@ impl TryFrom<VariantDictionary> for KdfSettings {
                 version,
             })
         } else if uuid == KDF_AES_KDBX4 || uuid == KDF_AES_KDBX3 {
-            let rounds: u64 = vd.get("R")?;
-            let seed: Vec<u8> = vd.get("S")?;
+            let rounds: u64 = vd.get(KDF_ROUNDS)?;
+            let seed: Vec<u8> = vd.get(KDF_SEED)?;
 
             Ok(KdfSettings::Aes { rounds, seed })
         } else {
