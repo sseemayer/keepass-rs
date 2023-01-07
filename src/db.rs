@@ -29,6 +29,13 @@ pub enum InnerHeader {
     KDBX4(KDBX4InnerHeader),
 }
 
+/// Identifier for KeePass 1 format.
+pub const KEEPASS_1_ID: u32 = 0xb54bfb65;
+/// Identifier for KeePass 2 pre-release format.
+pub const KEEPASS_2_ID: u32 = 0xb54bfb66;
+/// Identifier for the latest KeePass formats.
+pub const KEEPASS_LATEST_ID: u32 = 0xb54bfb67;
+
 /// A decrypted KeePass database
 #[derive(Debug)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
@@ -233,12 +240,12 @@ impl Database {
             crate::parse::get_kdbx_version(data.as_ref())?;
 
         match version {
-            0xb54bfb65 => crate::parse::kdb::parse(data.as_ref(), &key_elements),
-            // 0xb54bfb66 => alpha/beta kbd 2.x
-            0xb54bfb67 if file_major_version == 3 => {
+            KEEPASS_1_ID => crate::parse::kdb::parse(data.as_ref(), &key_elements),
+            // KEEPASS_2_ID => alpha/beta kbd 2.x
+            KEEPASS_LATEST_ID if file_major_version == 3 => {
                 crate::parse::kdbx3::parse(data.as_ref(), &key_elements)
             }
-            0xb54bfb67 if file_major_version == 4 => {
+            KEEPASS_LATEST_ID if file_major_version == 4 => {
                 crate::parse::kdbx4::parse(data.as_ref(), &key_elements)
             }
             _ => Err(DatabaseIntegrityError::InvalidKDBXVersion {
@@ -286,12 +293,12 @@ impl Database {
             crate::parse::get_kdbx_version(data.as_ref())?;
 
         let data = match version {
-            0xb54bfb65 => panic!("Dumping XML from KDB databases not supported"),
-            // 0xb54bfb66 => alpha/beta kbd 2.x
-            0xb54bfb67 if file_major_version == 3 => {
+            KEEPASS_1_ID => panic!("Dumping XML from KDB databases not supported"),
+            // KEEPASS_2_ID => alpha/beta kbd 2.x
+            KEEPASS_LATEST_ID if file_major_version == 3 => {
                 crate::parse::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
             }
-            0xb54bfb67 if file_major_version == 4 => {
+            KEEPASS_LATEST_ID if file_major_version == 4 => {
                 vec![crate::parse::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
             }
             _ => {

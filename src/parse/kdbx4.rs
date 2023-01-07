@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     crypt,
-    db::{Database, Header, InnerHeader},
+    db::{Database, Header, InnerHeader, KEEPASS_LATEST_ID},
     hmac_block_stream,
     variant_dictionary::VariantDictionary,
     xml_parse, DatabaseIntegrityError, DatabaseOpenError,
@@ -51,7 +51,7 @@ pub struct KDBX4InnerHeader {
 fn parse_outer_header(data: &[u8]) -> Result<KDBX4Header, DatabaseOpenError> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
-    if version != 0xb54b_fb67 || file_major_version != 4 {
+    if version != KEEPASS_LATEST_ID || file_major_version != 4 {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
             file_major_version: file_major_version as u32,

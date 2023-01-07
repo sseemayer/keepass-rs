@@ -1,7 +1,9 @@
 use crate::{
     config::OuterCipherSuite,
     crypt::kdf::Kdf,
-    db::{Database, Entry, Group, Header, InnerHeader, Meta, Node, NodeRefMut, Value},
+    db::{
+        Database, Entry, Group, Header, InnerHeader, Meta, Node, NodeRefMut, Value, KEEPASS_1_ID,
+    },
     DatabaseIntegrityError, DatabaseOpenError,
 };
 
@@ -30,7 +32,7 @@ const HEADER_SIZE: usize = 4 + 4 + 4 + 4 + 16 + 16 + 4 + 4 + 32 + 32 + 4; // fir
 fn parse_header(data: &[u8]) -> Result<KDBHeader, DatabaseIntegrityError> {
     let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
 
-    if version != 0xb54b_fb65 {
+    if version != KEEPASS_1_ID {
         return Err(DatabaseIntegrityError::InvalidKDBXVersion {
             version,
             file_major_version: file_major_version as u32,
