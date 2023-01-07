@@ -224,15 +224,7 @@ impl Database {
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<Database, DatabaseOpenError> {
-        let mut key_elements: Vec<Vec<u8>> = Vec::new();
-
-        if let Some(p) = password {
-            key_elements.push(calculate_sha256(&[p.as_bytes()])?.as_slice().to_vec());
-        }
-
-        if let Some(f) = keyfile {
-            key_elements.push(crate::keyfile::parse(f)?);
-        }
+        let key_elements = Database::get_key_elements(password, keyfile)?;
 
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
@@ -258,9 +250,7 @@ impl Database {
         }
     }
 
-    /// Helper function to load a database into its internal XML chunks
-    pub fn get_xml_chunks(
-        source: &mut dyn std::io::Read,
+    pub fn get_key_elements(
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<Vec<Vec<u8>>, DatabaseOpenError> {
@@ -273,6 +263,21 @@ impl Database {
         if let Some(f) = keyfile {
             key_elements.push(crate::keyfile::parse(f)?);
         }
+
+        if key_elements.is_empty() {
+            return Err(DatabaseOpenError::IncorrectKey);
+        }
+
+        Ok(key_elements)
+    }
+
+    /// Helper function to load a database into its internal XML chunks
+    pub fn get_xml_chunks(
+        source: &mut dyn std::io::Read,
+        password: Option<&str>,
+        keyfile: Option<&mut dyn std::io::Read>,
+    ) -> Result<Vec<Vec<u8>>, DatabaseOpenError> {
+        let key_elements = Database::get_key_elements(password, keyfile)?;
 
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;

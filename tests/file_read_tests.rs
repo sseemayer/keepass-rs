@@ -195,14 +195,14 @@ mod tests {
     #[should_panic(expected = r#"InvalidKDBXIdentifier"#)]
     fn open_broken_random_data() {
         let path = Path::new("tests/resources/broken_random_data.kdbx");
-        Database::open(&mut File::open(path).unwrap(), None, None).unwrap();
+        Database::open(&mut File::open(path).unwrap(), Some(""), None).unwrap();
     }
 
     #[test]
     #[should_panic(expected = r#"InvalidKDBXVersion"#)]
     fn open_broken_kdbx_version() {
         let path = Path::new("tests/resources/broken_kdbx_version.kdbx");
-        Database::open(&mut File::open(path).unwrap(), None, None).unwrap();
+        Database::open(&mut File::open(path).unwrap(), Some(""), None).unwrap();
     }
 
     #[test]
