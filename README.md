@@ -5,6 +5,7 @@
 [![Build Status](https://travis-ci.org/sseemayer/keepass-rs.svg?branch=master)](https://travis-ci.org/sseemayer/keepass-rs)
 [![codecov](https://codecov.io/gh/sseemayer/keepass-rs/branch/master/graph/badge.svg)](https://codecov.io/gh/sseemayer/keepass-rs)
 [![dependency status](https://deps.rs/repo/github/sseemayer/keepass-rs/status.svg)](https://deps.rs/repo/github/sseemayer/keepass-rs)
+[![License file](https://img.shields.io/github/license/sseemayer/keepass-rs)](https://github.com/sseemayer/keepass-rs/blob/master/LICENSE)
 
 KeePass .kdbx database file parser for Rust
 
