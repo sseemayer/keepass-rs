@@ -150,7 +150,7 @@ pub enum KdfSettingsError {
     #[error("Invalid KDF version: {}", version)]
     InvalidKDFVersion { version: u32 },
 
-    #[error("Invlaid KDF UUID: {:?}", uuid)]
+    #[error("Invalid KDF UUID: {:?}", uuid)]
     InvalidKDFUUID { uuid: Vec<u8> },
 
     #[error(transparent)]
