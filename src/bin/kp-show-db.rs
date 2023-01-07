@@ -33,7 +33,7 @@ pub fn main() -> Result<()> {
         Some(&password[..])
     };
 
-    let db = keepass::Database::open(
+    let db = Database::open(
         &mut source,
         password,
         keyfile.as_mut().map(|kf| kf as &mut dyn Read),
