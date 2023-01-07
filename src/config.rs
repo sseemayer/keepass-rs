@@ -13,6 +13,11 @@ const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
 const CIPHERSUITE_TWOFISH: [u8; 16] = hex!("ad68f29f576f4bb9a36ad47af965346c");
 const CIPHERSUITE_CHACHA20: [u8; 16] = hex!("d6038a2b8b6f4cb5a524339a31dbb59a");
 
+// Internal IDs for the ciphers
+const PLAIN: u32 = 0;
+const SALSA_20: u32 = 2;
+const CHA_CHA_20: u32 = 3;
+
 #[derive(Debug)]
 pub enum OuterCipherSuite {
     AES256,
@@ -94,9 +99,9 @@ impl TryFrom<u32> for InnerCipherSuite {
 
     fn try_from(v: u32) -> Result<InnerCipherSuite, Self::Error> {
         match v {
-            0 => Ok(InnerCipherSuite::Plain),
-            2 => Ok(InnerCipherSuite::Salsa20),
-            3 => Ok(InnerCipherSuite::ChaCha20),
+            PLAIN => Ok(InnerCipherSuite::Plain),
+            SALSA_20 => Ok(InnerCipherSuite::Salsa20),
+            CHA_CHA_20 => Ok(InnerCipherSuite::ChaCha20),
             _ => Err(InnerCipherSuiteError::InvalidInnerCipherID { cid: v }.into()),
         }
     }
