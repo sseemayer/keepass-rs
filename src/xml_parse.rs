@@ -1,7 +1,7 @@
 use crate::crypt::{ciphers::Cipher, CryptographyError};
 
+use base64::{engine::general_purpose as base64_engine, Engine as _};
 use secstr::SecStr;
-
 use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
@@ -30,7 +30,7 @@ fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime, XmlParseError> 
         // In KDBX4, timestamps are stored as seconds, Base64 encoded, since 0001-01-01 00:00:00
         // So, if we don't have a valid ISO 8601 string, assume we have found a Base64 encoded int.
         _ => {
-            let v = base64::decode(t)?;
+            let v = base64_engine::STANDARD.decode(t)?;
 
             // Cast the Vec created by base64::decode into the array expected by i64::from_le_bytes
             let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
@@ -314,7 +314,7 @@ pub(crate) fn parse_xml_block(
                                 // Use the decryptor to decrypt the protected
                                 // and base64-encoded value
                                 //
-                                let buf = base64::decode(&c)?;
+                                let buf = base64_engine::STANDARD.decode(&c)?;
 
                                 let buf_decode = inner_cipher.decrypt(&buf)?;
 

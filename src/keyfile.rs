@@ -1,4 +1,5 @@
 use crate::crypt::{calculate_sha256, CryptographyError};
+use base64::{engine::general_purpose as base64_engine, Engine as _};
 use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
@@ -40,7 +41,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>, KeyfileError> {
                     let key_base64 = s.as_bytes().to_vec();
 
                     // Check if the key is base64-encoded. If yes, return decoded bytes
-                    return if let Ok(key) = ::base64::decode(&key_base64) {
+                    return if let Ok(key) = base64_engine::STANDARD.decode(&key_base64) {
                         Ok(key)
                     } else {
                         Ok(key_base64)
