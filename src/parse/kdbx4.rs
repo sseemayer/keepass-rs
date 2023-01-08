@@ -25,6 +25,7 @@ pub struct KDBX4Header {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct BinaryAttachment {
     flags: u8,
     content: Vec<u8>,
@@ -43,6 +44,7 @@ impl From<&[u8]> for BinaryAttachment {
 pub struct KDBX4InnerHeader {
     inner_random_stream: InnerCipherSuite,
     inner_random_stream_key: Vec<u8>,
+    #[allow(dead_code)]
     binaries: Vec<BinaryAttachment>,
 }
 

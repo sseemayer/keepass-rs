@@ -33,7 +33,7 @@ pub fn main() -> Result<()> {
         Some(&password[..])
     };
 
-    let chunks = keepass::Database::get_xml_chunks(
+    let chunks = Database::get_xml_chunks(
         &mut source,
         password,
         keyfile.as_mut().map(|kf| kf as &mut dyn Read),
