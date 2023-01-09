@@ -4,6 +4,7 @@ use cipher::{
         typenum::{U32, U64},
         GenericArray,
     },
+    inout::PadError,
     InvalidLength,
 };
 
@@ -21,7 +22,10 @@ pub enum CryptographyError {
     InvalidLength(#[from] InvalidLength),
 
     #[error(transparent)]
-    Padding(#[from] UnpadError),
+    Unpadding(#[from] UnpadError),
+
+    #[error(transparent)]
+    Padding(#[from] PadError),
 
     #[error(transparent)]
     Argon2(#[from] argon2::Error),

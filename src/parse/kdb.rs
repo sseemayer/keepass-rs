@@ -4,7 +4,7 @@ use crate::{
     db::{
         Database, Entry, Group, Header, InnerHeader, Meta, Node, NodeRefMut, Value, KEEPASS_1_ID,
     },
-    DatabaseIntegrityError, DatabaseOpenError,
+    DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -355,7 +355,7 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, D
     // Check if we decrypted correctly
     let hash = crate::crypt::calculate_sha256(&[&payload])?;
     if header.contents_hash != hash.as_slice() {
-        return Err(DatabaseOpenError::IncorrectKey);
+        return Err(DatabaseKeyError::IncorrectKey.into());
     }
 
     let root_group = parse_db(&header, &payload)?;
