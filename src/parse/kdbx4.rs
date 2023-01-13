@@ -11,6 +11,25 @@ use crate::{
 
 use byteorder::{ByteOrder, LittleEndian};
 
+pub const HEADER_END: u8 = 0;
+pub const HEADER_COMMENT: u8 = 1;
+// A UUID specifying which cipher suite
+// should be used to encrypt the payload
+pub const HEADER_OUTER_ENCRYPTION_ID: u8 = 2;
+// First byte determines compression of payload
+pub const HEADER_COMPRESSION_ID: u8 = 3;
+// Master seed for deriving the master key
+pub const HEADER_MASTER_SEED: u8 = 4;
+// Initialization Vector for decrypting the payload
+pub const HEADER_ENCRYPTION_IV: u8 = 7;
+pub const HEADER_KDF_PARAMS: u8 = 11;
+
+pub const INNER_HEADER_END: u8 = 0x00;
+/// The ID of the inner header random stream
+pub const INNER_HEADER_RANDOM_STREAM_ID: u8 = 0x01;
+pub const INNER_HEADER_RANDOM_STREAM_KEY: u8 = 0x02;
+pub const INNER_HEADER_BINARY_ATTACHMENTS: u8 = 0x03;
+
 #[derive(Debug)]
 pub struct KDBX4Header {
     // https://gist.github.com/msmuenchen/9318327
@@ -87,35 +106,27 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenE
         pos += 5 + entry_length;
 
         match entry_type {
-            // END - finished parsing header
-            0 => {
+            HEADER_END => {
                 break;
             }
 
-            // COMMENT
-            1 => {}
+            HEADER_COMMENT => {}
 
-            // CIPHERID - a UUID specifying which cipher suite
-            //            should be used to encrypt the payload
-            2 => {
+            HEADER_OUTER_ENCRYPTION_ID => {
                 outer_cipher = Some(OuterCipherSuite::try_from(entry_buffer)?);
             }
 
-            // COMPRESSIONFLAGS - first byte determines compression of payload
-            3 => {
+            HEADER_COMPRESSION_ID => {
                 compression = Some(Compression::try_from(LittleEndian::read_u32(
                     &entry_buffer,
                 ))?);
             }
 
-            // MASTERSEED - Master seed for deriving the master key
-            4 => master_seed = Some(entry_buffer.to_vec()),
+            HEADER_MASTER_SEED => master_seed = Some(entry_buffer.to_vec()),
 
-            // ENCRYPTIONIV - Initialization Vector for decrypting the payload
-            7 => outer_iv = Some(entry_buffer.to_vec()),
+            HEADER_ENCRYPTION_IV => outer_iv = Some(entry_buffer.to_vec()),
 
-            // KDF Parameters
-            11 => {
+            HEADER_KDF_PARAMS => {
                 let vd = VariantDictionary::parse(entry_buffer)?;
                 kdf = Some(KdfSettings::try_from(vd)?);
             }
@@ -174,21 +185,17 @@ fn parse_inner_header(data: &[u8]) -> Result<(KDBX4InnerHeader, usize), Database
         pos += 5 + entry_length;
 
         match entry_type {
-            // end of header
-            0x00 => break,
+            INNER_HEADER_END => break,
 
-            // inner random stream ID
-            0x01 => {
+            INNER_HEADER_RANDOM_STREAM_ID => {
                 inner_random_stream = Some(InnerCipherSuite::try_from(LittleEndian::read_u32(
                     &entry_buffer,
                 ))?);
             }
 
-            // inner random stream key
-            0x02 => inner_random_stream_key = Some(entry_buffer.to_vec()),
+            INNER_HEADER_RANDOM_STREAM_KEY => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
-            // binary attachment
-            0x03 => {
+            INNER_HEADER_BINARY_ATTACHMENTS => {
                 let binary = BinaryAttachment::from(entry_buffer);
                 binaries.push(binary);
             }
