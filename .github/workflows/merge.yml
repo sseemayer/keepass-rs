@@ -10,13 +10,13 @@ jobs:
     name: Code Coverage
     runs-on: ubuntu-latest
     container:
-      image: xd009642/tarpaulin:develop-nightly
+      image: xd009642/tarpaulin:0.21.0
       options: --security-opt seccomp=unconfined
     steps:
       - uses: actions/checkout@v3
       - name: Generate code coverage
         run: |
-          cargo +nightly tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml
+          cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml
       - uses: codecov/codecov-action@v3
         with:
           fail_ci_if_error: false
