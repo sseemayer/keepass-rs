@@ -3,44 +3,33 @@ use std::fs::File;
 use std::io::Read;
 
 use keepass::NodeRef;
-use keepass::Result;
+use anyhow::Result;
+use clap::Parser;
 
-pub fn parse_args() -> clap::ArgMatches<'static> {
-    use clap::{App, Arg};
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct Args {
+    /// Provide a .kdbx database
+    in_kdbx: String,
 
-    App::new("kp-show-otp")
-        .arg(
-            Arg::with_name("in_kdbx")
-                .value_name("KDBXFILE")
-                .required(true)
-                .help("Provide a .kdbx database"),
-        )
-        .arg(
-            Arg::with_name("keyfile")
-                .value_name("KEYFILE")
-                .short("k")
-                .long("keyfile")
-                .help("Provide a key file"),
-        )
-        .arg(
-            Arg::with_name("entry")
-                .value_name("ENTRY")
-                .required(true)
-                .help("Entry to show TOTP from"),
-        )
-        .get_matches()
+    /// Provide a keyfile
+    #[arg(short = 'k', long)]
+    keyfile: Option<String>,
+
+    /// Provide the entry to read
+    entry: String,
 }
 
+
 pub fn main() -> Result<()> {
-    let args = parse_args();
+    let args = Args::parse();
 
-    let source_fn = args.value_of("in_kdbx").unwrap();
-    let mut source = File::open(source_fn)?;
+    let mut source = File::open(args.in_kdbx)?;
 
-    let mut keyfile: Option<File> = args.value_of("keyfile").and_then(|f| File::open(f).ok());
+    let mut keyfile: Option<File> = args.keyfile.and_then(|f| File::open(f).ok());
 
-    let password = rpassword::read_password_from_tty(Some("Password (or blank for none): "))
-        .expect("Read password");
+    let password =
+        rpassword::prompt_password("Password (or blank for none): ").expect("Read password");
 
     let password = if password.is_empty() {
         None
@@ -54,7 +43,7 @@ pub fn main() -> Result<()> {
         keyfile.as_mut().map(|kf| kf as &mut dyn Read),
     )?;
 
-    if let Some(NodeRef::Entry(e)) = db.root.get(&[args.value_of("entry").unwrap()]) {
+    if let Some(NodeRef::Entry(e)) = db.root.get(&[&args.entry]) {
         let totp = e.get_otp().unwrap();
         println!("Token is {}", totp.current_value());
         Ok(())
