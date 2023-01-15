@@ -2,9 +2,9 @@
 use std::fs::File;
 use std::io::Read;
 
-use keepass::NodeRef;
 use anyhow::Result;
 use clap::Parser;
+use keepass::NodeRef;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -19,7 +19,6 @@ struct Args {
     /// Provide the entry to read
     entry: String,
 }
-
 
 pub fn main() -> Result<()> {
     let args = Args::parse();
