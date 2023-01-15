@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v3
       - name: Generate code coverage
         run: |
-          cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml
+          cargo tarpaulin --verbose --all-features --exclude-files src/bin/*.rs --workspace --timeout 120 --out Xml
       - uses: codecov/codecov-action@v3
         with:
           fail_ci_if_error: false
