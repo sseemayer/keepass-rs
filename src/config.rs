@@ -1,11 +1,14 @@
 use hex_literal::hex;
+
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use thiserror::Error;
 
+use crate::crypt::ciphers::Cipher;
 use crate::{
+    compression,
     crypt::{ciphers, kdf, CryptographyError},
-    decompress,
-    variant_dictionary::VariantDictionary,
+    variant_dictionary::{VariantDictionary, VariantDictionaryValue},
 };
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
@@ -46,6 +49,22 @@ impl OuterCipherSuite {
             OuterCipherSuite::ChaCha20 => {
                 Ok(Box::new(ciphers::ChaCha20Cipher::new_key_iv(key, iv)?))
             }
+        }
+    }
+
+    pub fn get_iv_size(&self) -> u8 {
+        match self {
+            OuterCipherSuite::AES256 => ciphers::AES256Cipher::iv_size(),
+            OuterCipherSuite::Twofish => ciphers::TwofishCipher::iv_size(),
+            OuterCipherSuite::ChaCha20 => ciphers::ChaCha20Cipher::iv_size(),
+        }
+    }
+
+    pub(crate) fn dump(&self) -> [u8; 16] {
+        match self {
+            OuterCipherSuite::AES256 => CIPHERSUITE_AES256,
+            OuterCipherSuite::Twofish => CIPHERSUITE_TWOFISH,
+            OuterCipherSuite::ChaCha20 => CIPHERSUITE_CHACHA20,
         }
     }
 }
@@ -92,6 +111,22 @@ impl InnerCipherSuite {
             InnerCipherSuite::ChaCha20 => Ok(Box::new(ciphers::ChaCha20Cipher::new(key)?)),
         }
     }
+
+    pub(crate) fn dump(&self) -> u32 {
+        match self {
+            InnerCipherSuite::Plain => PLAIN,
+            InnerCipherSuite::Salsa20 => SALSA_20,
+            InnerCipherSuite::ChaCha20 => CHA_CHA_20,
+        }
+    }
+
+    pub fn get_iv_size(&self) -> u8 {
+        match self {
+            InnerCipherSuite::Plain => ciphers::PlainCipher::iv_size(),
+            InnerCipherSuite::Salsa20 => ciphers::Salsa20Cipher::iv_size(),
+            InnerCipherSuite::ChaCha20 => ciphers::ChaCha20Cipher::iv_size(),
+        }
+    }
 }
 
 impl TryFrom<u32> for InnerCipherSuite {
@@ -126,15 +161,21 @@ pub enum KdfSettings {
         rounds: u64,
     },
     Argon2 {
-        memory: u64,
         salt: Vec<u8>,
         iterations: u64,
+        memory: u64,
         parallelism: u32,
         version: argon2::Version,
     },
 }
 
 impl KdfSettings {
+    pub fn seed_size(&self) -> u8 {
+        match self {
+            KdfSettings::Aes { .. } => 32,
+            KdfSettings::Argon2 { .. } => 32,
+        }
+    }
     pub(crate) fn get_kdf(&self) -> Box<dyn kdf::Kdf> {
         match self {
             KdfSettings::Aes { seed, rounds } => Box::new(kdf::AesKdf {
@@ -155,6 +196,70 @@ impl KdfSettings {
                 version: *version,
             }),
         }
+    }
+
+    pub(crate) fn dump(&self) -> VariantDictionary {
+        let mut data: HashMap<String, VariantDictionaryValue> = HashMap::new();
+
+        match self {
+            KdfSettings::Aes { seed, rounds } => {
+                data.insert(
+                    KDF_ID.to_string(),
+                    VariantDictionaryValue::ByteArray(KDF_AES_KDBX4.to_vec()),
+                );
+                data.insert(
+                    KDF_ROUNDS.to_string(),
+                    VariantDictionaryValue::UInt64(rounds.clone()),
+                );
+                data.insert(
+                    KDF_SEED.to_string(),
+                    VariantDictionaryValue::ByteArray(seed.to_vec()),
+                );
+            }
+            KdfSettings::Argon2 {
+                memory,
+                salt,
+                iterations,
+                parallelism,
+                version,
+            } => {
+                data.insert(
+                    KDF_ID.to_string(),
+                    VariantDictionaryValue::ByteArray(KDF_ARGON2.to_vec()),
+                );
+                data.insert(
+                    KDF_MEMORY.to_string(),
+                    VariantDictionaryValue::UInt64(memory.clone()),
+                );
+                data.insert(
+                    KDF_SALT.to_string(),
+                    VariantDictionaryValue::ByteArray(salt.to_vec()),
+                );
+                data.insert(
+                    KDF_ITERATIONS.to_string(),
+                    VariantDictionaryValue::UInt64(iterations.clone()),
+                );
+                data.insert(
+                    KDF_PARALLELISM.to_string(),
+                    VariantDictionaryValue::UInt32(parallelism.clone()),
+                );
+                match version {
+                    argon2::Version::Version10 => {
+                        data.insert(
+                            KDF_VERSION.to_string(),
+                            VariantDictionaryValue::UInt32(0x10),
+                        );
+                    }
+                    argon2::Version::Version13 => {
+                        data.insert(
+                            KDF_VERSION.to_string(),
+                            VariantDictionaryValue::UInt32(0x13),
+                        );
+                    }
+                }
+            }
+        }
+        VariantDictionary { data }
     }
 }
 
@@ -211,7 +316,7 @@ impl TryFrom<VariantDictionary> for KdfSettings {
     }
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Compression {
     None,
     GZip,
@@ -224,10 +329,17 @@ pub enum CompressionError {
 }
 
 impl Compression {
-    pub(crate) fn get_compression(&self) -> Box<dyn decompress::Decompress> {
+    pub(crate) fn get_compression(&self) -> Box<dyn compression::Decompress> {
         match self {
-            Compression::None => Box::new(decompress::NoCompression),
-            Compression::GZip => Box::new(decompress::GZipCompression),
+            Compression::None => Box::new(compression::NoCompression),
+            Compression::GZip => Box::new(compression::GZipCompression),
+        }
+    }
+
+    pub(crate) fn dump(&self) -> [u8; 4] {
+        match self {
+            Compression::None => [0, 0, 0, 0],
+            Compression::GZip => [1, 0, 0, 0],
         }
     }
 }
