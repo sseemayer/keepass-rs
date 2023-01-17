@@ -63,6 +63,9 @@ pub enum DatabaseKeyError {
     IncorrectKey,
 
     #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error(transparent)]
     Keyfile(#[from] KeyfileError),
 }
 
@@ -70,6 +73,9 @@ pub enum DatabaseKeyError {
 pub enum DatabaseOpenError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Key(#[from] DatabaseKeyError),
 
     #[error(transparent)]
     DatabaseIntegrity(#[from] DatabaseIntegrityError),
@@ -191,89 +197,59 @@ pub enum DatabaseSaveError {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
-}
 
-impl From<DatabaseKeyError> for DatabaseOpenError {
-    fn from(value: DatabaseKeyError) -> Self {
-        value.into()
-    }
-}
+    #[error(transparent)]
+    Key(#[from] DatabaseKeyError),
 
-impl From<DatabaseKeyError> for DatabaseSaveError {
-    fn from(value: DatabaseKeyError) -> Self {
-        value.into()
-    }
-}
-
-impl From<CryptographyError> for DatabaseKeyError {
-    fn from(value: CryptographyError) -> Self {
-        value.into()
-    }
-}
-
-impl From<CryptographyError> for DatabaseSaveError {
-    fn from(value: CryptographyError) -> Self {
-        value.into()
-    }
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
 }
 
 impl From<CryptographyError> for DatabaseOpenError {
-    fn from(value: CryptographyError) -> Self {
-        value.into()
+    fn from(e: CryptographyError) -> Self {
+        DatabaseIntegrityError::from(e).into()
     }
 }
 
 impl From<BlockStreamError> for DatabaseOpenError {
-    fn from(value: BlockStreamError) -> Self {
-        value.into()
-    }
-}
-
-impl From<BlockStreamError> for DatabaseSaveError {
-    fn from(value: BlockStreamError) -> Self {
-        value.into()
+    fn from(e: BlockStreamError) -> Self {
+        DatabaseIntegrityError::from(e).into()
     }
 }
 
 impl From<XmlParseError> for DatabaseOpenError {
-    fn from(value: XmlParseError) -> Self {
-        value.into()
-    }
-}
-
-impl From<OuterCipherSuiteError> for DatabaseOpenError {
-    fn from(value: OuterCipherSuiteError) -> Self {
-        value.into()
+    fn from(e: XmlParseError) -> Self {
+        DatabaseIntegrityError::from(e).into()
     }
 }
 
 impl From<InnerCipherSuiteError> for DatabaseOpenError {
-    fn from(value: InnerCipherSuiteError) -> Self {
-        value.into()
+    fn from(e: InnerCipherSuiteError) -> Self {
+        DatabaseIntegrityError::from(e).into()
+    }
+}
+
+impl From<OuterCipherSuiteError> for DatabaseOpenError {
+    fn from(e: OuterCipherSuiteError) -> Self {
+        DatabaseIntegrityError::from(e).into()
     }
 }
 
 impl From<KdfSettingsError> for DatabaseOpenError {
-    fn from(value: KdfSettingsError) -> Self {
-        value.into()
+    fn from(e: KdfSettingsError) -> Self {
+        DatabaseIntegrityError::from(e).into()
     }
 }
 
 impl From<VariantDictionaryError> for DatabaseOpenError {
-    fn from(value: VariantDictionaryError) -> Self {
-        value.into()
-    }
-}
-
-impl From<VariantDictionaryError> for DatabaseSaveError {
-    fn from(value: VariantDictionaryError) -> Self {
-        value.into()
+    fn from(e: VariantDictionaryError) -> Self {
+        DatabaseIntegrityError::from(e).into()
     }
 }
 
 impl From<CompressionError> for DatabaseOpenError {
-    fn from(value: CompressionError) -> Self {
-        value.into()
+    fn from(e: CompressionError) -> Self {
+        DatabaseIntegrityError::from(e).into()
     }
 }
 

@@ -108,7 +108,7 @@ fn dump_outer_header(header: &KDBX4Header) -> Result<Vec<u8>, DatabaseSaveError>
     write_header_field(&mut header_data, HEADER_MASTER_SEED, &header.master_seed);
 
     let vd: VariantDictionary = header.kdf.dump();
-    write_header_field(&mut header_data, HEADER_KDF_PARAMS, &vd.dump()?);
+    write_header_field(&mut header_data, HEADER_KDF_PARAMS, &vd.dump());
 
     write_header_field(&mut header_data, HEADER_END, &[]);
 
