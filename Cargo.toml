@@ -46,6 +46,9 @@ totp-lite = "2.0.0"
 url = "2.2.2"
 base32 = "0.4.0"
 
+uuid = { version = "1.2", features = ["v4"] }
+getrandom = { version = "0.2" }
+
 # dependencies for command-line utilities
 anyhow = { version = "1", optional = true }
 clap = { version = "4", optional = true, features = ["derive"] }

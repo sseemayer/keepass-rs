@@ -1,7 +1,10 @@
 use crate::{
     config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
-    db::{Database, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node, KEEPASS_LATEST_ID},
+    db::{
+        Database, DatabaseKeyError, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node,
+        KEEPASS_LATEST_ID,
+    },
     hmac_block_stream::BlockStreamError,
     xml_parse, DatabaseIntegrityError,
 };
@@ -258,7 +261,7 @@ pub(crate) fn decrypt_xml(
 
     // Check if we decrypted correctly
     if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
-        return Err(DatabaseOpenError::IncorrectKey);
+        return Err(DatabaseKeyError::IncorrectKey.into());
     }
 
     let mut buf = Vec::new();

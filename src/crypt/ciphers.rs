@@ -1,5 +1,5 @@
 use aes::Aes256;
-use cipher::{block_padding::Pkcs7, generic_array::GenericArray, BlockDecryptMut};
+use cipher::{block_padding::Pkcs7, generic_array::GenericArray, BlockDecryptMut, BlockEncryptMut};
 use salsa20::{
     cipher::{KeyIvInit, StreamCipher},
     Salsa20,
@@ -8,10 +8,16 @@ use salsa20::{
 use crate::crypt::CryptographyError;
 
 pub(crate) trait Cipher {
+    fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError>;
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError>;
+    /// The number of bytes expected by the cipher as an initialization version.
+    fn iv_size() -> u8
+    where
+        Self: Sized;
 }
 
-type Aes256Cbc = cbc::Decryptor<Aes256>;
+type Aes256CbcEncryptor = cbc::Encryptor<Aes256>;
+type Aes256CbcDecryptor = cbc::Decryptor<Aes256>;
 pub(crate) struct AES256Cipher {
     key: Vec<u8>,
     iv: Vec<u8>,
@@ -27,10 +33,18 @@ impl AES256Cipher {
 }
 
 impl Cipher for AES256Cipher {
+    fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
+        let cipher = Aes256CbcEncryptor::new_from_slices(&self.key, &self.iv)?;
+
+        let ciphertext =
+            cipher.encrypt_padded_vec_mut::<twofish::cipher::block_padding::Pkcs7>(plaintext);
+
+        Ok(ciphertext)
+    }
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         let mut out = vec![0; ciphertext.len()];
 
-        let cipher = Aes256Cbc::new_from_slices(&self.key[..], &self.iv[..])?;
+        let cipher = Aes256CbcDecryptor::new_from_slices(&self.key[..], &self.iv[..])?;
 
         let len = cipher
             .decrypt_padded_b2b_mut::<Pkcs7>(ciphertext, &mut out)?
@@ -40,9 +54,16 @@ impl Cipher for AES256Cipher {
 
         Ok(out)
     }
+    fn iv_size() -> u8
+    where
+        Self: Sized,
+    {
+        16
+    }
 }
 
-type TwofishCbc = cbc::Decryptor<twofish::Twofish>;
+type TwofishCbcEncryptor = cbc::Encryptor<twofish::Twofish>;
+type TwofishCbcDecryptor = cbc::Decryptor<twofish::Twofish>;
 pub(crate) struct TwofishCipher {
     key: Vec<u8>,
     iv: Vec<u8>,
@@ -58,13 +79,26 @@ impl TwofishCipher {
 }
 
 impl Cipher for TwofishCipher {
+    fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
+        let cipher = TwofishCbcEncryptor::new_from_slices(&self.key, &self.iv)?;
+
+        let ciphertext =
+            cipher.encrypt_padded_vec_mut::<twofish::cipher::block_padding::Pkcs7>(plaintext);
+
+        Ok(ciphertext)
+    }
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
-        let cipher = TwofishCbc::new_from_slices(&self.key, &self.iv)?;
+        let cipher = TwofishCbcDecryptor::new_from_slices(&self.key, &self.iv)?;
 
         let mut buf = ciphertext.to_vec();
         cipher.decrypt_padded_mut::<twofish::cipher::block_padding::Pkcs7>(&mut buf)?;
-
         Ok(buf)
+    }
+    fn iv_size() -> u8
+    where
+        Self: Sized,
+    {
+        16
     }
 }
 
@@ -84,10 +118,22 @@ impl Salsa20Cipher {
 }
 
 impl Cipher for Salsa20Cipher {
+    fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
+        let mut buffer = Vec::from(plaintext);
+        self.cipher.apply_keystream(&mut buffer);
+        Ok(buffer)
+    }
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         let mut buffer = Vec::from(ciphertext);
         self.cipher.apply_keystream(&mut buffer);
         Ok(buffer)
+    }
+    fn iv_size() -> u8
+    where
+        Self: Sized,
+    {
+        // or 16
+        32
     }
 }
 
@@ -117,10 +163,21 @@ impl ChaCha20Cipher {
 }
 
 impl Cipher for ChaCha20Cipher {
+    fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
+        let mut buffer = Vec::from(plaintext);
+        self.cipher.apply_keystream(&mut buffer);
+        Ok(buffer)
+    }
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         let mut buffer = Vec::from(ciphertext);
         self.cipher.apply_keystream(&mut buffer);
         Ok(buffer)
+    }
+    fn iv_size() -> u8
+    where
+        Self: Sized,
+    {
+        12
     }
 }
 
@@ -131,7 +188,16 @@ impl PlainCipher {
     }
 }
 impl Cipher for PlainCipher {
+    fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
+        Ok(Vec::from(plaintext))
+    }
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         Ok(Vec::from(ciphertext))
+    }
+    fn iv_size() -> u8
+    where
+        Self: Sized,
+    {
+        12
     }
 }

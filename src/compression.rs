@@ -1,13 +1,19 @@
 use flate2::read::GzDecoder;
-use std::io::Read;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::io::{Read, Write};
 
 pub trait Decompress {
+    fn compress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error>;
     fn decompress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error>;
 }
 
 pub struct NoCompression;
 
 impl Decompress for NoCompression {
+    fn compress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+        Ok(in_buffer.to_vec())
+    }
     fn decompress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error> {
         Ok(in_buffer.to_vec())
     }
@@ -16,6 +22,14 @@ impl Decompress for NoCompression {
 pub struct GZipCompression;
 
 impl Decompress for GZipCompression {
+    fn compress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+        let mut res = Vec::new();
+        let mut encoder = GzEncoder::new(&mut res, Compression::default());
+        encoder.write_all(in_buffer)?;
+        encoder.flush()?;
+        encoder.finish()?;
+        Ok(res)
+    }
     fn decompress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error> {
         let mut res = Vec::new();
         let mut decoder = GzDecoder::new(in_buffer);

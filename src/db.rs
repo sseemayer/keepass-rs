@@ -1,8 +1,10 @@
 use secstr::SecStr;
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::{
+    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     config::{CompressionError, InnerCipherSuiteError, KdfSettingsError, OuterCipherSuiteError},
     crypt::{calculate_sha256, CryptographyError},
     hmac_block_stream::BlockStreamError,
@@ -11,7 +13,7 @@ use crate::{
     parse::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
-        kdbx4::{KDBX4Header, KDBX4InnerHeader},
+        kdbx4::{BinaryAttachment, KDBX4Header, KDBX4InnerHeader},
     },
     variant_dictionary::VariantDictionaryError,
     xml_parse::XmlParseError,
@@ -57,18 +59,21 @@ pub struct Database {
 }
 
 #[derive(Debug, Error)]
+pub enum DatabaseKeyError {
+    #[error("Incorrect key")]
+    IncorrectKey,
+
+    #[error(transparent)]
+    Keyfile(#[from] KeyfileError),
+}
+
+#[derive(Debug, Error)]
 pub enum DatabaseOpenError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    Keyfile(#[from] KeyfileError),
-
-    #[error(transparent)]
     DatabaseIntegrity(#[from] DatabaseIntegrityError),
-
-    #[error("Incorrect key")]
-    IncorrectKey,
 }
 
 #[derive(Debug, Error)]
@@ -177,6 +182,42 @@ pub enum DatabaseIntegrityError {
     KdfSettings(#[from] KdfSettingsError),
 }
 
+#[derive(Debug, Error)]
+pub enum DatabaseSaveError {
+    #[error("Saving this database version is not supported")]
+    UnsupportedVersion,
+
+    #[error("Error while generating XML")]
+    Xml(#[from] xml::writer::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
+impl From<DatabaseKeyError> for DatabaseOpenError {
+    fn from(value: DatabaseKeyError) -> Self {
+        value.into()
+    }
+}
+
+impl From<DatabaseKeyError> for DatabaseSaveError {
+    fn from(value: DatabaseKeyError) -> Self {
+        value.into()
+    }
+}
+
+impl From<CryptographyError> for DatabaseKeyError {
+    fn from(value: CryptographyError) -> Self {
+        value.into()
+    }
+}
+
+impl From<CryptographyError> for DatabaseSaveError {
+    fn from(value: CryptographyError) -> Self {
+        value.into()
+    }
+}
+
 impl From<CryptographyError> for DatabaseOpenError {
     fn from(value: CryptographyError) -> Self {
         value.into()
@@ -184,6 +225,12 @@ impl From<CryptographyError> for DatabaseOpenError {
 }
 
 impl From<BlockStreamError> for DatabaseOpenError {
+    fn from(value: BlockStreamError) -> Self {
+        value.into()
+    }
+}
+
+impl From<BlockStreamError> for DatabaseSaveError {
     fn from(value: BlockStreamError) -> Self {
         value.into()
     }
@@ -214,6 +261,12 @@ impl From<KdfSettingsError> for DatabaseOpenError {
 }
 
 impl From<VariantDictionaryError> for DatabaseOpenError {
+    fn from(value: VariantDictionaryError) -> Self {
+        value.into()
+    }
+}
+
+impl From<VariantDictionaryError> for DatabaseSaveError {
     fn from(value: VariantDictionaryError) -> Self {
         value.into()
     }
@@ -258,10 +311,33 @@ impl Database {
         }
     }
 
+    /// Save a database to a std::io::Write
+    pub(crate) fn save(
+        &self,
+        destination: &mut dyn std::io::Write,
+        password: Option<&str>,
+        keyfile: Option<&mut dyn std::io::Read>,
+    ) -> Result<(), DatabaseSaveError> {
+        let key_elements = Database::get_key_elements(password, keyfile)?;
+
+        let data = match self.header {
+            Header::KDB(_) => {
+                return Err(DatabaseSaveError::UnsupportedVersion.into());
+            }
+            Header::KDBX3(_) => {
+                return Err(DatabaseSaveError::UnsupportedVersion.into());
+            }
+            Header::KDBX4(_) => crate::parse::kdbx4::dump(self, &key_elements),
+        }?;
+
+        destination.write_all(&data)?;
+        Ok(())
+    }
+
     pub fn get_key_elements(
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Vec<Vec<u8>>, DatabaseOpenError> {
+    ) -> Result<Vec<Vec<u8>>, DatabaseKeyError> {
         let mut key_elements: Vec<Vec<u8>> = Vec::new();
 
         if let Some(p) = password {
@@ -273,7 +349,7 @@ impl Database {
         }
 
         if key_elements.is_empty() {
-            return Err(DatabaseOpenError::IncorrectKey);
+            return Err(DatabaseKeyError::IncorrectKey);
         }
 
         Ok(key_elements)
@@ -314,6 +390,72 @@ impl Database {
 
         Ok(data)
     }
+
+    pub fn new(
+        outer_cipher_suite: OuterCipherSuite,
+        compression: Compression,
+        inner_cipher_suite: InnerCipherSuite,
+        kdf_setting: KdfSettings,
+        root: Group,
+        binaries: Vec<BinaryAttachment>,
+    ) -> std::result::Result<Database, getrandom::Error> {
+        let mut outer_iv: Vec<u8> = vec![];
+        outer_iv.resize(outer_cipher_suite.get_iv_size().into(), 0);
+        getrandom::getrandom(&mut outer_iv)?;
+
+        let mut inner_random_stream_key: Vec<u8> = vec![];
+        inner_random_stream_key.resize(inner_cipher_suite.get_iv_size().into(), 0);
+        getrandom::getrandom(&mut inner_random_stream_key)?;
+
+        let kdf: KdfSettings;
+        let mut kdf_seed: Vec<u8> = vec![];
+        kdf_seed.resize(kdf_setting.seed_size().into(), 0);
+        getrandom::getrandom(&mut kdf_seed)?;
+
+        let mut master_seed: Vec<u8> = vec![];
+        master_seed.resize(crate::parse::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
+        getrandom::getrandom(&mut master_seed)?;
+
+        match kdf_setting {
+            KdfSettings::Aes { rounds, .. } => {
+                // FIXME obviously this is ugly. We should be able to change
+                // the seed in the first kdf object.
+                kdf = KdfSettings::Aes {
+                    seed: kdf_seed,
+                    rounds,
+                };
+            }
+            KdfSettings::Argon2 { .. } => {
+                kdf = KdfSettings::Argon2 {
+                    salt: kdf_seed,
+                    iterations: 100,
+                    memory: 1000000,
+                    parallelism: 1,
+                    version: argon2::Version::Version13,
+                };
+            }
+        };
+
+        Ok(Database {
+            header: Header::KDBX4(KDBX4Header {
+                version: crate::db::KEEPASS_LATEST_ID,
+                file_major_version: 4,
+                file_minor_version: 3,
+                outer_cipher: outer_cipher_suite,
+                compression,
+                master_seed,
+                outer_iv,
+                kdf,
+            }),
+            inner_header: InnerHeader::KDBX4(KDBX4InnerHeader {
+                inner_random_stream: inner_cipher_suite,
+                inner_random_stream_key,
+                binaries,
+            }),
+            root,
+            meta: Meta::default(),
+        })
+    }
 }
 
 /// Database metadata
@@ -349,6 +491,16 @@ pub struct Group {
 }
 
 impl Group {
+    pub fn new(name: &str) -> Group {
+        Group {
+            children: vec![],
+            name: name.to_string(),
+            uuid: Uuid::new_v4().to_string(),
+            times: HashMap::default(),
+            expires: false,
+        }
+    }
+
     /// Recursively get a Group or Entry reference by specifying a path relative to the current Group
     /// ```
     /// use keepass::{Database, NodeRef};
@@ -539,6 +691,18 @@ pub struct Entry {
     pub expires: bool,
     pub times: HashMap<String, chrono::NaiveDateTime>,
     pub tags: Vec<String>,
+}
+impl Entry {
+    pub fn new() -> Entry {
+        Entry {
+            uuid: Uuid::new_v4().to_string(),
+            fields: HashMap::default(),
+            times: HashMap::default(),
+            expires: false,
+            autotype: None,
+            tags: vec![],
+        }
+    }
 }
 
 impl<'a> Entry {
