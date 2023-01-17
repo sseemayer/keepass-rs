@@ -476,7 +476,7 @@ mod kdbx4_tests {
         root_group.children.push(Node::Entry(Entry::new()));
         root_group.children.push(Node::Entry(Entry::new()));
         root_group.children.push(Node::Entry(Entry::new()));
-        let db = Database::create_database(
+        let db = Database::new(
             outer_cipher_suite,
             compression,
             inner_cipher_suite,
@@ -681,7 +681,7 @@ mod kdbx4_tests {
     pub fn binary_attachments() {
         let mut root_group = Group::new("Root");
         root_group.children.push(Node::Entry(Entry::new()));
-        let db = Database::create_database(
+        let db = Database::new(
             OuterCipherSuite::AES256,
             Compression::GZip,
             InnerCipherSuite::Salsa20,

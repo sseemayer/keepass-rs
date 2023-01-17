@@ -557,7 +557,7 @@ mod xml_tests {
 
         root_group.children.push(Node::Entry(entry));
 
-        let db = Database::create_database(
+        let db = Database::new(
             OuterCipherSuite::AES256,
             Compression::GZip,
             InnerCipherSuite::Salsa20,
@@ -616,7 +616,7 @@ mod xml_tests {
 
         root_group.children.push(Node::Entry(entry));
 
-        let db = Database::create_database(
+        let db = Database::new(
             OuterCipherSuite::AES256,
             Compression::GZip,
             InnerCipherSuite::Salsa20,

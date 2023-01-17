@@ -390,7 +390,7 @@ impl Database {
         Ok(data)
     }
 
-    pub fn create_database(
+    pub fn new(
         outer_cipher_suite: OuterCipherSuite,
         compression: Compression,
         inner_cipher_suite: InnerCipherSuite,
