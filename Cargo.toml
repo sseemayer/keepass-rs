@@ -16,6 +16,7 @@ readme = "README.md"
 [features]
 utilities = ["anyhow", "clap", "rpassword", "serialization"]
 serialization = ["serde", "serde_json", "chrono/serde"]
+totp = ["totp-lite", "url", "base32"]
 
 default = []
 
@@ -28,7 +29,6 @@ flate2 = "1"
 xml-rs = "0.8"
 base64 = "0.21"
 hex-literal = "0.3"
-
 secstr = "0.5"
 chrono = "0.4.23"
 
@@ -56,6 +56,11 @@ rpassword = { version = "7", optional = true }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 
+# dependencies for totp (enabled by "totp" feature)
+totp-lite = { version = "2.0.0", optional = true }
+url = { version = "2.2.2", optional = true }
+base32 = { version = "0.4.0", optional = true }
+
 rustfmt = "0.10.0"
 
 [[bin]]
@@ -69,3 +74,7 @@ required-features = ["utilities"]
 [[bin]]
 name = "kp-show-db"
 required-features = ["utilities"]
+
+[[bin]]
+name = "kp-show-otp"
+required-features = ["utilities", "totp"]

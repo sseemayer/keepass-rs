@@ -86,5 +86,13 @@ Since the tool depends on additional crates, it is not compiled until you specif
 cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database.kdbx
 ```
 
+### `kp-show-otp`
+
+This application can dump the OTP value of a given entry
+
+```ignore
+cargo run --release --features "totp,utilities" --bin kp-show-otp -- tests/resources/test_db_kdbx4_with_totp_sha512_entry.kdbx "sha512 totp"
+```
+
 ## License
 MIT
