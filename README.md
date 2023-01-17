@@ -91,7 +91,7 @@ cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database
 This application can dump the OTP value of a given entry
 
 ```ignore
-cargo run --release --features "utilities" --bin kp-show-otp -- tests/resources/test_db_kdbx4_with_totp_sha512_entry.kdbx "sha512 totp"
+cargo run --release --features "totp,utilities" --bin kp-show-otp -- tests/resources/test_db_kdbx4_with_totp_sha512_entry.kdbx "sha512 totp"
 ```
 
 ## License

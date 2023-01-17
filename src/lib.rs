@@ -11,8 +11,7 @@ pub(crate) mod parse;
 pub(crate) mod variant_dictionary;
 pub(crate) mod xml_parse;
 
-pub mod otp;
-pub(crate) mod parse;
+mod otp;
 
 pub use self::db::*;
 // see https://gist.github.com/msmuenchen/9318327 for file format details

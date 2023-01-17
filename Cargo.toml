@@ -16,6 +16,7 @@ readme = "README.md"
 [features]
 utilities = ["anyhow", "clap", "rpassword", "serialization"]
 serialization = ["serde", "serde_json", "chrono/serde"]
+totp = ["totp-lite", "url", "base32"]
 
 default = []
 
@@ -42,9 +43,6 @@ chacha20 = "0.9"
 cipher = { version = "0.4", features = ["std"] }
 twofish = "0.7"
 cbc = "0.1"
-totp-lite = "2.0.0"
-url = "2.2.2"
-base32 = "0.4.0"
 
 uuid = { version = "1.2", features = ["v4"] }
 getrandom = { version = "0.2" }
@@ -57,6 +55,11 @@ rpassword = { version = "7", optional = true }
 # dependencies for serialization (enabled by "serialization" feature)
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
+
+# dependencies for totp (enabled by "totp" feature)
+totp-lite = { version = "2.0.0", optional = true }
+url = { version = "2.2.2", optional = true }
+base32 = { version = "0.4.0", optional = true }
 
 rustfmt = "0.10.0"
 
@@ -74,4 +77,4 @@ required-features = ["utilities"]
 
 [[bin]]
 name = "kp-show-otp"
-required-features = ["utilities"]
+required-features = ["utilities", "totp"]

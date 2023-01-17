@@ -3,13 +3,14 @@ use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
 use uuid::Uuid;
 
+#[cfg(feature = "totp")]
+use crate::otp::otp::TOTP;
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     config::{CompressionError, InnerCipherSuiteError, KdfSettingsError, OuterCipherSuiteError},
     crypt::{calculate_sha256, CryptographyError},
     hmac_block_stream::BlockStreamError,
     keyfile::KeyfileError,
-    otp::TOTP,
     parse::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
@@ -747,6 +748,7 @@ impl<'a> Entry {
     }
 
     /// Convenience method for getting a TOTP from this entry
+    #[cfg(feature = "totp")]
     pub fn get_otp(&'a self) -> Option<TOTP> {
         let otp = self.get("otp");
         if otp.is_none() {
