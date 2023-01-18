@@ -1,7 +1,6 @@
 use base32;
-use std::borrow::Cow;
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
+use thiserror::Error;
 use totp_lite::{totp_custom, Sha1, Sha256, Sha512};
 use url::Url;
 
@@ -43,9 +42,30 @@ impl std::fmt::Display for OTPCode {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum TOTPError {
+    #[error(transparent)]
+    UrlFormat(#[from] url::ParseError),
+
+    #[error(transparent)]
+    IntFormat(#[from] std::num::ParseIntError),
+
+    #[error("Missing TOTP field: {}", _0)]
+    MissingField(&'static str),
+
+    #[error(transparent)]
+    Time(#[from] SystemTimeError),
+
+    #[error("Base32 decoding error")]
+    Base32,
+
+    #[error("No OTP record found")]
+    NoRecord,
+}
+
 impl TOTP {
-    pub fn parse_from_str(s: &str) -> Option<TOTP> {
-        let parsed = Url::parse(s).unwrap();
+    pub fn parse_from_str(s: &str) -> Result<TOTP, TOTPError> {
+        let parsed = Url::parse(s)?;
         let query_pairs = parsed.query_pairs();
 
         let label: String = parsed.path().trim_start_matches("/").to_string();
@@ -58,10 +78,10 @@ impl TOTP {
         for pair in query_pairs {
             let (k, v) = pair;
             match k.as_ref() {
-                "secret" => secret = Some(v.into_owned()),
-                "issuer" => issuer = Some(v.into_owned()),
-                "period" => period = Some(v.parse::<u64>().unwrap()),
-                "digits" => digits = Some(v.parse::<u32>().unwrap()),
+                "secret" => secret = Some(v.to_string()),
+                "issuer" => issuer = Some(v.to_string()),
+                "period" => period = Some(v.parse::<u64>()?),
+                "digits" => digits = Some(v.parse::<u32>()?),
                 "algorithm" => {
                     algorithm = match v.as_ref() {
                         "SHA1" => TOTPAlgorithm::Sha1,
@@ -74,20 +94,21 @@ impl TOTP {
             }
         }
 
-        Some(TOTP {
+        Ok(TOTP {
             label,
-            secret: base32::decode(base32::Alphabet::RFC4648 { padding: true }, &secret?)?,
-            issuer: issuer.unwrap(),
+            secret: base32::decode(
+                base32::Alphabet::RFC4648 { padding: true },
+                &secret.ok_or(TOTPError::MissingField("secret"))?,
+            )
+            .ok_or(TOTPError::Base32)?,
+            issuer: issuer.ok_or(TOTPError::MissingField("issuer"))?,
             period: period.unwrap_or(DEFAULT_PERIOD),
             digits: digits.unwrap_or(DEFAULT_DIGITS),
             algorithm,
         })
     }
-    pub fn current_value(&self) -> OTPCode {
-        let time: u64 = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+    pub fn current_value(&self) -> Result<OTPCode, SystemTimeError> {
+        let time: u64 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let code = match self.algorithm {
             TOTPAlgorithm::Sha1 => {
@@ -102,34 +123,32 @@ impl TOTP {
         };
 
         let valid_for = Duration::from_secs(self.period - (time % self.period));
-        return OTPCode {
+        return Ok(OTPCode {
             code,
             valid_for,
             period: Duration::from_secs(self.period),
-        };
+        });
     }
 }
 
 #[cfg(test)]
 mod kdbx4_otp_tests {
-    use super::TOTP;
+    use super::{TOTPError, TOTP};
     use crate::*;
-    use std::error;
     use std::{fs::File, path::Path};
 
     #[test]
-    fn kdbx4_entry_totp_default() -> Result<(), Box<dyn error::Error>> {
+    fn kdbx4_entry() -> Result<(), Box<dyn std::error::Error>> {
         // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
         let path = Path::new("tests/resources/test_db_kdbx4_with_totp_entry.kdbx");
         let db = Database::open(&mut File::open(path)?, Some("test"), None)?;
 
+        let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
+
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["this entry has totp"]) {
             assert_eq!(e.get_title(), Some("this entry has totp"));
-            let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
             assert_eq!(e.get_raw_otp_value(), Some(otp_str));
-            assert_eq!(e.get_otp(), TOTP::parse_from_str(otp_str));
-            assert_eq!(e.get_otp().unwrap().current_value().code.len(), 6); // 6 digits
         } else {
             panic!("Expected an entry");
         }
@@ -138,21 +157,37 @@ mod kdbx4_otp_tests {
     }
 
     #[test]
-    fn kdbx4_entry_totp_sha512() -> Result<(), Box<dyn error::Error>> {
-        // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
-        let path = Path::new("tests/resources/test_db_kdbx4_with_totp_sha512_entry.kdbx");
-        let db = Database::open(&mut File::open(path)?, Some("test"), None)?;
+    fn totp_default() -> Result<(), TOTPError> {
+        let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
-        // get an entry on the root node
-        if let Some(NodeRef::Entry(e)) = db.root.get(&["sha512 totp"]) {
-            assert_eq!(e.get_title(), Some("sha512 totp"));
-            let otp_str = "otpauth://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA512";
-            assert_eq!(e.get_raw_otp_value(), Some(otp_str));
-            assert_eq!(e.get_otp(), TOTP::parse_from_str(otp_str));
-            assert_eq!(e.get_otp().unwrap().current_value().code.len(), 6); // 6 digits
-        } else {
-            panic!("Expected an entry");
-        }
+        let expected = TOTP {
+            label: "KeePassXC:none".to_string(),
+            secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
+            issuer: "KeePassXC".to_string(),
+            period: 30,
+            digits: 6,
+            algorithm: otp::TOTPAlgorithm::Sha1,
+        };
+
+        assert_eq!(TOTP::parse_from_str(otp_str)?, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn totp_sha512() -> Result<(), TOTPError> {
+        let otp_str = "otpauth://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA512";
+
+        let expected = TOTP {
+            label: "sha512%20totp:none".to_string(),
+            secret: b"123456".to_vec(),
+            issuer: "sha512 totp".to_string(),
+            period: 30,
+            digits: 6,
+            algorithm: otp::TOTPAlgorithm::Sha512,
+        };
+
+        assert_eq!(TOTP::parse_from_str(otp_str)?, expected);
 
         Ok(())
     }
