@@ -82,4 +82,23 @@ mod tests {
 
         Ok(())
     }
+    #[test]
+    fn kdbx4_entry_bad_password() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
+        let db = Database::open(
+            &mut File::open(path)?,
+            Some("this password is not correct"),
+            None,
+        );
+
+        assert!(db.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn databasekeyerror_into_databaseopenerror() -> Result<(), DatabaseOpenError> {
+        let _: DatabaseOpenError = DatabaseKeyError::IncorrectKey.into();
+        Ok(())
+    }
 }

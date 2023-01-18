@@ -78,7 +78,7 @@ impl VariantDictionary {
         Ok(VariantDictionary { data })
     }
 
-    pub(crate) fn dump(&self) -> Result<Vec<u8>, VariantDictionaryError> {
+    pub(crate) fn dump(&self) -> Vec<u8> {
         let mut data: Vec<u8> = vec![];
 
         data.resize(2, 0);
@@ -141,7 +141,7 @@ impl VariantDictionary {
             data.extend_from_slice(&field_buffer);
         }
 
-        Ok(data)
+        data
     }
 
     pub(crate) fn get<T>(&self, key: &str) -> Result<T, VariantDictionaryError>

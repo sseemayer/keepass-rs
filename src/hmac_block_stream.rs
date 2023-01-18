@@ -61,7 +61,7 @@ pub(crate) fn read_hmac_block_stream(
 pub(crate) fn write_hmac_block_stream(
     data: &[u8],
     key: &GenericArray<u8, U64>,
-) -> Result<Vec<u8>, BlockStreamError> {
+) -> Result<Vec<u8>, CryptographyError> {
     let mut out = Vec::new();
 
     let mut pos = 0;
