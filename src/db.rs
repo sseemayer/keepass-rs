@@ -4,7 +4,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 #[cfg(feature = "totp")]
-use crate::otp::otp::TOTP;
+use crate::otp::TOTP;
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     config::{CompressionError, InnerCipherSuiteError, KdfSettingsError, OuterCipherSuiteError},
