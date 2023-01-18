@@ -732,8 +732,7 @@ impl<'a> Entry {
     /// Convenience method for getting a TOTP from this entry
     #[cfg(feature = "totp")]
     pub fn get_otp(&'a self) -> Result<TOTP, TOTPError> {
-        let otp = self.get("otp").ok_or(TOTPError::NoRecord)?;
-        TOTP::parse_from_str(otp)
+        self.get_raw_otp_value().ok_or(TOTPError::NoRecord)?.parse()
     }
 
     /// Convenience method for getting the raw value of the 'otp' field

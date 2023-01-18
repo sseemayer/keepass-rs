@@ -14,6 +14,19 @@ pub enum TOTPAlgorithm {
     Sha512,
 }
 
+impl std::str::FromStr for TOTPAlgorithm {
+    type Err = TOTPError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "SHA1" => Ok(TOTPAlgorithm::Sha1),
+            "SHA256" => Ok(TOTPAlgorithm::Sha256),
+            "SHA512" => Ok(TOTPAlgorithm::Sha512),
+            _ => Err(TOTPError::BadAlgorithm(s.to_string())),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct TOTP {
     label: String,
@@ -69,8 +82,10 @@ pub enum TOTPError {
     BadAlgorithm(String),
 }
 
-impl TOTP {
-    pub fn parse_from_str(s: &str) -> Result<TOTP, TOTPError> {
+impl std::str::FromStr for TOTP {
+    type Err = TOTPError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parsed = Url::parse(s)?;
 
         if parsed.scheme() != "otpauth" {
@@ -81,8 +96,8 @@ impl TOTP {
         let label: String = parsed.path().trim_start_matches("/").to_string();
         let mut secret: Option<String> = None;
         let mut issuer: Option<String> = None;
-        let mut period: Option<u64> = None;
-        let mut digits: Option<u32> = None;
+        let mut period: u64 = DEFAULT_PERIOD;
+        let mut digits: u32 = DEFAULT_DIGITS;
         let mut algorithm: TOTPAlgorithm = TOTPAlgorithm::Sha1;
 
         for pair in query_pairs {
@@ -90,36 +105,33 @@ impl TOTP {
             match k.as_ref() {
                 "secret" => secret = Some(v.to_string()),
                 "issuer" => issuer = Some(v.to_string()),
-                "period" => period = Some(v.parse::<u64>()?),
-                "digits" => digits = Some(v.parse::<u32>()?),
-                "algorithm" => {
-                    algorithm = match v.as_ref() {
-                        "SHA1" => TOTPAlgorithm::Sha1,
-                        "SHA256" => TOTPAlgorithm::Sha256,
-                        "SHA512" => TOTPAlgorithm::Sha512,
-                        _ => return Err(TOTPError::BadAlgorithm(v.to_string())),
-                    }
-                }
+                "period" => period = v.parse()?,
+                "digits" => digits = v.parse()?,
+                "algorithm" => algorithm = v.parse()?,
                 _ => {}
             }
         }
 
+        let secret = secret.ok_or(TOTPError::MissingField("secret"))?;
+        let issuer = issuer.ok_or(TOTPError::MissingField("issuer"))?;
+
+        let secret = base32::decode(base32::Alphabet::RFC4648 { padding: true }, &secret)
+            .ok_or(TOTPError::Base32)?;
+
         Ok(TOTP {
             label,
-            secret: base32::decode(
-                base32::Alphabet::RFC4648 { padding: true },
-                &secret.ok_or(TOTPError::MissingField("secret"))?,
-            )
-            .ok_or(TOTPError::Base32)?,
-            issuer: issuer.ok_or(TOTPError::MissingField("issuer"))?,
-            period: period.unwrap_or(DEFAULT_PERIOD),
-            digits: digits.unwrap_or(DEFAULT_DIGITS),
+            secret,
+            issuer,
+            period,
+            digits,
             algorithm,
         })
     }
-    pub fn current_value(&self) -> Result<OTPCode, SystemTimeError> {
-        let time: u64 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+}
 
+impl TOTP {
+    /// Get the one-time code for a specific unix timestamp
+    pub fn value_at(&self, time: u64) -> OTPCode {
         let code = match self.algorithm {
             TOTPAlgorithm::Sha1 => {
                 totp_custom::<Sha1>(self.period, self.digits, &self.secret, time)
@@ -133,11 +145,18 @@ impl TOTP {
         };
 
         let valid_for = Duration::from_secs(self.period - (time % self.period));
-        return Ok(OTPCode {
+
+        OTPCode {
             code,
             valid_for,
             period: Duration::from_secs(self.period),
-        });
+        }
+    }
+
+    /// Get the current one-time code
+    pub fn value_now(&self) -> Result<OTPCode, SystemTimeError> {
+        let time: u64 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        Ok(self.value_at(time))
     }
 }
 
@@ -179,7 +198,7 @@ mod kdbx4_otp_tests {
             algorithm: otp::TOTPAlgorithm::Sha1,
         };
 
-        assert_eq!(TOTP::parse_from_str(otp_str)?, expected);
+        assert_eq!(otp_str.parse::<TOTP>()?, expected);
 
         Ok(())
     }
@@ -197,7 +216,7 @@ mod kdbx4_otp_tests {
             algorithm: otp::TOTPAlgorithm::Sha512,
         };
 
-        assert_eq!(TOTP::parse_from_str(otp_str)?, expected);
+        assert_eq!(otp_str.parse::<TOTP>()?, expected);
 
         Ok(())
     }
@@ -205,22 +224,22 @@ mod kdbx4_otp_tests {
     #[test]
     fn totp_bad() {
         assert!(matches!(
-            TOTP::parse_from_str("not a totp string"),
+            "not a totp string".parse::<TOTP>(),
             Err(TOTPError::UrlFormat(_))
         ));
 
         assert!(matches!(
-            TOTP::parse_from_str("http://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA512"),
+            "http://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA512".parse::<TOTP>(),
             Err(TOTPError::BadScheme(_))
         ));
 
         assert!(matches!(
-            TOTP::parse_from_str("otpauth://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA123"),
+            "otpauth://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA123".parse::<TOTP>(),
             Err(TOTPError::BadAlgorithm(_))
         ));
 
         assert!(matches!(
-            TOTP::parse_from_str("otpauth://missing_fields"),
+            "otpauth://missing_fields".parse::<TOTP>(),
             Err(TOTPError::MissingField("secret"))
         ));
     }
