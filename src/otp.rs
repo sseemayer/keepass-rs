@@ -61,11 +61,21 @@ pub enum TOTPError {
 
     #[error("No OTP record found")]
     NoRecord,
+
+    #[error("Bad URL scheme: '{}'", _0)]
+    BadScheme(String),
+
+    #[error("Bad hash algorithm: '{}'", _0)]
+    BadAlgorithm(String),
 }
 
 impl TOTP {
     pub fn parse_from_str(s: &str) -> Result<TOTP, TOTPError> {
         let parsed = Url::parse(s)?;
+
+        if parsed.scheme() != "otpauth" {
+            return Err(TOTPError::BadScheme(parsed.scheme().to_string()));
+        }
         let query_pairs = parsed.query_pairs();
 
         let label: String = parsed.path().trim_start_matches("/").to_string();
@@ -87,7 +97,7 @@ impl TOTP {
                         "SHA1" => TOTPAlgorithm::Sha1,
                         "SHA256" => TOTPAlgorithm::Sha256,
                         "SHA512" => TOTPAlgorithm::Sha512,
-                        _ => panic!("Received an unsupported algorithm for TOTP"),
+                        _ => return Err(TOTPError::BadAlgorithm(v.to_string())),
                     }
                 }
                 _ => {}
@@ -190,5 +200,28 @@ mod kdbx4_otp_tests {
         assert_eq!(TOTP::parse_from_str(otp_str)?, expected);
 
         Ok(())
+    }
+
+    #[test]
+    fn totp_bad() {
+        assert!(matches!(
+            TOTP::parse_from_str("not a totp string"),
+            Err(TOTPError::UrlFormat(_))
+        ));
+
+        assert!(matches!(
+            TOTP::parse_from_str("http://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA512"),
+            Err(TOTPError::BadScheme(_))
+        ));
+
+        assert!(matches!(
+            TOTP::parse_from_str("otpauth://totp/sha512%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha512%20totp&algorithm=SHA123"),
+            Err(TOTPError::BadAlgorithm(_))
+        ));
+
+        assert!(matches!(
+            TOTP::parse_from_str("otpauth://missing_fields"),
+            Err(TOTPError::MissingField("secret"))
+        ));
     }
 }
