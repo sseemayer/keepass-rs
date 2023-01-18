@@ -57,21 +57,20 @@ impl TOTP {
 
         for pair in query_pairs {
             let (k, v) = pair;
-            match k {
-                Cow::Borrowed("secret") => secret = Some(v.into_owned()),
-                Cow::Borrowed("issuer") => issuer = Some(v.into_owned()),
-                Cow::Borrowed("period") => period = Some(v.parse::<u64>().unwrap()),
-                Cow::Borrowed("digits") => digits = Some(v.parse::<u32>().unwrap()),
-                Cow::Borrowed("algorithm") => {
-                    algorithm = match v {
-                        Cow::Borrowed("SHA1") => TOTPAlgorithm::Sha1,
-                        Cow::Borrowed("SHA256") => TOTPAlgorithm::Sha256,
-                        Cow::Borrowed("SHA512") => TOTPAlgorithm::Sha512,
+            match k.as_ref() {
+                "secret" => secret = Some(v.into_owned()),
+                "issuer" => issuer = Some(v.into_owned()),
+                "period" => period = Some(v.parse::<u64>().unwrap()),
+                "digits" => digits = Some(v.parse::<u32>().unwrap()),
+                "algorithm" => {
+                    algorithm = match v.as_ref() {
+                        "SHA1" => TOTPAlgorithm::Sha1,
+                        "SHA256" => TOTPAlgorithm::Sha256,
+                        "SHA512" => TOTPAlgorithm::Sha512,
                         _ => panic!("Received an unsupported algorithm for TOTP"),
                     }
                 }
-                Cow::Borrowed(_) => (),
-                Cow::Owned(_) => panic!("Somehow got an owned value"),
+                _ => {}
             }
         }
 
