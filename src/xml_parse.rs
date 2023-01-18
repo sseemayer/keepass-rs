@@ -564,7 +564,7 @@ mod xml_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 1000,
+                memory: 65536,
                 parallelism: 1,
                 version: argon2::Version::Version13,
             },
@@ -623,7 +623,7 @@ mod xml_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 1000,
+                memory: 65536,
                 parallelism: 1,
                 version: argon2::Version::Version13,
             },

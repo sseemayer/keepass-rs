@@ -393,22 +393,28 @@ impl Database {
         master_seed.resize(crate::parse::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
         getrandom::getrandom(&mut master_seed)?;
 
+        // FIXME obviously this is ugly. We should be able to change
+        // the seed without destructuring all the kdf enum types.
         match kdf_setting {
             KdfSettings::Aes { rounds, .. } => {
-                // FIXME obviously this is ugly. We should be able to change
-                // the seed in the first kdf object.
                 kdf = KdfSettings::Aes {
                     seed: kdf_seed,
                     rounds,
                 };
             }
-            KdfSettings::Argon2 { .. } => {
+            KdfSettings::Argon2 {
+                iterations,
+                memory,
+                parallelism,
+                version,
+                ..
+            } => {
                 kdf = KdfSettings::Argon2 {
                     salt: kdf_seed,
-                    iterations: 100,
-                    memory: 1000000,
-                    parallelism: 1,
-                    version: argon2::Version::Version13,
+                    iterations,
+                    memory,
+                    parallelism,
+                    version,
                 };
             }
         };

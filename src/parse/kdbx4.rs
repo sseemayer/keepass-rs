@@ -525,7 +525,7 @@ mod kdbx4_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 134217728,
+                memory: 65536,
                 parallelism: 8,
                 version: argon2::Version::Version13,
             },
@@ -541,7 +541,7 @@ mod kdbx4_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 134217728,
+                memory: 65536,
                 parallelism: 8,
                 version: argon2::Version::Version13,
             },
@@ -569,8 +569,8 @@ mod kdbx4_tests {
             InnerCipherSuite::Salsa20,
             KdfSettings::Argon2 {
                 salt: vec![],
-                iterations: 1000,
-                memory: 1000,
+                iterations: 100,
+                memory: 65536,
                 parallelism: 1,
                 version: argon2::Version::Version13,
             },
@@ -612,7 +612,7 @@ mod kdbx4_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 134217728,
+                memory: 65536,
                 parallelism: 8,
                 version: argon2::Version::Version13,
             },
@@ -628,7 +628,7 @@ mod kdbx4_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 134217728,
+                memory: 65536,
                 parallelism: 8,
                 version: argon2::Version::Version13,
             },
@@ -670,7 +670,7 @@ mod kdbx4_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 134217728,
+                memory: 65536,
                 parallelism: 8,
                 version: argon2::Version::Version13,
             },
@@ -688,7 +688,7 @@ mod kdbx4_tests {
             KdfSettings::Argon2 {
                 salt: vec![],
                 iterations: 1000,
-                memory: 1000,
+                memory: 65536,
                 parallelism: 1,
                 version: argon2::Version::Version13,
             },
