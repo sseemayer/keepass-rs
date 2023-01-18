@@ -222,6 +222,20 @@ mod kdbx4_otp_tests {
     }
 
     #[test]
+    fn totp_value() {
+        let totp = TOTP {
+            label: "KeePassXC:none".to_string(),
+            secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
+            issuer: "KeePassXC".to_string(),
+            period: 30,
+            digits: 6,
+            algorithm: otp::TOTPAlgorithm::Sha1,
+        };
+
+        assert_eq!(totp.value_at(1234).code, "806863")
+    }
+
+    #[test]
     fn totp_bad() {
         assert!(matches!(
             "not a totp string".parse::<TOTP>(),
