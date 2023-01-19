@@ -44,7 +44,7 @@ pub fn main() -> Result<()> {
 
     if let Some(NodeRef::Entry(e)) = db.root.get(&[&args.entry]) {
         let totp = e.get_otp().unwrap();
-        println!("Token is {}", totp.current_value());
+        println!("Token is {}", totp.value_now().unwrap().code);
         Ok(())
     } else {
         panic!("Could not find entry with provided name")
