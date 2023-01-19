@@ -4,7 +4,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 #[cfg(feature = "totp")]
-use crate::otp::TOTP;
+use crate::otp::{TOTPError, TOTP};
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     config::{CompressionError, InnerCipherSuiteError, KdfSettingsError, OuterCipherSuiteError},
@@ -731,12 +731,8 @@ impl<'a> Entry {
 
     /// Convenience method for getting a TOTP from this entry
     #[cfg(feature = "totp")]
-    pub fn get_otp(&'a self) -> Option<TOTP> {
-        let otp = self.get("otp");
-        if otp.is_none() {
-            return None;
-        }
-        return TOTP::parse_from_str(otp.unwrap());
+    pub fn get_otp(&'a self) -> Result<TOTP, TOTPError> {
+        self.get_raw_otp_value().ok_or(TOTPError::NoRecord)?.parse()
     }
 
     /// Convenience method for getting the raw value of the 'otp' field
