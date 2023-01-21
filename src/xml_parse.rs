@@ -1,11 +1,13 @@
 use crate::crypt::{ciphers::Cipher, CryptographyError};
+use crate::xml_db::dump::DumpXml;
+use crate::xml_db::parse::parse_xml_timestamp;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use secstr::SecStr;
 use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
-use xml::writer::{EmitterConfig, EventWriter, XmlEvent as WriterEvent};
+use xml::writer::EmitterConfig;
 
 use super::db::{AutoType, AutoTypeAssociation, Database, Entry, Group, Meta, Value};
 
@@ -24,29 +26,6 @@ enum Node {
     RecycleBinUUID(String),
 }
 
-/// In KDBX4, timestamps are stored as seconds, Base64 encoded, since 0001-01-01 00:00:00.
-/// This function returns the epoch baseline used by KDBX for date serialization.
-fn get_epoch_baseline() -> chrono::NaiveDateTime {
-    chrono::NaiveDateTime::parse_from_str("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S").unwrap()
-}
-
-fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime, XmlParseError> {
-    match chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%SZ") {
-        // Prior to KDBX4 file format, timestamps were stored as ISO 8601 strings
-        Ok(ndt) => Ok(ndt),
-        // If we don't have a valid ISO 8601 string, assume we have found a Base64 encoded int.
-        _ => {
-            let v = base64_engine::STANDARD.decode(t)?;
-
-            // Cast the decoded base64 Vec into the array expected by i64::from_le_bytes
-            let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-            a.copy_from_slice(&v[0..8]);
-            let ndt = get_epoch_baseline() + chrono::Duration::seconds(i64::from_le_bytes(a));
-            Ok(ndt)
-        }
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum XmlParseError {
     #[error(transparent)]
@@ -59,12 +38,6 @@ pub enum XmlParseError {
     Cryptography(#[from] CryptographyError),
 }
 
-fn dump_xml_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
-    let timestamp = timestamp.timestamp() - get_epoch_baseline().timestamp();
-    let timestamp_bytes = i64::to_le_bytes(timestamp);
-    base64_engine::STANDARD.encode(timestamp_bytes)
-}
-
 pub(crate) fn dump_database(
     db: &Database,
     inner_cipher: &mut dyn Cipher,
@@ -74,159 +47,9 @@ pub(crate) fn dump_database(
         .perform_indent(false)
         .create_writer(&mut data);
 
-    writer.write(WriterEvent::start_element("KeePassFile"))?;
+    db.dump_xml(&mut writer, inner_cipher)?;
 
-    writer.write(WriterEvent::start_element("Meta"))?;
-
-    writer.write(WriterEvent::start_element("Generator"))?;
-    writer.write(WriterEvent::characters("keepass-rs"))?;
-    writer.write(WriterEvent::end_element())?;
-
-    // TODO DatabaseName
-    // TODO DatabaseNameChanged
-    // TODO DatabaseDescription
-    // TODO DatabaseDescriptionChanged
-    // TODO DefaultUserName
-    // TODO DefaultUserNameChanged
-    // TODO DeletedObjects
-    // TODO MaintenanceHistoryDays
-    // TODO Color
-    // TODO MasterKeyChanged
-    // TODO MasterKeyChangeRec
-    // TODO MasterKeyChangeForce
-    // TODO MemoryProtection
-    // TODO CustomIcons
-    // TODO RecycleBinEnabled
-    // TODO RecycleBinUUID
-    // TODO RecycleBinChanged
-    // TODO EntryTemplatesGroup
-    // TODO EntryTemplatesGroupChanged
-    // TODO LastSelectedGroup
-    // TODO LastTopVisibleGroup
-    // TODO HistoryMaxItems
-    // TODO HistoryMaxSize
-    // TODO SettingsChanged
-    // TODO CustomData
-
-    writer.write(WriterEvent::end_element())?;
-
-    writer.write(WriterEvent::start_element("Root"))?;
-    dump_xml_group(&mut writer, &db.root, inner_cipher)?;
-    writer.write(WriterEvent::end_element())?;
-
-    writer.write(WriterEvent::end_element())?;
     Ok(data)
-}
-
-pub(crate) fn dump_xml_group<E: std::io::Write>(
-    writer: &mut EventWriter<E>,
-    group: &Group,
-    inner_cipher: &mut dyn Cipher,
-) -> std::result::Result<(), xml::writer::Error> {
-    writer.write(WriterEvent::start_element("Group"))?;
-
-    // TODO IconId
-    // TODO Notes
-
-    writer.write(WriterEvent::start_element("Name"))?;
-    writer.write(WriterEvent::characters(&group.name))?;
-    writer.write(WriterEvent::end_element())?;
-
-    writer.write(WriterEvent::start_element("UUID"))?;
-    writer.write(WriterEvent::characters(&group.uuid))?;
-    writer.write(WriterEvent::end_element())?;
-
-    for child in &group.children {
-        match child {
-            crate::Node::Entry(e) => dump_xml_entry(writer, e, inner_cipher)?,
-            crate::Node::Group(g) => dump_xml_group(writer, g, inner_cipher)?,
-        };
-    }
-    writer.write(WriterEvent::end_element())?;
-
-    Ok(())
-}
-
-pub(crate) fn dump_xml_entry<E: std::io::Write>(
-    writer: &mut EventWriter<E>,
-    entry: &Entry,
-    inner_cipher: &mut dyn Cipher,
-) -> std::result::Result<(), xml::writer::Error> {
-    writer.write(WriterEvent::start_element("Entry"))?;
-
-    // TODO IconId
-    // TODO Times
-    // TODO AutoType
-    // TODO History
-    // TODO ForegroundColor
-    // TODO BackgroundColor
-    //
-    writer.write(WriterEvent::start_element("UUID"))?;
-    writer.write(WriterEvent::characters(&entry.uuid))?;
-    writer.write(WriterEvent::end_element())?;
-
-    writer.write(WriterEvent::start_element("Expires"))?;
-    if entry.expires {
-        writer.write(WriterEvent::characters("True"))?;
-    } else {
-        writer.write(WriterEvent::characters("False"))?;
-    }
-    writer.write(WriterEvent::end_element())?;
-
-    writer.write(WriterEvent::start_element("Tags"))?;
-    writer.write(WriterEvent::characters(&entry.tags.join(";")))?;
-    writer.write(WriterEvent::end_element())?;
-
-    writer.write(WriterEvent::start_element("Times"))?;
-    for time_name in entry.times.keys() {
-        let time = entry.times.get(time_name).unwrap();
-        writer.write(WriterEvent::start_element(time_name.as_ref()))?;
-        writer.write(WriterEvent::characters(&dump_xml_timestamp(time)))?;
-        writer.write(WriterEvent::end_element())?;
-    }
-    writer.write(WriterEvent::end_element())?;
-
-    for field_name in entry.fields.keys() {
-        let mut is_protected = true;
-        let field_value: String = match entry.fields.get(field_name).unwrap() {
-            Value::Bytes(b) => {
-                is_protected = false;
-                std::str::from_utf8(b).unwrap().to_string()
-            }
-            Value::Unprotected(s) => {
-                is_protected = false;
-                s.to_string()
-            }
-            Value::Protected(_) => entry.get(field_name).unwrap().to_string(),
-        };
-        writer.write(WriterEvent::start_element("String"))?;
-
-        writer.write(WriterEvent::start_element("Key"))?;
-        writer.write(WriterEvent::characters(&field_name))?;
-        writer.write(WriterEvent::end_element())?;
-
-        let mut start_element_builder = WriterEvent::start_element("Value");
-        if is_protected {
-            start_element_builder = start_element_builder.attr("Protected", "True");
-        }
-        writer.write(start_element_builder)?;
-
-        if is_protected {
-            let encrypted_value = inner_cipher.encrypt(field_value.as_bytes()).unwrap();
-
-            let protected_value = base64_engine::STANDARD.encode(&encrypted_value);
-            writer.write(WriterEvent::characters(&protected_value))?;
-        } else {
-            writer.write(WriterEvent::characters(&field_value))?;
-        }
-        writer.write(WriterEvent::end_element())?;
-
-        writer.write(WriterEvent::end_element())?;
-    }
-
-    writer.write(WriterEvent::end_element())?;
-
-    Ok(())
 }
 
 pub(crate) fn parse_xml_block(
