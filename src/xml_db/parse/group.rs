@@ -40,6 +40,10 @@ impl FromXml for Group {
                         // TODO
                         // out.icon_id = icon_id;
                     }
+                    "CustomIconUUID" => {
+                        let icon_id = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        // TODO
+                    }
                     "Times" => {
                         out.times = Times::from_xml(iterator, inner_cipher)?;
                     }

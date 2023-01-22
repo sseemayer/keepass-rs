@@ -4,8 +4,8 @@ use chrono::NaiveDateTime;
 use crate::{
     compression::{Decompress, GZipCompression},
     parse::kdbx4::BinaryAttachment,
-    xml_db::parse::{FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
-    Meta, Value,
+    xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
+    Meta,
 };
 
 impl FromXml for Meta {
@@ -102,8 +102,7 @@ impl FromXml for Meta {
                         // TODO
                     }
                     "CustomIcons" => {
-                        let value =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                        let value = CustomIcons::from_xml(iterator, inner_cipher)?;
                         // TODO
                     }
                     "RecycleBinEnabled" => {
@@ -247,7 +246,7 @@ impl FromXml for MemoryProtection {
                     }
                     _ => {
                         return Err(XmlParseError::BadEvent {
-                            expected: "valid CustomData child",
+                            expected: "valid MemoryProtection child",
                             event: event.clone(),
                         })
                     }
@@ -275,131 +274,6 @@ impl FromXml for MemoryProtection {
 }
 
 #[derive(Debug, Default)]
-struct CustomData {
-    items: Vec<CustomDataItem>,
-}
-
-impl FromXml for CustomData {
-    type Parses = Self;
-
-    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
-        iterator: &mut std::iter::Peekable<I>,
-        inner_cipher: &mut dyn crate::crypt::ciphers::Cipher,
-    ) -> Result<Self::Parses, XmlParseError> {
-        let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "CustomData") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Open CustomData tag",
-                event: open_tag,
-            });
-        }
-
-        let mut out = Self::default();
-
-        while let Some(event) = iterator.peek() {
-            match event {
-                SimpleXmlEvent::Start(name, _) => match &name[..] {
-                    "Item" => {
-                        let item = CustomDataItem::from_xml(iterator, inner_cipher)?;
-                        out.items.push(item);
-                    }
-                    _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid CustomData child",
-                            event: event.clone(),
-                        })
-                    }
-                },
-                SimpleXmlEvent::End(name) if name == "CustomData" => break,
-                _ => {
-                    return Err(XmlParseError::BadEvent {
-                        expected: "start tag or close CustomData",
-                        event: event.clone(),
-                    })
-                }
-            }
-        }
-
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "CustomData") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close CustomData tag",
-                event: close_tag,
-            });
-        }
-
-        Ok(out)
-    }
-}
-
-#[derive(Debug, Default)]
-struct CustomDataItem {
-    key: String,
-    value: Option<Value>,
-    last_modification_time: Option<NaiveDateTime>,
-}
-
-impl FromXml for CustomDataItem {
-    type Parses = Self;
-
-    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
-        iterator: &mut std::iter::Peekable<I>,
-        inner_cipher: &mut dyn crate::crypt::ciphers::Cipher,
-    ) -> Result<Self::Parses, XmlParseError> {
-        let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "Item") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Open Item tag",
-                event: open_tag,
-            });
-        }
-
-        let mut out = Self::default();
-
-        while let Some(event) = iterator.peek() {
-            match event {
-                SimpleXmlEvent::Start(name, _) => match &name[..] {
-                    "Key" => {
-                        out.key = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
-                    }
-                    "Value" => {
-                        out.value = Some(Value::from_xml(iterator, inner_cipher)?);
-                    }
-                    "LastModificationTime" => {
-                        out.last_modification_time =
-                            SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
-                                .value;
-                    }
-                    _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid Item child",
-                            event: event.clone(),
-                        })
-                    }
-                },
-                SimpleXmlEvent::End(name) if name == "Item" => break,
-                _ => {
-                    return Err(XmlParseError::BadEvent {
-                        expected: "start tag or close Item",
-                        event: event.clone(),
-                    })
-                }
-            }
-        }
-
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Item") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Item tag",
-                event: close_tag,
-            });
-        }
-
-        Ok(out)
-    }
-}
-
-#[derive(Debug, Default)]
 struct BinaryAttachments {
     binaries: Vec<BinaryAttachment>,
 }
@@ -418,8 +292,6 @@ impl FromXml for BinaryAttachments {
                 event: open_tag,
             });
         }
-
-        dbg!("**********");
 
         let mut out = Self::default();
 
@@ -504,6 +376,127 @@ impl FromXml for BinaryAttachment {
                 event: close_tag,
             });
         }
+        Ok(out)
+    }
+}
+
+#[derive(Debug, Default)]
+struct CustomIcons {
+    icons: Vec<Icon>,
+}
+
+impl FromXml for CustomIcons {
+    type Parses = Self;
+
+    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
+        iterator: &mut std::iter::Peekable<I>,
+        inner_cipher: &mut dyn crate::crypt::ciphers::Cipher,
+    ) -> Result<Self::Parses, XmlParseError> {
+        let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "CustomIcons") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Open CustomIcons tag",
+                event: open_tag,
+            });
+        }
+
+        let mut out = Self::default();
+
+        while let Some(event) = iterator.peek() {
+            match event {
+                SimpleXmlEvent::Start(name, _) => match &name[..] {
+                    "Icon" => {
+                        let icon = Icon::from_xml(iterator, inner_cipher)?;
+                        out.icons.push(icon);
+                    }
+                    _ => {
+                        return Err(XmlParseError::BadEvent {
+                            expected: "valid CustomIcons child",
+                            event: event.clone(),
+                        })
+                    }
+                },
+                SimpleXmlEvent::End(name) if name == "CustomIcons" => break,
+                _ => {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "start tag or close CustomIcons",
+                        event: event.clone(),
+                    })
+                }
+            }
+        }
+
+        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "CustomIcons") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Close CustomIcons tag",
+                event: close_tag,
+            });
+        }
+
+        Ok(out)
+    }
+}
+
+#[derive(Debug, Default)]
+struct Icon {
+    uuid: String,
+    data: Vec<u8>,
+}
+
+impl FromXml for Icon {
+    type Parses = Self;
+
+    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
+        iterator: &mut std::iter::Peekable<I>,
+        inner_cipher: &mut dyn crate::crypt::ciphers::Cipher,
+    ) -> Result<Self::Parses, XmlParseError> {
+        let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "Icon") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Open Icon tag",
+                event: open_tag,
+            });
+        }
+
+        let mut out = Self::default();
+
+        while let Some(event) = iterator.peek() {
+            match event {
+                SimpleXmlEvent::Start(name, _) => match &name[..] {
+                    "UUID" => {
+                        out.uuid = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                    }
+                    "Data" => {
+                        let data = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        let buf = base64_engine::STANDARD.decode(&data)?;
+                        out.data = buf;
+                    }
+                    _ => {
+                        return Err(XmlParseError::BadEvent {
+                            expected: "valid Icon child",
+                            event: event.clone(),
+                        })
+                    }
+                },
+                SimpleXmlEvent::End(name) if name == "Icon" => break,
+                _ => {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "start tag or close Icon",
+                        event: event.clone(),
+                    })
+                }
+            }
+        }
+
+        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Icon") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Close Icon tag",
+                event: close_tag,
+            });
+        }
+
         Ok(out)
     }
 }

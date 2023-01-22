@@ -5,7 +5,7 @@ use secstr::SecStr;
 
 use crate::{
     crypt::ciphers::Cipher,
-    xml_db::parse::{FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
+    xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
     AutoType, AutoTypeAssociation, Entry, Times, Value,
 };
 
@@ -49,6 +49,10 @@ impl FromXml for Entry {
                             out.fields.insert(field.key, value);
                         }
                     }
+                    "CustomData" => {
+                        let value = CustomData::from_xml(iterator, inner_cipher)?;
+                        // TODO
+                    }
                     "Binary" => {
                         let field = BinaryField::from_xml(iterator, inner_cipher)?;
                         // TODO reference into a binary field from the Meta. Might only appear in
@@ -64,6 +68,10 @@ impl FromXml for Entry {
                         let icon_id = SimpleTag::<usize>::from_xml(iterator, inner_cipher)?;
                         // TODO
                         // out.icon_id = icon_id;
+                    }
+                    "CustomIconUUID" => {
+                        let icon_id = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        // TODO
                     }
                     "ForegroundColor" => {
                         let color = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?;

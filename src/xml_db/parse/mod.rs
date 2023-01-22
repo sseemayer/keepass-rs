@@ -12,7 +12,7 @@ use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
     xml_db::get_epoch_baseline,
-    Group, Meta, Times,
+    Group, Meta, Times, Value,
 };
 
 #[derive(Debug, Error)]
@@ -528,6 +528,131 @@ impl FromXml for DeletedObject {
         if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "DeletedObject") {
             return Err(XmlParseError::BadEvent {
                 expected: "Close DeletedObject tag",
+                event: close_tag,
+            });
+        }
+
+        Ok(out)
+    }
+}
+
+#[derive(Debug, Default)]
+struct CustomData {
+    items: Vec<CustomDataItem>,
+}
+
+impl FromXml for CustomData {
+    type Parses = Self;
+
+    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
+        iterator: &mut std::iter::Peekable<I>,
+        inner_cipher: &mut dyn crate::crypt::ciphers::Cipher,
+    ) -> Result<Self::Parses, XmlParseError> {
+        let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "CustomData") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Open CustomData tag",
+                event: open_tag,
+            });
+        }
+
+        let mut out = Self::default();
+
+        while let Some(event) = iterator.peek() {
+            match event {
+                SimpleXmlEvent::Start(name, _) => match &name[..] {
+                    "Item" => {
+                        let item = CustomDataItem::from_xml(iterator, inner_cipher)?;
+                        out.items.push(item);
+                    }
+                    _ => {
+                        return Err(XmlParseError::BadEvent {
+                            expected: "valid CustomData child",
+                            event: event.clone(),
+                        })
+                    }
+                },
+                SimpleXmlEvent::End(name) if name == "CustomData" => break,
+                _ => {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "start tag or close CustomData",
+                        event: event.clone(),
+                    })
+                }
+            }
+        }
+
+        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "CustomData") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Close CustomData tag",
+                event: close_tag,
+            });
+        }
+
+        Ok(out)
+    }
+}
+
+#[derive(Debug, Default)]
+struct CustomDataItem {
+    key: String,
+    value: Option<Value>,
+    last_modification_time: Option<NaiveDateTime>,
+}
+
+impl FromXml for CustomDataItem {
+    type Parses = Self;
+
+    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
+        iterator: &mut std::iter::Peekable<I>,
+        inner_cipher: &mut dyn crate::crypt::ciphers::Cipher,
+    ) -> Result<Self::Parses, XmlParseError> {
+        let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "Item") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Open Item tag",
+                event: open_tag,
+            });
+        }
+
+        let mut out = Self::default();
+
+        while let Some(event) = iterator.peek() {
+            match event {
+                SimpleXmlEvent::Start(name, _) => match &name[..] {
+                    "Key" => {
+                        out.key = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                    }
+                    "Value" => {
+                        out.value = Some(Value::from_xml(iterator, inner_cipher)?);
+                    }
+                    "LastModificationTime" => {
+                        out.last_modification_time =
+                            SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
+                                .value;
+                    }
+                    _ => {
+                        return Err(XmlParseError::BadEvent {
+                            expected: "valid Item child",
+                            event: event.clone(),
+                        })
+                    }
+                },
+                SimpleXmlEvent::End(name) if name == "Item" => break,
+                _ => {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "start tag or close Item",
+                        event: event.clone(),
+                    })
+                }
+            }
+        }
+
+        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Item") {
+            return Err(XmlParseError::BadEvent {
+                expected: "Close Item tag",
                 event: close_tag,
             });
         }
