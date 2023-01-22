@@ -7,7 +7,7 @@ use crate::{
     db::{Database, Header, InnerHeader, KEEPASS_LATEST_ID},
     hmac_block_stream,
     variant_dictionary::VariantDictionary,
-    xml_parse, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSaveError,
+    DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSaveError,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -46,7 +46,7 @@ pub struct KDBX4Header {
     pub kdf: KdfSettings,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BinaryAttachment {
     pub flags: u8,
     pub content: Vec<u8>,
@@ -362,7 +362,7 @@ pub fn dump(db: &Database, key_elements: &[Vec<u8>]) -> Result<Vec<u8>, Database
         .get_cipher(&inner_header.inner_random_stream_key)?;
 
     // after inner header is one XML document
-    let xml = xml_parse::dump_database(&db, &mut *inner_cipher)?;
+    let xml = crate::xml_db::dump::dump(&db, &mut *inner_cipher)?;
     payload.extend_from_slice(&xml);
 
     let payload_compressed = header.compression.get_compression().compress(&payload)?;
@@ -387,13 +387,13 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, D
         .inner_random_stream
         .get_cipher(&inner_header.inner_random_stream_key)?;
 
-    let (root, meta) = xml_parse::parse_xml_block(&xml, &mut *inner_decryptor)?;
+    let kpxml = crate::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
 
     let db = Database {
         header: Header::KDBX4(header),
         inner_header: InnerHeader::KDBX4(inner_header),
-        root,
-        meta,
+        root: kpxml.root.group,
+        meta: kpxml.meta,
     };
 
     Ok(db)

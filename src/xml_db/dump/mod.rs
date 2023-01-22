@@ -1,8 +1,13 @@
 use base64::{engine::general_purpose as base64_engine, Engine as _};
-use xml::writer::{EventWriter, XmlEvent as WriterEvent};
+use xml::{
+    writer::{EventWriter, XmlEvent as WriterEvent},
+    EmitterConfig,
+};
 
 use crate::{
-    crypt::ciphers::Cipher, xml_db::get_epoch_baseline, Database, Entry, Group, Meta, Node, Value,
+    crypt::ciphers::Cipher,
+    db::{Database, Entry, Group, Meta, Node, Times, Value},
+    xml_db::get_epoch_baseline,
 };
 
 /// Format a timestamp suitable for an XML database
@@ -10,6 +15,20 @@ pub fn format_xml_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
     let timestamp = timestamp.timestamp() - get_epoch_baseline().timestamp();
     let timestamp_bytes = i64::to_le_bytes(timestamp);
     base64_engine::STANDARD.encode(timestamp_bytes)
+}
+
+pub(crate) fn dump(
+    db: &Database,
+    inner_cipher: &mut dyn Cipher,
+) -> Result<Vec<u8>, xml::writer::Error> {
+    let mut data: Vec<u8> = Vec::new();
+    let mut writer = EmitterConfig::new()
+        .perform_indent(false)
+        .create_writer(&mut data);
+
+    db.dump_xml(&mut writer, inner_cipher)?;
+
+    Ok(data)
 }
 
 /// A trait that denotes an inner KeePass database object can be stored into an XML database.
@@ -45,6 +64,16 @@ impl DumpXml for bool {
         } else {
             "False"
         }))
+    }
+}
+
+impl DumpXml for usize {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        _inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::characters(&format!("{}", self)))
     }
 }
 
@@ -229,15 +258,10 @@ impl DumpXml for Entry {
         // TODO BackgroundColor
 
         SimpleTag("UUID", &self.uuid).dump_xml(writer, inner_cipher)?;
-        SimpleTag("Expires", self.expires).dump_xml(writer, inner_cipher)?;
 
         SimpleTag("Tags", &self.tags.join(";")).dump_xml(writer, inner_cipher)?;
 
-        writer.write(WriterEvent::start_element("Times"))?;
-        for (time_name, time) in &self.times {
-            SimpleTag(time_name, time).dump_xml(writer, inner_cipher)?;
-        }
-        writer.write(WriterEvent::end_element())?;
+        self.times.dump_xml(writer, inner_cipher)?;
 
         for (field_name, field_value) in &self.fields {
             writer.write(WriterEvent::start_element("String"))?;
@@ -249,6 +273,26 @@ impl DumpXml for Entry {
         }
 
         writer.write(WriterEvent::end_element())?; // Entry
+
+        Ok(())
+    }
+}
+
+impl DumpXml for Times {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("Times"))?;
+        for (time_name, time) in &self.times {
+            SimpleTag(time_name, time).dump_xml(writer, inner_cipher)?;
+        }
+
+        SimpleTag("Expires", self.expires).dump_xml(writer, inner_cipher)?;
+        SimpleTag("UsageCount", self.usage_count).dump_xml(writer, inner_cipher)?;
+
+        writer.write(WriterEvent::end_element())?;
 
         Ok(())
     }
