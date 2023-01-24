@@ -387,13 +387,13 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, D
         .inner_random_stream
         .get_cipher(&inner_header.inner_random_stream_key)?;
 
-    let kpxml = crate::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
+    let database_content = crate::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
 
     let db = Database {
         header: Header::KDBX4(header),
         inner_header: InnerHeader::KDBX4(inner_header),
-        root: kpxml.root.group,
-        meta: kpxml.meta,
+        root: database_content.root.group,
+        meta: database_content.meta,
     };
 
     Ok(db)

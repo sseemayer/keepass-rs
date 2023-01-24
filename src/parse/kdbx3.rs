@@ -195,10 +195,10 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, D
 
     // Parse XML data blocks
     for block_buffer in xml_blocks {
-        let kxml = crate::xml_db::parse::parse(&block_buffer, &mut *inner_decryptor)
+        let database_content = crate::xml_db::parse::parse(&block_buffer, &mut *inner_decryptor)
             .map_err(|e| DatabaseIntegrityError::from(e))?;
-        meta = kxml.meta;
-        root.children.push(Node::Group(kxml.root.group));
+        meta = database_content.meta;
+        root.children.push(Node::Group(database_content.root.group));
     }
 
     // Re-root db.root if it contains only one child (if there was only one block)
