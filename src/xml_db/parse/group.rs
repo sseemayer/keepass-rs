@@ -3,6 +3,8 @@ use crate::{
     Entry, Group, Node, Times,
 };
 
+use super::IgnoreSubfield;
+
 impl FromXml for Group {
     type Parses = Self;
 
@@ -85,10 +87,7 @@ impl FromXml for Group {
                         out.children.push(Node::Group(group));
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid Group child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "Group" => break,

@@ -660,3 +660,83 @@ impl FromXml for CustomDataItem {
         Ok(out)
     }
 }
+
+/// A helper parser that will ignore everything in its tag.
+pub(crate) struct IgnoreSubfield;
+
+impl FromXml for IgnoreSubfield {
+    type Parses = ();
+
+    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
+        iterator: &mut Peekable<I>,
+        _inner_cipher: &mut dyn Cipher,
+    ) -> Result<Self::Parses, XmlParseError> {
+        let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+        if let SimpleXmlEvent::Start(ref tag, _) = open_tag {
+            let mut stack = Vec::new();
+
+            while let Some(event) = iterator.next() {
+                match event {
+                    SimpleXmlEvent::Start(t, _) => stack.push(t),
+                    SimpleXmlEvent::End(ref t) => {
+                        if let Some(s) = stack.pop() {
+                            // ascend the stack of inner elements
+                            if &s != t {
+                                return Err(XmlParseError::BadEvent {
+                                    expected: "Close matching tag",
+                                    event,
+                                });
+                            }
+                        } else {
+                            // we have an empty stack -- then the closing tag must match the
+                            // original open tag
+                            if t != tag {
+                                return Err(XmlParseError::BadEvent {
+                                    expected: "Close matching tag",
+                                    event,
+                                });
+                            }
+
+                            break;
+                        }
+                    }
+                    SimpleXmlEvent::Characters(_) => {}
+                    SimpleXmlEvent::Err(e) => return Err(e.into()),
+                }
+            }
+        } else {
+            return Err(XmlParseError::BadEvent {
+                expected: "Open tag (to be ignored)",
+                event: open_tag,
+            });
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod parse_test {
+    use crate::config::InnerCipherSuite;
+
+    use super::{parse, XmlParseError};
+
+    #[test]
+    fn test_custom_xml_fields() -> Result<(), XmlParseError> {
+        let xml = include_bytes!("../../../tests/resources/inner_xml_with_custom_fields.xml");
+
+        let inner_cipher_suite = InnerCipherSuite::Salsa20;
+
+        let mut inner_random_stream_key: Vec<u8> = vec![];
+        inner_random_stream_key.resize(inner_cipher_suite.get_iv_size().into(), 0);
+        getrandom::getrandom(&mut inner_random_stream_key).unwrap();
+
+        let mut inner_cipher = inner_cipher_suite
+            .get_cipher(&inner_random_stream_key)
+            .unwrap();
+
+        let _database_content = parse(&xml[..], &mut *inner_cipher)?;
+
+        Ok(())
+    }
+}

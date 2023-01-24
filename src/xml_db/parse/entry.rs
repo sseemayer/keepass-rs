@@ -9,6 +9,8 @@ use crate::{
     AutoType, AutoTypeAssociation, Entry, Times, Value,
 };
 
+use super::IgnoreSubfield;
+
 impl FromXml for Entry {
     type Parses = Self;
 
@@ -99,10 +101,7 @@ impl FromXml for Entry {
                         // out.history = history;
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid Entry child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "Entry" => break,
@@ -163,10 +162,7 @@ impl FromXml for StringField {
                         }
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid String child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "String" => break,
@@ -338,10 +334,7 @@ impl FromXml for AutoType {
                         out.associations.push(ata);
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid AutoType tag",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "AutoType" => break,
@@ -395,10 +388,7 @@ impl FromXml for AutoTypeAssociation {
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid Association child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "Association" => break,
@@ -452,10 +442,7 @@ impl FromXml for History {
                         entries.push(entry);
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid History child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "History" => break,

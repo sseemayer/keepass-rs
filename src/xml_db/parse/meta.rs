@@ -8,6 +8,8 @@ use crate::{
     Meta,
 };
 
+use super::IgnoreSubfield;
+
 impl FromXml for Meta {
     type Parses = Self;
 
@@ -167,10 +169,7 @@ impl FromXml for Meta {
                         // TODO
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid Meta child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "Meta" => break,
@@ -245,10 +244,7 @@ impl FromXml for MemoryProtection {
                             SimpleTag::<bool>::from_xml(iterator, inner_cipher)?.value;
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid MemoryProtection child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "MemoryProtection" => break,
@@ -303,10 +299,7 @@ impl FromXml for BinaryAttachments {
                         out.binaries.push(binary);
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid Binaries child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "Binaries" => break,
@@ -410,10 +403,7 @@ impl FromXml for CustomIcons {
                         out.icons.push(icon);
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid CustomIcons child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "CustomIcons" => break,
@@ -473,10 +463,7 @@ impl FromXml for Icon {
                         out.data = buf;
                     }
                     _ => {
-                        return Err(XmlParseError::BadEvent {
-                            expected: "valid Icon child",
-                            event: event.clone(),
-                        })
+                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
                     }
                 },
                 SimpleXmlEvent::End(name) if name == "Icon" => break,
