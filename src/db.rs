@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use secstr::SecStr;
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
@@ -17,7 +18,7 @@ use crate::{
         kdbx4::{BinaryAttachment, KDBX4Header, KDBX4InnerHeader},
     },
     variant_dictionary::VariantDictionaryError,
-    xml_parse::XmlParseError,
+    xml_db::parse::XmlParseError,
 };
 
 #[derive(Debug)]
@@ -462,15 +463,7 @@ pub struct Group {
     pub children: Vec<Node>,
 
     /// The list of time fields for this group
-    ///
-    /// Using chrono::NaiveDateTime which does not include timezone
-    /// or UTC offset because KeePass clients typically store timestamps
-    /// relative to the local time on the machine writing the data without
-    /// including accurate UTC offset or timezone information.
-    pub times: HashMap<String, chrono::NaiveDateTime>,
-
-    /// Does this group expire
-    pub expires: bool,
+    pub times: Times,
 }
 
 impl Group {
@@ -479,8 +472,7 @@ impl Group {
             children: vec![],
             name: name.to_string(),
             uuid: Uuid::new_v4().to_string(),
-            times: HashMap::default(),
-            expires: false,
+            times: Times::default(),
         }
     }
 
@@ -671,17 +663,16 @@ pub struct Entry {
     pub uuid: String,
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
-    pub expires: bool,
-    pub times: HashMap<String, chrono::NaiveDateTime>,
     pub tags: Vec<String>,
+
+    pub times: Times,
 }
 impl Entry {
     pub fn new() -> Entry {
         Entry {
             uuid: Uuid::new_v4().to_string(),
             fields: HashMap::default(),
-            times: HashMap::default(),
-            expires: false,
+            times: Times::default(),
             autotype: None,
             tags: vec![],
         }
@@ -795,5 +786,27 @@ impl<'a> IntoIterator for &'a Group {
         queue.push_back(NodeRef::Group(self));
 
         NodeIter { queue }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct Times {
+    /// Does this node expire
+    pub expires: bool,
+
+    /// Number of usages
+    pub usage_count: usize,
+
+    /// Using chrono::NaiveDateTime which does not include timezone
+    /// or UTC offset because KeePass clients typically store timestamps
+    /// relative to the local time on the machine writing the data without
+    /// including accurate UTC offset or timezone information.
+    pub times: HashMap<String, NaiveDateTime>,
+}
+
+impl Times {
+    fn get(&self, key: &str) -> Option<&NaiveDateTime> {
+        self.times.get(key)
     }
 }

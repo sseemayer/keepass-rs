@@ -299,7 +299,6 @@ fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group, DatabaseIntegrityE
         uuid: Default::default(),
         name: "Root".to_owned(),
         children: Default::default(),
-        expires: Default::default(),
         times: Default::default(),
     };
 

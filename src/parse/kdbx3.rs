@@ -6,7 +6,7 @@ use crate::{
         KEEPASS_LATEST_ID,
     },
     hmac_block_stream::BlockStreamError,
-    xml_parse, DatabaseIntegrityError,
+    DatabaseIntegrityError,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -190,16 +190,15 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, D
         uuid: Default::default(),
         name: "Root".to_owned(),
         children: Default::default(),
-        expires: Default::default(),
         times: Default::default(),
     };
 
     // Parse XML data blocks
     for block_buffer in xml_blocks {
-        let (block_group, _meta) = xml_parse::parse_xml_block(&block_buffer, &mut *inner_decryptor)
+        let database_content = crate::xml_db::parse::parse(&block_buffer, &mut *inner_decryptor)
             .map_err(|e| DatabaseIntegrityError::from(e))?;
-        meta = _meta;
-        root.children.push(Node::Group(block_group));
+        meta = database_content.meta;
+        root.children.push(Node::Group(database_content.root.group));
     }
 
     // Re-root db.root if it contains only one child (if there was only one block)

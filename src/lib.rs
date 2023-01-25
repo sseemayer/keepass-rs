@@ -9,7 +9,7 @@ pub(crate) mod hmac_block_stream;
 mod keyfile;
 pub(crate) mod parse;
 pub(crate) mod variant_dictionary;
-pub(crate) mod xml_parse;
+pub(crate) mod xml_db;
 
 #[cfg(feature = "totp")]
 pub(crate) mod otp;

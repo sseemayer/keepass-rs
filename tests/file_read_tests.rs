@@ -1,4 +1,4 @@
-mod tests {
+mod file_read_tests {
     use keepass::*;
     use std::{fs::File, path::Path};
 
