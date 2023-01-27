@@ -12,7 +12,7 @@ use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
     xml_db::get_epoch_baseline,
-    Group, Meta, Times, Value,
+    CustomData, CustomDataItem, Group, Meta, Times, Value,
 };
 
 #[derive(Debug, Error)]
@@ -536,11 +536,6 @@ impl FromXml for DeletedObject {
     }
 }
 
-#[derive(Debug, Default)]
-struct CustomData {
-    items: Vec<CustomDataItem>,
-}
-
 impl FromXml for CustomData {
     type Parses = Self;
 
@@ -592,13 +587,6 @@ impl FromXml for CustomData {
 
         Ok(out)
     }
-}
-
-#[derive(Debug, Default)]
-struct CustomDataItem {
-    key: String,
-    value: Option<Value>,
-    last_modification_time: Option<NaiveDateTime>,
 }
 
 impl FromXml for CustomDataItem {
