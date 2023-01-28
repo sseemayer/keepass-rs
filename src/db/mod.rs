@@ -482,11 +482,13 @@ impl Times {
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomData {
     pub items: Vec<CustomDataItem>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomDataItem {
     pub key: String,
     pub value: Option<Value>,

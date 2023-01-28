@@ -69,6 +69,7 @@ pub struct Meta {
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct MemoryProtection {
     pub protect_title: bool,
     pub protect_username: bool,
@@ -78,22 +79,26 @@ pub struct MemoryProtection {
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomIcons {
     pub icons: Vec<Icon>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Icon {
     pub uuid: String,
     pub data: Vec<u8>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct BinaryAttachments {
     pub binaries: Vec<BinaryAttachment>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct BinaryAttachment {
     pub identifier: Option<String>,
     pub flags: u8,
