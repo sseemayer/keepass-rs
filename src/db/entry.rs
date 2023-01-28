@@ -104,7 +104,7 @@ impl<'a> Entry {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Value {
     Bytes(Vec<u8>),
     Unprotected(String),

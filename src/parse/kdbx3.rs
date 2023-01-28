@@ -182,9 +182,8 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, D
         .inner_cipher
         .get_cipher(&stream_key)
         .map_err(|e| DatabaseIntegrityError::from(e))?;
-    let mut meta = Meta {
-        recyclebin_uuid: Default::default(),
-    };
+
+    let mut meta = Meta::default();
 
     let mut root = Group {
         uuid: Default::default(),

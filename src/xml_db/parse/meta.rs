@@ -3,7 +3,7 @@ use chrono::NaiveDateTime;
 
 use crate::{
     compression::{Decompress, GZipCompression},
-    parse::kdbx4::BinaryAttachment,
+    meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection},
     xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
     Meta,
 };
@@ -31,142 +31,114 @@ impl FromXml for Meta {
             match event {
                 SimpleXmlEvent::Start(name, _) => match &name[..] {
                     "Generator" => {
-                        let value =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
-                    }
-                    "HeaderHash" => {
-                        // this seems to be only present in kdbx3 databases.
-                        let _header_hash =
+                        out.generator =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "DatabaseName" => {
-                        let value =
+                        out.database_name =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "DatabaseNameChanged" => {
-                        let value =
+                        out.database_name_changed =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
-                        // TODO
                     }
                     "DatabaseDescription" => {
-                        let value =
+                        out.database_description =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "DatabaseDescriptionChanged" => {
-                        let value =
+                        out.database_description_changed =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
-                        // TODO
                     }
                     "DefaultUserName" => {
-                        let value =
+                        out.default_username =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "DefaultUserNameChanged" => {
-                        let value =
+                        out.default_username_changed =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
-                        // TODO
                     }
                     "MaintenanceHistoryDays" => {
-                        let value =
+                        out.maintenance_history_days =
                             SimpleTag::<Option<usize>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "Color" => {
-                        let value =
+                        out.color =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "MasterKeyChanged" => {
-                        let value =
+                        out.master_key_changed =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
-                        // TODO
                     }
                     "MasterKeyChangeRec" => {
-                        let value =
+                        out.master_key_change_rec =
                             SimpleTag::<Option<isize>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "MasterKeyChangeForce" => {
-                        let value =
+                        out.master_key_change_force =
                             SimpleTag::<Option<isize>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "MemoryProtection" => {
-                        let value = MemoryProtection::from_xml(iterator, inner_cipher)?;
-                        // TODO
+                        out.memory_protection =
+                            Some(MemoryProtection::from_xml(iterator, inner_cipher)?);
                     }
                     "CustomIcons" => {
-                        let value = CustomIcons::from_xml(iterator, inner_cipher)?;
-                        // TODO
+                        out.custom_icons = CustomIcons::from_xml(iterator, inner_cipher)?;
                     }
                     "RecycleBinEnabled" => {
-                        let value =
+                        out.recyclebin_enabled =
                             SimpleTag::<Option<bool>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "RecycleBinUUID" => {
                         out.recyclebin_uuid =
-                            SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "RecycleBinChanged" => {
-                        let value =
+                        out.recyclebin_changed =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
-                        // TODO
                     }
                     "EntryTemplatesGroup" => {
-                        let value =
+                        out.entry_templates_group =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "EntryTemplatesGroupChanged" => {
-                        let value =
+                        out.entry_templates_group_changed =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
-                        // TODO
                     }
                     "LastSelectedGroup" => {
-                        let value =
+                        out.last_selected_group =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "LastTopVisibleGroup" => {
-                        let value =
+                        out.last_top_visible_group =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "HistoryMaxItems" => {
-                        let value =
+                        out.history_max_items =
                             SimpleTag::<Option<usize>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "HistoryMaxSize" => {
-                        let value =
+                        out.history_max_size =
                             SimpleTag::<Option<usize>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
                     }
                     "SettingsChanged" => {
-                        let value =
+                        out.settings_changed =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
-                        // TODO
                     }
                     "Binaries" => {
-                        let value = BinaryAttachments::from_xml(iterator, inner_cipher)?;
+                        out.binaries = BinaryAttachments::from_xml(iterator, inner_cipher)?;
                         // TODO figure out where this is needed. Is it only in KDBX3? How to
                         // migrate to KDBX4?
                     }
                     "CustomData" => {
-                        let value = CustomData::from_xml(iterator, inner_cipher)?;
-                        // TODO
+                        out.custom_data = CustomData::from_xml(iterator, inner_cipher)?;
                     }
                     _ => {
                         IgnoreSubfield::from_xml(iterator, inner_cipher)?;
@@ -192,15 +164,6 @@ impl FromXml for Meta {
 
         Ok(out)
     }
-}
-
-#[derive(Debug, Default)]
-struct MemoryProtection {
-    protect_title: bool,
-    protect_username: bool,
-    protect_password: bool,
-    protect_url: bool,
-    protect_notes: bool,
 }
 
 impl FromXml for MemoryProtection {
@@ -269,11 +232,6 @@ impl FromXml for MemoryProtection {
     }
 }
 
-#[derive(Debug, Default)]
-struct BinaryAttachments {
-    binaries: Vec<BinaryAttachment>,
-}
-
 impl FromXml for BinaryAttachments {
     type Parses = Self;
 
@@ -334,28 +292,35 @@ impl FromXml for BinaryAttachment {
         let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         let mut out = Self::default();
-        let compressed = if let SimpleXmlEvent::Start(ref name, ref attributes) = open_tag {
-            if name != "Binary" {
+        let (identifier, compressed) =
+            if let SimpleXmlEvent::Start(ref name, ref attributes) = open_tag {
+                if name != "Binary" {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "Open Binary tag",
+                        event: open_tag,
+                    });
+                }
+
+                let identifier = attributes.get("ID").map(|s| s.to_string());
+
+                let compressed = attributes
+                    .get("Compressed")
+                    .map(|v| v.to_lowercase().parse())
+                    .unwrap_or(Ok(false))?;
+
+                (identifier, compressed)
+            } else {
                 return Err(XmlParseError::BadEvent {
                     expected: "Open Binary tag",
                     event: open_tag,
                 });
-            }
-
-            attributes
-                .get("Compressed")
-                .map(|v| v.to_lowercase().parse())
-                .unwrap_or(Ok(false))?
-        } else {
-            return Err(XmlParseError::BadEvent {
-                expected: "Open Binary tag",
-                event: open_tag,
-            });
-        };
+            };
 
         let data = String::from_xml(iterator, inner_cipher)?;
         let buf = base64_engine::STANDARD.decode(&data)?;
 
+        out.identifier = identifier;
+        out.compressed = compressed;
         out.content = if compressed {
             Decompress::decompress(&GZipCompression, &buf).map_err(XmlParseError::Compression)?
         } else {
@@ -371,11 +336,6 @@ impl FromXml for BinaryAttachment {
         }
         Ok(out)
     }
-}
-
-#[derive(Debug, Default)]
-struct CustomIcons {
-    icons: Vec<Icon>,
 }
 
 impl FromXml for CustomIcons {
@@ -426,12 +386,6 @@ impl FromXml for CustomIcons {
 
         Ok(out)
     }
-}
-
-#[derive(Debug, Default)]
-struct Icon {
-    uuid: String,
-    data: Vec<u8>,
 }
 
 impl FromXml for Icon {

@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::convert::TryInto;
 
+use crate::meta::BinaryAttachment;
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     crypt,
@@ -46,20 +47,20 @@ pub struct KDBX4Header {
     pub kdf: KdfSettings,
 }
 
-#[derive(Debug, Default)]
-pub struct BinaryAttachment {
-    pub flags: u8,
-    pub content: Vec<u8>,
-}
-
 impl From<&[u8]> for BinaryAttachment {
     fn from(data: &[u8]) -> Self {
         let flags = data[0];
         let content = data[1..].to_vec();
 
-        BinaryAttachment { flags, content }
+        BinaryAttachment {
+            identifier: None,
+            compressed: false,
+            flags,
+            content,
+        }
     }
 }
+
 impl BinaryAttachment {
     fn dump(&self) -> Vec<u8> {
         let mut attachment: Vec<u8> = vec![self.flags];
@@ -695,11 +696,15 @@ mod kdbx4_tests {
             root_group,
             vec![
                 BinaryAttachment {
+                    identifier: None,
                     flags: 1,
+                    compressed: false,
                     content: vec![0x01, 0x02, 0x03, 0x04],
                 },
                 BinaryAttachment {
+                    identifier: None,
                     flags: 2,
+                    compressed: false,
                     content: vec![0x04, 0x03, 0x02, 0x01],
                 },
             ],

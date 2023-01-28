@@ -282,13 +282,16 @@ mod file_read_tests {
         println!("{:?} DB Opened", db);
 
         assert_eq!(db.root.name, "Root");
-        assert_eq!(db.meta.recyclebin_uuid, "VjFx/mWYQtyAA/mN3jLocg==");
+        assert_eq!(
+            db.meta.recyclebin_uuid,
+            Some("VjFx/mWYQtyAA/mN3jLocg==".to_string())
+        );
 
         let recycle_group: Vec<NodeRef> = db
             .root
             .iter()
             .filter(|child| match child {
-                NodeRef::Group(g) => g.uuid == db.meta.recyclebin_uuid,
+                NodeRef::Group(g) => Some(&g.uuid) == db.meta.recyclebin_uuid.as_ref(),
                 NodeRef::Entry(_) => false,
             })
             .collect();

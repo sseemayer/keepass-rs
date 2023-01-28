@@ -14,7 +14,7 @@ use thiserror::Error;
 pub use crate::db::{
     entry::{AutoType, AutoTypeAssociation, Entry, Value},
     group::Group,
-    meta::Meta,
+    meta::{BinaryAttachment, Meta},
     node::{Node, NodeIter, NodeRef, NodeRefMut},
 };
 
@@ -32,7 +32,7 @@ use crate::{
     parse::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
-        kdbx4::{BinaryAttachment, KDBX4Header, KDBX4InnerHeader},
+        kdbx4::{KDBX4Header, KDBX4InnerHeader},
     },
     variant_dictionary::VariantDictionaryError,
     xml_db::parse::XmlParseError,
@@ -479,4 +479,18 @@ impl Times {
     fn get(&self, key: &str) -> Option<&NaiveDateTime> {
         self.times.get(key)
     }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct CustomData {
+    pub items: Vec<CustomDataItem>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct CustomDataItem {
+    pub key: String,
+    pub value: Option<Value>,
+    pub last_modification_time: Option<NaiveDateTime>,
 }
