@@ -481,12 +481,12 @@ impl Times {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct CustomData {
     pub items: Vec<CustomDataItem>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct CustomDataItem {
     pub key: String,
     pub value: Option<Value>,

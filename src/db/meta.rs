@@ -3,7 +3,7 @@ use chrono::NaiveDateTime;
 use crate::db::CustomData;
 
 /// Database metadata
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Meta {
     /// the program that generated the database file.
@@ -45,7 +45,7 @@ pub struct Meta {
     pub recyclebin_enabled: Option<bool>,
 
     /// A UUID for the recycle bin group
-    pub recyclebin_uuid: String,
+    pub recyclebin_uuid: Option<String>,
 
     pub recyclebin_changed: Option<NaiveDateTime>,
 
@@ -68,7 +68,7 @@ pub struct Meta {
     pub custom_data: CustomData,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct MemoryProtection {
     pub protect_title: bool,
     pub protect_username: bool,
@@ -77,25 +77,26 @@ pub struct MemoryProtection {
     pub protect_notes: bool,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct CustomIcons {
     pub icons: Vec<Icon>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Icon {
     pub uuid: String,
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct BinaryAttachments {
     pub binaries: Vec<BinaryAttachment>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct BinaryAttachment {
     pub identifier: Option<String>,
     pub flags: u8,
+    pub compressed: bool,
     pub content: Vec<u8>,
 }

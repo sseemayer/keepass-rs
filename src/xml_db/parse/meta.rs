@@ -34,11 +34,6 @@ impl FromXml for Meta {
                         out.generator =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
-                    "HeaderHash" => {
-                        // this seems to be only present in kdbx3 databases.
-                        let _header_hash =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
-                    }
                     "DatabaseName" => {
                         out.database_name =
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
@@ -100,7 +95,7 @@ impl FromXml for Meta {
                     }
                     "RecycleBinUUID" => {
                         out.recyclebin_uuid =
-                            SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "RecycleBinChanged" => {
                         out.recyclebin_changed =
@@ -297,28 +292,35 @@ impl FromXml for BinaryAttachment {
         let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         let mut out = Self::default();
-        let compressed = if let SimpleXmlEvent::Start(ref name, ref attributes) = open_tag {
-            if name != "Binary" {
+        let (identifier, compressed) =
+            if let SimpleXmlEvent::Start(ref name, ref attributes) = open_tag {
+                if name != "Binary" {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "Open Binary tag",
+                        event: open_tag,
+                    });
+                }
+
+                let identifier = attributes.get("ID").map(|s| s.to_string());
+
+                let compressed = attributes
+                    .get("Compressed")
+                    .map(|v| v.to_lowercase().parse())
+                    .unwrap_or(Ok(false))?;
+
+                (identifier, compressed)
+            } else {
                 return Err(XmlParseError::BadEvent {
                     expected: "Open Binary tag",
                     event: open_tag,
                 });
-            }
-
-            attributes
-                .get("Compressed")
-                .map(|v| v.to_lowercase().parse())
-                .unwrap_or(Ok(false))?
-        } else {
-            return Err(XmlParseError::BadEvent {
-                expected: "Open Binary tag",
-                event: open_tag,
-            });
-        };
+            };
 
         let data = String::from_xml(iterator, inner_cipher)?;
         let buf = base64_engine::STANDARD.decode(&data)?;
 
+        out.identifier = identifier;
+        out.compressed = compressed;
         out.content = if compressed {
             Decompress::decompress(&GZipCompression, &buf).map_err(XmlParseError::Compression)?
         } else {

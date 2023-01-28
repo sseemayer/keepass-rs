@@ -54,6 +54,7 @@ impl From<&[u8]> for BinaryAttachment {
 
         BinaryAttachment {
             identifier: None,
+            compressed: false,
             flags,
             content,
         }
@@ -697,11 +698,13 @@ mod kdbx4_tests {
                 BinaryAttachment {
                     identifier: None,
                     flags: 1,
+                    compressed: false,
                     content: vec![0x01, 0x02, 0x03, 0x04],
                 },
                 BinaryAttachment {
                     identifier: None,
                     flags: 2,
+                    compressed: false,
                     content: vec![0x04, 0x03, 0x02, 0x01],
                 },
             ],

@@ -12,6 +12,7 @@ use crate::{
     crypt::ciphers::Cipher,
     db::{Database, Times},
     xml_db::get_epoch_baseline,
+    CustomData, CustomDataItem,
 };
 
 /// Format a timestamp suitable for an XML database
@@ -72,6 +73,16 @@ impl DumpXml for bool {
 }
 
 impl DumpXml for usize {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        _inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::characters(&format!("{}", self)))
+    }
+}
+
+impl DumpXml for isize {
     fn dump_xml<E: std::io::Write>(
         &self,
         writer: &mut EventWriter<E>,
@@ -155,6 +166,47 @@ impl DumpXml for Times {
 
         writer.write(WriterEvent::end_element())?;
 
+        Ok(())
+    }
+}
+
+impl DumpXml for CustomData {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("CustomData"))?;
+
+        for item in &self.items {
+            item.dump_xml(writer, inner_cipher)?;
+        }
+
+        writer.write(WriterEvent::end_element())?;
+
+        Ok(())
+    }
+}
+
+impl DumpXml for CustomDataItem {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("Item"))?;
+
+        SimpleTag("Key", &self.key).dump_xml(writer, inner_cipher)?;
+
+        if let Some(ref value) = self.value {
+            value.dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.last_modification_time {
+            SimpleTag("LastModificationTime", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        writer.write(WriterEvent::end_element())?;
         Ok(())
     }
 }
