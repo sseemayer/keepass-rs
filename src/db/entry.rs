@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use secstr::SecStr;
 use uuid::Uuid;
 
-use crate::db::Times;
+use crate::{db::Times, CustomData};
 
 #[cfg(feature = "totp")]
 use crate::otp::{TOTPError, TOTP};
@@ -18,15 +18,25 @@ pub struct Entry {
     pub tags: Vec<String>,
 
     pub times: Times,
+
+    pub custom_data: CustomData,
+
+    pub icon_id: Option<usize>,
+    pub custom_icon_uuid: Option<String>,
+
+    pub foreground_color: Option<String>,
+    pub background_color: Option<String>,
+
+    pub override_url: Option<String>,
+    pub quality_check: Option<bool>,
+
+    pub history: History,
 }
 impl Entry {
     pub fn new() -> Entry {
         Entry {
             uuid: Uuid::new_v4().to_string(),
-            fields: HashMap::default(),
-            times: Times::default(),
-            autotype: None,
-            tags: vec![],
+            ..Default::default()
         }
     }
 }
@@ -150,4 +160,10 @@ pub struct AutoType {
 pub struct AutoTypeAssociation {
     pub window: Option<String>,
     pub sequence: Option<String>,
+}
+
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct History {
+    pub entries: Vec<Entry>,
 }

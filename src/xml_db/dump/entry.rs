@@ -3,8 +3,9 @@ use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 
 use crate::{
     crypt::ciphers::Cipher,
+    entry::History,
     xml_db::dump::{DumpXml, SimpleTag},
-    Entry, Value,
+    AutoType, AutoTypeAssociation, Entry, Value,
 };
 
 impl DumpXml for Entry {
@@ -15,18 +16,9 @@ impl DumpXml for Entry {
     ) -> Result<(), xml::writer::Error> {
         writer.write(WriterEvent::start_element("Entry"))?;
 
-        // TODO IconId
-        // TODO Times
-        // TODO AutoType
-        // TODO History
-        // TODO ForegroundColor
-        // TODO BackgroundColor
-
         SimpleTag("UUID", &self.uuid).dump_xml(writer, inner_cipher)?;
 
         SimpleTag("Tags", &self.tags.join(";")).dump_xml(writer, inner_cipher)?;
-
-        self.times.dump_xml(writer, inner_cipher)?;
 
         for (field_name, field_value) in &self.fields {
             writer.write(WriterEvent::start_element("String"))?;
@@ -36,6 +28,40 @@ impl DumpXml for Entry {
 
             writer.write(WriterEvent::end_element())?; // String
         }
+
+        self.custom_data.dump_xml(writer, inner_cipher)?;
+
+        if let Some(ref value) = self.autotype {
+            value.dump_xml(writer, inner_cipher)?;
+        }
+
+        self.times.dump_xml(writer, inner_cipher)?;
+
+        if let Some(value) = self.icon_id {
+            SimpleTag("IconID", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.custom_icon_uuid {
+            SimpleTag("CustomIconUUID", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.foreground_color {
+            SimpleTag("ForegroundColor", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.background_color {
+            SimpleTag("BackgroundColor", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.override_url {
+            SimpleTag("OverrideURL", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(value) = self.quality_check {
+            SimpleTag("QualityCheck", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        self.history.dump_xml(writer, inner_cipher)?;
 
         writer.write(WriterEvent::end_element())?; // Entry
 
@@ -68,5 +94,66 @@ impl DumpXml for Value {
                 Ok(())
             }
         }
+    }
+}
+
+impl DumpXml for AutoType {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("AutoType"))?;
+
+        SimpleTag("Enabled", self.enabled).dump_xml(writer, inner_cipher)?;
+
+        if let Some(ref value) = self.sequence {
+            SimpleTag("DefaultSequence", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        for assoc in &self.associations {
+            assoc.dump_xml(writer, inner_cipher)?;
+        }
+
+        writer.write(WriterEvent::end_element())?;
+        Ok(())
+    }
+}
+
+impl DumpXml for AutoTypeAssociation {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("Association"))?;
+
+        if let Some(ref value) = self.window {
+            SimpleTag("Window", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.sequence {
+            SimpleTag("KeystrokeSequence", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        writer.write(WriterEvent::end_element())?;
+        Ok(())
+    }
+}
+
+impl DumpXml for History {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("History"))?;
+
+        for entry in &self.entries {
+            entry.dump_xml(writer, inner_cipher)?;
+        }
+
+        writer.write(WriterEvent::end_element())?;
+        Ok(())
     }
 }
