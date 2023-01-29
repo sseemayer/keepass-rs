@@ -1,0 +1,6 @@
+[all]
+all-features = true
+workspace = true
+target-dir = "target/coverage/"
+exclude-files = ["src/bin/*", "target/*"]
+out = ["Xml", "Html"]

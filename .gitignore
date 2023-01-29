@@ -36,3 +36,4 @@ Session.vim
 
 ####=== Coverage ===#####
 cobertura.xml
+tarpaulin-report.html
