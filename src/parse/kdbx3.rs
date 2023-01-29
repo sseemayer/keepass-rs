@@ -1,11 +1,9 @@
 use crate::{
     config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
-    db::{
-        Database, DatabaseKeyError, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node,
-        KEEPASS_LATEST_ID,
-    },
+    db::{Database, DatabaseKeyError, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node},
     hmac_block_stream::BlockStreamError,
+    parse::DatabaseVersion,
     DatabaseIntegrityError,
 };
 
@@ -16,9 +14,6 @@ use std::convert::TryFrom;
 #[derive(Debug)]
 pub struct KDBX3Header {
     // https://gist.github.com/msmuenchen/9318327
-    pub version: u32,
-    pub file_major_version: u16,
-    pub file_minor_version: u16,
     pub outer_cipher: OuterCipherSuite,
     pub compression: Compression,
     pub master_seed: Vec<u8>,
@@ -32,17 +27,6 @@ pub struct KDBX3Header {
 }
 
 fn parse_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
-    let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
-
-    if version != KEEPASS_LATEST_ID || file_major_version != 3 {
-        return Err(DatabaseIntegrityError::InvalidKDBXVersion {
-            version,
-            file_major_version: file_major_version as u32,
-            file_minor_version: file_minor_version as u32,
-        }
-        .into());
-    }
-
     let mut outer_cipher: Option<OuterCipherSuite> = None;
     let mut compression: Option<Compression> = None;
     let mut master_seed: Option<Vec<u8>> = None;
@@ -53,9 +37,10 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
     let mut stream_start: Option<Vec<u8>> = None;
     let mut inner_cipher: Option<InnerCipherSuite> = None;
 
-    // parse header
-    let mut pos = 12;
+    // skip over the version header
+    let mut pos = DatabaseVersion::get_version_header_size();
 
+    // parse header
     loop {
         // parse header blocks.
         //
@@ -155,9 +140,6 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
     let inner_cipher = get_or_err(inner_cipher, "Inner cipher ID")?;
 
     Ok(KDBX3Header {
-        version,
-        file_major_version,
-        file_minor_version,
         outer_cipher,
         compression,
         master_seed,

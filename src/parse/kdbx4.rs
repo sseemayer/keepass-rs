@@ -5,8 +5,9 @@ use crate::meta::BinaryAttachment;
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     crypt,
-    db::{Database, Header, InnerHeader, KEEPASS_LATEST_ID},
+    db::{Database, Header, InnerHeader},
     hmac_block_stream,
+    parse::DatabaseVersion,
     variant_dictionary::VariantDictionary,
     DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSaveError,
 };
@@ -37,9 +38,7 @@ pub const INNER_HEADER_BINARY_ATTACHMENTS: u8 = 0x03;
 #[derive(Debug)]
 pub struct KDBX4Header {
     // https://gist.github.com/msmuenchen/9318327
-    pub version: u32,
-    pub file_major_version: u16,
-    pub file_minor_version: u16,
+    pub version: DatabaseVersion,
     pub outer_cipher: OuterCipherSuite,
     pub compression: Compression,
     pub master_seed: Vec<u8>,
@@ -76,21 +75,9 @@ pub struct KDBX4InnerHeader {
     pub binaries: Vec<BinaryAttachment>,
 }
 
-fn dump_kdbx_version(header: &KDBX4Header) -> Vec<u8> {
-    let mut header_data: Vec<u8> = vec![];
-    header_data.extend_from_slice(&crate::parse::KDBX_IDENTIFIER);
-
-    header_data.resize(12, 0);
-    LittleEndian::write_u32(&mut header_data[4..8], header.version);
-    LittleEndian::write_u16(&mut header_data[8..10], header.file_minor_version);
-    LittleEndian::write_u16(&mut header_data[10..12], header.file_major_version);
-
-    header_data
-}
-
 fn dump_outer_header(header: &KDBX4Header) -> Result<Vec<u8>, DatabaseSaveError> {
     let mut header_data: Vec<u8> = vec![];
-    header_data.extend_from_slice(&dump_kdbx_version(header));
+    header_data.extend_from_slice(&header.version.dump());
 
     write_header_field(
         &mut header_data,
@@ -128,16 +115,9 @@ fn write_header_field(header_data: &mut Vec<u8>, field_id: u8, field_value: &[u8
 }
 
 fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenError> {
-    let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
-
-    if version != KEEPASS_LATEST_ID || file_major_version != 4 {
-        return Err(DatabaseIntegrityError::InvalidKDBXVersion {
-            version,
-            file_major_version: file_major_version as u32,
-            file_minor_version: file_minor_version as u32,
-        }
-        .into());
-    }
+    let database_version = DatabaseVersion::parse(data)?;
+    // skip over the version header
+    let mut pos = DatabaseVersion::get_version_header_size();
 
     let mut outer_cipher: Option<OuterCipherSuite> = None;
     let mut compression: Option<Compression> = None;
@@ -146,8 +126,6 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenE
     let mut kdf: Option<KdfSettings> = None;
 
     // parse header
-    let mut pos = 12;
-
     loop {
         // parse header blocks.
         //
@@ -217,9 +195,7 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenE
 
     Ok((
         KDBX4Header {
-            version,
-            file_major_version,
-            file_minor_version,
+            version: database_version,
             outer_cipher,
             compression,
             master_seed,

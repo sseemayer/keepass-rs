@@ -1,7 +1,7 @@
 use crate::{
     config::OuterCipherSuite,
     crypt::kdf::Kdf,
-    db::{Database, Entry, Group, Header, InnerHeader, Node, NodeRefMut, Value, KEEPASS_1_ID},
+    db::{Database, Entry, Group, Header, InnerHeader, Node, NodeRefMut, Value},
     DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError,
 };
 
@@ -13,7 +13,6 @@ use std::{collections::HashMap, convert::TryInto, str};
 #[derive(Debug)]
 pub struct KDBHeader {
     // https://gist.github.com/lgg/e6ccc6e212d18dd2ecd8a8c116fb1e45
-    pub version: u32,
     pub flags: u32,
     pub subversion: u32,
     pub master_seed: Vec<u8>,   // 16 bytes
@@ -28,23 +27,11 @@ pub struct KDBHeader {
 const HEADER_SIZE: usize = 4 + 4 + 4 + 4 + 16 + 16 + 4 + 4 + 32 + 32 + 4; // first 4 bytes are the KeePass magic
 
 fn parse_header(data: &[u8]) -> Result<KDBHeader, DatabaseIntegrityError> {
-    let (version, file_major_version, file_minor_version) = crate::parse::get_kdbx_version(data)?;
-
-    if version != KEEPASS_1_ID {
-        return Err(DatabaseIntegrityError::InvalidKDBXVersion {
-            version,
-            file_major_version: file_major_version as u32,
-            file_minor_version: file_minor_version as u32,
-        }
-        .into());
-    }
-
     if data.len() < HEADER_SIZE {
         return Err(DatabaseIntegrityError::InvalidFixedHeader { size: data.len() }.into());
     }
 
     Ok(KDBHeader {
-        version,
         flags: LittleEndian::read_u32(&data[8..]),
         subversion: LittleEndian::read_u32(&data[12..]),
         master_seed: data[16..32].to_vec(),
