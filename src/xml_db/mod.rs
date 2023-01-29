@@ -9,6 +9,7 @@ pub fn get_epoch_baseline() -> chrono::NaiveDateTime {
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveDateTime;
     use secstr::SecStr;
 
     use crate::{
@@ -105,6 +106,26 @@ mod tests {
 
         root_group.children.push(Node::Entry(entry));
 
+        let mut subgroup = Group::new("Child group");
+        subgroup.notes = Some("I am a subgroup".to_string());
+        subgroup.icon_id = Some(42);
+        subgroup.custom_icon_uuid = Some("CUSTOM-ICON".to_string());
+        subgroup.times.expires = true;
+        subgroup.times.usage_count = 100;
+        subgroup
+            .times
+            .times
+            .insert("Created".to_string(), NaiveDateTime::default());
+        subgroup.is_expanded = true;
+        subgroup.default_autotype_sequence =
+            Some("{UP}{UP}{DOWN}{DOWN}{LEFT}{RIGHT}{LEFT}{RIGHT}BA".to_string());
+        subgroup.enable_autotype = Some("yes".to_string());
+        subgroup.enable_searching = Some("sure".to_string());
+
+        subgroup.last_top_visible_entry = Some("an-entry".to_string());
+
+        root_group.children.push(Node::Group(subgroup));
+
         let db = Database::new(
             OuterCipherSuite::AES256,
             Compression::GZip,
@@ -116,7 +137,7 @@ mod tests {
                 parallelism: 1,
                 version: argon2::Version::Version13,
             },
-            root_group,
+            root_group.clone(),
             vec![],
         )
         .unwrap();
@@ -126,18 +147,17 @@ mod tests {
         let encrypted_db = kdbx4::dump(&db, &key_elements).unwrap();
         let decrypted_db = kdbx4::parse(&encrypted_db, &key_elements).unwrap();
 
-        assert_eq!(decrypted_db.root.children.len(), 1);
+        assert_eq!(decrypted_db.root.children.len(), 2);
 
         let decrypted_entry = match &decrypted_db.root.children[0] {
             Node::Entry(e) => e,
-            Node::Group(_) => panic!("Was expecting an entry as the only child."),
+            Node::Group(_) => panic!("Was expecting an entry as the first child."),
         };
 
         assert_eq!(decrypted_entry.get_title(), Some("ASDF"));
         assert_eq!(decrypted_entry.get_uuid(), new_entry_uuid);
 
-        let decrypted_root_group = &decrypted_db.root;
-        assert_eq!(decrypted_root_group.name, "Root");
+        assert_eq!(&decrypted_db.root, &root_group);
     }
 
     #[test]

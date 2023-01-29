@@ -14,11 +14,40 @@ impl DumpXml for Group {
     ) -> Result<(), xml::writer::Error> {
         writer.write(WriterEvent::start_element("Group"))?;
 
-        // TODO IconId
-        // TODO Notes
-
         SimpleTag("Name", &self.name).dump_xml(writer, inner_cipher)?;
         SimpleTag("UUID", &self.uuid).dump_xml(writer, inner_cipher)?;
+
+        if let Some(ref value) = self.notes {
+            SimpleTag("Notes", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(value) = self.icon_id {
+            SimpleTag("IconID", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.custom_icon_uuid {
+            SimpleTag("CustomIconUUID", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        self.times.dump_xml(writer, inner_cipher)?;
+
+        SimpleTag("IsExpanded", self.is_expanded).dump_xml(writer, inner_cipher)?;
+
+        if let Some(ref value) = self.default_autotype_sequence {
+            SimpleTag("DefaultAutoTypeSequence", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.enable_autotype {
+            SimpleTag("EnableAutoType", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.enable_searching {
+            SimpleTag("EnableSearching", value).dump_xml(writer, inner_cipher)?;
+        }
+
+        if let Some(ref value) = self.last_top_visible_entry {
+            SimpleTag("LastTopVisibleEntry", value).dump_xml(writer, inner_cipher)?;
+        }
 
         for child in &self.children {
             child.dump_xml(writer, inner_cipher)?;

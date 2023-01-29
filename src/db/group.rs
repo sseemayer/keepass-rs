@@ -8,7 +8,7 @@ use crate::db::{
 };
 
 /// A database group with child groups and entries
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Group {
     /// The unique identifier of the group
@@ -17,20 +17,44 @@ pub struct Group {
     /// The name of the group
     pub name: String,
 
+    /// Notes for the group
+    pub notes: Option<String>,
+
+    /// ID of the group's icon
+    pub icon_id: Option<usize>,
+
+    /// UUID for a custom group icon
+    pub custom_icon_uuid: Option<String>,
+
     /// The list of child nodes (Groups or Entries)
     pub children: Vec<Node>,
 
     /// The list of time fields for this group
     pub times: Times,
+
+    /// Whether the group is expanded in the user interface
+    pub is_expanded: bool,
+
+    /// Default autotype sequence
+    pub default_autotype_sequence: Option<String>,
+
+    /// Whether autotype is enabled
+    // TODO: in example XML files, this is "null" - what should the type be?
+    pub enable_autotype: Option<String>,
+
+    /// Whether searching is enabled
+    // TODO: in example XML files, this is "null" - what should the type be?
+    pub enable_searching: Option<String>,
+
+    pub last_top_visible_entry: Option<String>,
 }
 
 impl Group {
     pub fn new(name: &str) -> Group {
         Group {
-            children: vec![],
             name: name.to_string(),
             uuid: Uuid::new_v4().to_string(),
-            times: Times::default(),
+            ..Default::default()
         }
     }
 

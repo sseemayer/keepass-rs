@@ -294,10 +294,8 @@ fn parse_entries(
 
 fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group, DatabaseIntegrityError> {
     let mut root = Group {
-        uuid: Default::default(),
         name: "Root".to_owned(),
-        children: Default::default(),
-        times: Default::default(),
+        ..Default::default()
     };
 
     let mut pos = &data[..];

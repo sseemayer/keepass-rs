@@ -9,7 +9,7 @@ use crate::db::Times;
 use crate::otp::{TOTPError, TOTP};
 
 /// A database entry containing several key-value fields.
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Entry {
     pub uuid: String,
@@ -136,7 +136,7 @@ impl serde::Serialize for Value {
 }
 
 /// An AutoType setting associated with an Entry
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoType {
     pub enabled: bool,
@@ -145,7 +145,7 @@ pub struct AutoType {
 }
 
 /// A window association associated with an AutoType setting
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoTypeAssociation {
     pub window: Option<String>,
