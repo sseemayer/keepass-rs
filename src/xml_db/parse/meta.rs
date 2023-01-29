@@ -154,13 +154,8 @@ impl FromXml for Meta {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Meta") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Meta tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -220,13 +215,8 @@ impl FromXml for MemoryProtection {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "MemoryProtection") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close MemoryProtection tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -270,13 +260,8 @@ impl FromXml for BinaryAttachments {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Binaries") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Binaries tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -327,13 +312,9 @@ impl FromXml for BinaryAttachment {
             buf
         };
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Binary") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Binary tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+
         Ok(out)
     }
 }
@@ -376,13 +357,8 @@ impl FromXml for CustomIcons {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "CustomIcons") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close CustomIcons tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -430,14 +406,147 @@ impl FromXml for Icon {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Icon") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Icon tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod parse_meta_test {
+
+    use crate::{
+        meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
+        xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
+        BinaryAttachment, Meta,
+    };
+
+    #[test]
+    fn test_meta() -> Result<(), XmlParseError> {
+        let _value = parse_test_xml::<Meta>("<Meta></Meta>")?;
+
+        let value = parse_test_xml::<Meta>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Meta>("<Meta></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Meta>("<Meta>No-Characters-Allowed</Meta>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let _value = parse_test_xml::<Meta>("<Meta><UnkownChildTag/></Meta>")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_memory_protection() -> Result<(), XmlParseError> {
+        let _value = parse_test_xml::<MemoryProtection>("<MemoryProtection></MemoryProtection>")?;
+
+        let value = parse_test_xml::<MemoryProtection>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<MemoryProtection>("<MemoryProtection></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<MemoryProtection>(
+            "<MemoryProtection>No-Characters-Allowed</MemoryProtection>",
+        );
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let _value = parse_test_xml::<MemoryProtection>(
+            "<MemoryProtection><UnkownChildTag/></MemoryProtection>",
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_binary_attachments() -> Result<(), XmlParseError> {
+        let _value = parse_test_xml::<BinaryAttachments>("<Binaries></Binaries>")?;
+
+        let value = parse_test_xml::<BinaryAttachments>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryAttachments>("<Binaries></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<BinaryAttachments>("<Binaries>No-Characters-Allowed</Binaries>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let _value = parse_test_xml::<BinaryAttachments>("<Binaries><UnkownChildTag/></Binaries>")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_binary_attachment() -> Result<(), XmlParseError> {
+        let value =
+            parse_test_xml::<BinaryAttachment>("<Binary ID=\"1\">QmluYXJ5IERhdGE=</Binary>")?;
+        assert_eq!(value.identifier, Some("1".to_string()));
+        assert_eq!(value.content, r"Binary Data".as_bytes());
+
+        let value = parse_test_xml::<BinaryAttachment>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryAttachment>("");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryAttachment>("<Binary></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryAttachment>("<Binary></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryAttachment>("<Binary><UnkownChildTag/></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_icons() -> Result<(), XmlParseError> {
+        let _value = parse_test_xml::<CustomIcons>("<CustomIcons></CustomIcons>")?;
+
+        let value = parse_test_xml::<CustomIcons>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomIcons>("<CustomIcons></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<CustomIcons>("<CustomIcons>No-Characters-Allowed</CustomIcons>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let _value = parse_test_xml::<CustomIcons>("<CustomIcons><UnkownChildTag/></CustomIcons>")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_icon() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<Icon>("<Icon></Icon>")?;
+        assert_eq!(value.uuid, "");
+        assert_eq!(value.data, &[]);
+
+        let value =
+            parse_test_xml::<Icon>("<Icon><UUID>asdf</UUID><Data>QmluYXJ5IERhdGE=</Data></Icon>")?;
+        assert_eq!(value.uuid, "asdf");
+        assert_eq!(value.data, r"Binary Data".as_bytes());
+
+        let value = parse_test_xml::<Icon>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Icon>("<Icon></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Icon>("<Icon>No-Characters-Allowed</Icon>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let _value = parse_test_xml::<Icon>("<Icon><UnkownChildTag/></Icon>")?;
+
+        Ok(())
     }
 }

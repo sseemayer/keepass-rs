@@ -100,13 +100,8 @@ impl FromXml for Group {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Group") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Group tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
