@@ -33,6 +33,7 @@ use crate::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
         kdbx4::{KDBX4Header, KDBX4InnerHeader},
+        DatabaseVersion,
     },
     variant_dictionary::VariantDictionaryError,
     xml_db::parse::XmlParseError,
@@ -50,13 +51,6 @@ pub enum InnerHeader {
     None,
     KDBX4(KDBX4InnerHeader),
 }
-
-/// Identifier for KeePass 1 format.
-pub const KEEPASS_1_ID: u32 = 0xb54bfb65;
-/// Identifier for KeePass 2 pre-release format.
-pub const KEEPASS_2_ID: u32 = 0xb54bfb66;
-/// Identifier for the latest KeePass formats.
-pub const KEEPASS_LATEST_ID: u32 = 0xb54bfb67;
 
 /// A decrypted KeePass database
 #[derive(Debug)]
@@ -99,6 +93,9 @@ pub enum DatabaseOpenError {
 
     #[error(transparent)]
     DatabaseIntegrity(#[from] DatabaseIntegrityError),
+
+    #[error("Opening this database version is not supported")]
+    UnsupportedVersion,
 }
 
 #[derive(Debug, Error)]
@@ -285,24 +282,13 @@ impl Database {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
-        let (version, file_major_version, file_minor_version) =
-            crate::parse::get_kdbx_version(data.as_ref())?;
+        let database_version = DatabaseVersion::parse(data.as_ref())?;
 
-        match version {
-            KEEPASS_1_ID => crate::parse::kdb::parse(data.as_ref(), &key_elements),
-            // KEEPASS_2_ID => alpha/beta kbd 2.x
-            KEEPASS_LATEST_ID if file_major_version == 3 => {
-                crate::parse::kdbx3::parse(data.as_ref(), &key_elements)
-            }
-            KEEPASS_LATEST_ID if file_major_version == 4 => {
-                crate::parse::kdbx4::parse(data.as_ref(), &key_elements)
-            }
-            _ => Err(DatabaseIntegrityError::InvalidKDBXVersion {
-                version,
-                file_major_version: file_major_version as u32,
-                file_minor_version: file_minor_version as u32,
-            }
-            .into()),
+        match database_version {
+            DatabaseVersion::KDB(_) => crate::parse::kdb::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
+            DatabaseVersion::KDB3(_) => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB4(_) => crate::parse::kdbx4::parse(data.as_ref(), &key_elements),
         }
     }
 
@@ -361,25 +347,16 @@ impl Database {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
-        let (version, file_major_version, file_minor_version) =
-            crate::parse::get_kdbx_version(data.as_ref())?;
+        let database_version = DatabaseVersion::parse(data.as_ref())?;
 
-        let data = match version {
-            KEEPASS_1_ID => panic!("Dumping XML from KDB databases not supported"),
-            // KEEPASS_2_ID => alpha/beta kbd 2.x
-            KEEPASS_LATEST_ID if file_major_version == 3 => {
+        let data = match database_version {
+            DatabaseVersion::KDB(_) => panic!("Dumping XML from KDB databases not supported"),
+            DatabaseVersion::KDB2(_) => panic!("Dumping XML from KDB2 databases not supported"),
+            DatabaseVersion::KDB3(_) => {
                 crate::parse::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
             }
-            KEEPASS_LATEST_ID if file_major_version == 4 => {
+            DatabaseVersion::KDB4(_) => {
                 vec![crate::parse::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
-            }
-            _ => {
-                return Err(DatabaseIntegrityError::InvalidKDBXVersion {
-                    version,
-                    file_major_version: file_major_version as u32,
-                    file_minor_version: file_minor_version as u32,
-                }
-                .into())
             }
         };
 
@@ -439,9 +416,7 @@ impl Database {
 
         Ok(Database {
             header: Header::KDBX4(KDBX4Header {
-                version: crate::db::KEEPASS_LATEST_ID,
-                file_major_version: 4,
-                file_minor_version: 3,
+                version: DatabaseVersion::KDB4(3),
                 outer_cipher: outer_cipher_suite,
                 compression,
                 master_seed,
