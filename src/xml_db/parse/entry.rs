@@ -114,13 +114,8 @@ impl FromXml for Entry {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Entry") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close entry tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -175,13 +170,8 @@ impl FromXml for StringField {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "String") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close entry tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -240,13 +230,8 @@ impl FromXml for BinaryField {
             });
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Binary") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Binary tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(BinaryField { key, identifier })
     }
@@ -260,6 +245,7 @@ impl FromXml for Value {
         inner_cipher: &mut dyn Cipher,
     ) -> Result<Self::Parses, XmlParseError> {
         let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+
         if let SimpleXmlEvent::Start(ref tag, ref attributes) = open_tag {
             if tag == "Value" {
                 let protected: bool = attributes
@@ -279,13 +265,8 @@ impl FromXml for Value {
                     Value::Unprotected(content)
                 };
 
-                let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-                if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Value") {
-                    return Err(XmlParseError::BadEvent {
-                        expected: "Close value tag",
-                        event: close_tag,
-                    });
-                }
+                // no need to check for the correct closing tag - checked by XmlReader
+                let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
                 return Ok(value);
             }
@@ -347,13 +328,8 @@ impl FromXml for AutoType {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "AutoType") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close AutoType tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -401,13 +377,8 @@ impl FromXml for AutoTypeAssociation {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Association") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Association tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -455,13 +426,8 @@ impl FromXml for History {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "History") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close History tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(Self { entries })
     }

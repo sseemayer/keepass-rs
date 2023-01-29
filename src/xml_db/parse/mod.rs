@@ -95,6 +95,13 @@ pub(crate) fn parse(
     xml: &[u8],
     inner_cipher: &mut dyn Cipher,
 ) -> Result<KeePassXml, XmlParseError> {
+    parse_from_bytes::<KeePassXml>(xml, inner_cipher)
+}
+
+pub(crate) fn parse_from_bytes<P: FromXml>(
+    xml: &[u8],
+    inner_cipher: &mut dyn Cipher,
+) -> Result<<P as FromXml>::Parses, XmlParseError> {
     let mut reader = EventReader::new(xml)
         .into_iter()
         .filter_map(|e| {
@@ -124,7 +131,7 @@ pub(crate) fn parse(
         })
         .peekable();
 
-    KeePassXml::from_xml(&mut reader, inner_cipher)
+    P::from_xml(&mut reader, inner_cipher)
 }
 
 /// Helper trait for converting `SimpleXmlEvent::Characters` into types that can be parsed from
@@ -148,7 +155,7 @@ impl<T: FromXmlCharacters> FromXml for T {
             T::from_xml_characters(&text)
         } else {
             return Err(XmlParseError::BadEvent {
-                expected: "text containing a bool",
+                expected: "text containing a value",
                 event,
             });
         }
@@ -204,8 +211,8 @@ impl FromXmlCharacters for NaiveDateTime {
 }
 
 /// Helper type to denote a tag with a character content that can be parsed.
+#[derive(Debug)]
 struct SimpleTag<V> {
-    #[allow(dead_code)] // normally this is guaranteed from peeking
     name: String,
     value: V,
 }
@@ -232,7 +239,7 @@ impl<V: FromXml> FromXml for SimpleTag<V> {
             Ok(SimpleTag { name, value })
         } else {
             return Err(XmlParseError::BadEvent {
-                expected: "Open entry tag",
+                expected: "Open tag",
                 event: open_tag,
             });
         }
@@ -288,13 +295,8 @@ impl FromXml for KeePassXml {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "KeePassFile") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close KeePassFile tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -343,13 +345,8 @@ impl FromXml for Times {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Times") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Times tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -404,13 +401,8 @@ impl FromXml for Root {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Root") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Root tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -462,13 +454,8 @@ impl FromXml for DeletedObjects {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "DeletedObjects") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close DeletedObjects tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -524,13 +511,8 @@ impl FromXml for DeletedObject {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "DeletedObject") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close DeletedObject tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -577,13 +559,8 @@ impl FromXml for CustomData {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "CustomData") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close CustomData tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -637,13 +614,8 @@ impl FromXml for CustomDataItem {
             }
         }
 
-        let close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if !matches!(close_tag, SimpleXmlEvent::End(ref tag) if tag == "Item") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Close Item tag",
-                event: close_tag,
-            });
-        }
+        // no need to check for the correct closing tag - checked by XmlReader
+        let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
 
         Ok(out)
     }
@@ -660,31 +632,17 @@ impl FromXml for IgnoreSubfield {
         _inner_cipher: &mut dyn Cipher,
     ) -> Result<Self::Parses, XmlParseError> {
         let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
-        if let SimpleXmlEvent::Start(ref tag, _) = open_tag {
+        if let SimpleXmlEvent::Start(_, _) = open_tag {
             let mut stack = Vec::new();
 
             while let Some(event) = iterator.next() {
                 match event {
                     SimpleXmlEvent::Start(t, _) => stack.push(t),
-                    SimpleXmlEvent::End(ref t) => {
-                        if let Some(s) = stack.pop() {
-                            // ascend the stack of inner elements
-                            if &s != t {
-                                return Err(XmlParseError::BadEvent {
-                                    expected: "Close matching tag",
-                                    event,
-                                });
-                            }
-                        } else {
-                            // we have an empty stack -- then the closing tag must match the
-                            // original open tag
-                            if t != tag {
-                                return Err(XmlParseError::BadEvent {
-                                    expected: "Close matching tag",
-                                    event,
-                                });
-                            }
-
+                    SimpleXmlEvent::End(_) => {
+                        // ascend the stack of inner elements. matching closing tag is ensured
+                        // by XmlReader
+                        if stack.pop().is_none() {
+                            // we are back at the root of the subparser
                             break;
                         }
                     }
@@ -705,9 +663,20 @@ impl FromXml for IgnoreSubfield {
 
 #[cfg(test)]
 mod parse_test {
-    use crate::config::InnerCipherSuite;
+    use crate::{
+        config::InnerCipherSuite,
+        crypt::ciphers::PlainCipher,
+        xml_db::parse::{DeletedObject, DeletedObjects, IgnoreSubfield, Root},
+        CustomData, CustomDataItem, Times,
+    };
 
-    use super::{parse, XmlParseError};
+    use super::{parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError};
+
+    pub(crate) fn parse_test_xml<P: FromXml>(
+        xml: &str,
+    ) -> Result<<P as FromXml>::Parses, XmlParseError> {
+        parse_from_bytes::<P>(xml.as_bytes(), &mut PlainCipher)
+    }
 
     #[test]
     fn test_custom_xml_fields() -> Result<(), XmlParseError> {
@@ -724,6 +693,222 @@ mod parse_test {
             .unwrap();
 
         let _database_content = parse(&xml[..], &mut *inner_cipher)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_simple_tag() -> Result<(), XmlParseError> {
+        // String tag
+        let value = parse_test_xml::<SimpleTag<String>>(
+            "<TestTag attribute=\"SomeValue\">Test-Value</TestTag>",
+        )?;
+        assert_eq!(value.name, "TestTag");
+        assert_eq!(value.value, "Test-Value");
+
+        let value = parse_test_xml::<SimpleTag<String>>(
+            "<TestTag attribute=\"SomeValue\">Test-Value<!-- a comment -->even more test data</TestTag>",
+        )?;
+        assert_eq!(value.name, "TestTag");
+        assert_eq!(value.value, "Test-Valueeven more test data");
+
+        let value =
+            parse_test_xml::<SimpleTag<String>>("<TestTag attribute=\"SomeValue\"></TestTag>");
+        assert!(value.is_err());
+
+        // Option<String> tag
+        let value = parse_test_xml::<SimpleTag<Option<String>>>(
+            "<TestTag attribute=\"SomeValue\">Test-Value</TestTag>",
+        )?;
+        assert_eq!(value.name, "TestTag");
+        assert_eq!(value.value, Some("Test-Value".to_string()));
+
+        let value = parse_test_xml::<SimpleTag<Option<String>>>(
+            "<TestTag attribute=\"SomeValue\"></TestTag>",
+        )?;
+        assert_eq!(value.name, "TestTag");
+        assert_eq!(value.value, None);
+
+        // bool tag
+        let value =
+            parse_test_xml::<SimpleTag<bool>>("<TestTag attribute=\"SomeValue\">True</TestTag>")?;
+        assert_eq!(value.name, "TestTag");
+        assert_eq!(value.value, true);
+
+        // usize tag
+        let value =
+            parse_test_xml::<SimpleTag<usize>>("<TestTag attribute=\"SomeValue\">42</TestTag>")?;
+        assert_eq!(value.name, "TestTag");
+        assert_eq!(value.value, 42);
+
+        // isize tag
+        let value =
+            parse_test_xml::<SimpleTag<isize>>("<TestTag attribute=\"SomeValue\">-42</TestTag>")?;
+        assert_eq!(value.name, "TestTag");
+        assert_eq!(value.value, -42);
+
+        // reject invalid XML
+        let value = parse_test_xml::<SimpleTag<String>>("");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<SimpleTag<String>>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<SimpleTag<String>>("<OpenTag>Data</CloseTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<SimpleTag<String>>("<TestTag></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<SimpleTag<String>>("<TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<SimpleTag<String>>("<TestTag>SomeData<AnotherTag/></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_keepass_xml_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<KeePassXml>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<KeePassXml>("<KeePassFile></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<KeePassXml>("<KeePassFile>No-Characters-Allowed</KeePassFile>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<KeePassXml>("<KeePassFile><UnkownChildTag/></KeePassFile>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_times() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<Times>("<Times><TestTime>8i481Q4AAAA=</TestTime></Times>")?;
+        assert_eq!(value.times.len(), 1);
+
+        let value = parse_test_xml::<Times>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Times>("<Times></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Times>("<Times>No-Characters-Allowed</Times>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_root_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<Root>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Root>("<Root></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Root>("<Root>No-Characters-Allowed</Root>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Root>("<Root><UnkownChildTag/></Root>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_deleted_objects_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<DeletedObjects>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<DeletedObjects>("<DeletedObjects></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<DeletedObjects>(
+            "<DeletedObjects>No-Characters-Allowed</DeletedObjects>",
+        );
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<DeletedObjects>("<DeletedObjects><UnkownChildTag/></DeletedObjects>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_deleted_object_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<DeletedObject>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<DeletedObject>("<DeletedObject></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<DeletedObject>("<DeletedObject>No-Characters-Allowed</DeletedObject>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<DeletedObject>("<DeletedObject><UnkownChildTag/></DeletedObject>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_data_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<CustomData>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomData>("<CustomData></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomData>("<CustomData>No-Characters-Allowed</CustomData>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomData>("<CustomData><UnkownChildTag/></CustomData>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_data_item_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<CustomDataItem>("<TestTag>SomeData</TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomDataItem>("<Item></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomDataItem>("<Item>No-Characters-Allowed</Item>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomDataItem>("<Item><UnkownChildTag/></Item>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ignore_subfield() -> Result<(), XmlParseError> {
+        let _value = parse_test_xml::<IgnoreSubfield>("<TestTag>SomeData</TestTag>")?;
+        let _value = parse_test_xml::<IgnoreSubfield>(
+            "<TestTag>SomeData<More-Content></More-Content></TestTag>",
+        )?;
+
+        let value = parse_test_xml::<IgnoreSubfield>("<Item></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::Xml(_))));
+
+        let value = parse_test_xml::<IgnoreSubfield>("</Item>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<IgnoreSubfield>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         Ok(())
     }
