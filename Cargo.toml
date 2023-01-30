@@ -17,6 +17,7 @@ readme = "README.md"
 utilities = ["anyhow", "clap", "rpassword", "serialization"]
 serialization = ["serde", "serde_json", "chrono/serde"]
 totp = ["totp-lite", "url", "base32"]
+save_kdbx4 = []
 
 default = []
 

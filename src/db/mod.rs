@@ -296,7 +296,8 @@ impl Database {
     }
 
     /// Save a database to a std::io::Write
-    pub(crate) fn save(
+    #[cfg(feature = "save_kdbx4")]
+    pub fn save(
         &self,
         destination: &mut dyn std::io::Write,
         password: Option<&str>,
