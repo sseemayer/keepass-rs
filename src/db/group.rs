@@ -46,6 +46,9 @@ pub struct Group {
     // TODO: in example XML files, this is "null" - what should the type be?
     pub enable_searching: Option<String>,
 
+    /// UUID for the last top visible entry
+    // TODO figure out what that is supposed to mean. According to the KeePass sourcecode, it has
+    // something to do with restoring selected items when re-opening a database.
     pub last_top_visible_entry: Option<String>,
 }
 
