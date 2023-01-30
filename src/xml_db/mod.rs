@@ -9,13 +9,15 @@ pub fn get_epoch_baseline() -> chrono::NaiveDateTime {
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveDateTime;
     use secstr::SecStr;
 
     use crate::{
         config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
         meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
         parse::kdbx4,
-        BinaryAttachment, CustomData, CustomDataItem, Database, Entry, Group, Meta, Node, Value,
+        AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database, Entry, Group,
+        Meta, Node, Value,
     };
 
     fn make_key() -> Vec<Vec<u8>> {
@@ -35,7 +37,6 @@ mod tests {
     pub fn test_entry() {
         let mut root_group = Group::new("Root");
         let mut entry = Entry::new();
-        let new_entry_uuid = entry.uuid.clone();
 
         entry.fields.insert(
             "Title".to_string(),
@@ -52,8 +53,44 @@ mod tests {
         entry.tags.push("test".to_string());
         entry.tags.push("keepass-rs".to_string());
         entry.times.expires = true;
+        entry.times.usage_count = 42;
+        entry
+            .times
+            .times
+            .insert("Created".to_string(), NaiveDateTime::default());
+        entry.autotype = Some(crate::AutoType {
+            enabled: true,
+            sequence: Some("Autotype-sequence".to_string()),
+            associations: vec![
+                AutoTypeAssociation {
+                    window: Some("window-1".to_string()),
+                    sequence: Some("sequence-1".to_string()),
+                },
+                AutoTypeAssociation {
+                    window: None,
+                    sequence: None,
+                },
+            ],
+        });
 
-        root_group.children.push(Node::Entry(entry));
+        entry.custom_data.items.push(CustomDataItem {
+            key: "CDI-key".to_string(),
+            value: Some(Value::Unprotected("CDI-Value".to_string())),
+            last_modification_time: Some(NaiveDateTime::default()),
+        });
+
+        entry.icon_id = Some(123);
+        entry.custom_icon_uuid = Some("custom-icon-uuid".to_string());
+
+        entry.foreground_color = Some("#C0FFEE".to_string());
+        entry.background_color = Some("#1C1357".to_string());
+
+        entry.override_url = Some("https://docs.rs/keepass-rs/".to_string());
+        entry.quality_check = Some(true);
+
+        entry.history.entries.push(entry.clone());
+
+        root_group.children.push(Node::Entry(entry.clone()));
 
         let db = Database::new(
             OuterCipherSuite::AES256,
@@ -83,14 +120,7 @@ mod tests {
             Node::Group(_) => panic!("Was expecting an entry as the only child."),
         };
 
-        assert_eq!(decrypted_entry.get_uuid(), new_entry_uuid);
-        assert_eq!(decrypted_entry.get_title(), Some("ASDF"));
-        assert_eq!(decrypted_entry.get_username(), Some("ghj"));
-        assert_eq!(decrypted_entry.get("Password"), Some("klmno"));
-        assert_eq!(
-            decrypted_entry.tags,
-            vec!["keepass-rs".to_string(), "test".to_string()]
-        );
+        assert_eq!(decrypted_entry, &entry);
     }
 
     #[test]
@@ -105,6 +135,26 @@ mod tests {
 
         root_group.children.push(Node::Entry(entry));
 
+        let mut subgroup = Group::new("Child group");
+        subgroup.notes = Some("I am a subgroup".to_string());
+        subgroup.icon_id = Some(42);
+        subgroup.custom_icon_uuid = Some("CUSTOM-ICON".to_string());
+        subgroup.times.expires = true;
+        subgroup.times.usage_count = 100;
+        subgroup
+            .times
+            .times
+            .insert("Created".to_string(), NaiveDateTime::default());
+        subgroup.is_expanded = true;
+        subgroup.default_autotype_sequence =
+            Some("{UP}{UP}{DOWN}{DOWN}{LEFT}{RIGHT}{LEFT}{RIGHT}BA".to_string());
+        subgroup.enable_autotype = Some("yes".to_string());
+        subgroup.enable_searching = Some("sure".to_string());
+
+        subgroup.last_top_visible_entry = Some("an-entry".to_string());
+
+        root_group.children.push(Node::Group(subgroup));
+
         let db = Database::new(
             OuterCipherSuite::AES256,
             Compression::GZip,
@@ -116,7 +166,7 @@ mod tests {
                 parallelism: 1,
                 version: argon2::Version::Version13,
             },
-            root_group,
+            root_group.clone(),
             vec![],
         )
         .unwrap();
@@ -126,18 +176,17 @@ mod tests {
         let encrypted_db = kdbx4::dump(&db, &key_elements).unwrap();
         let decrypted_db = kdbx4::parse(&encrypted_db, &key_elements).unwrap();
 
-        assert_eq!(decrypted_db.root.children.len(), 1);
+        assert_eq!(decrypted_db.root.children.len(), 2);
 
         let decrypted_entry = match &decrypted_db.root.children[0] {
             Node::Entry(e) => e,
-            Node::Group(_) => panic!("Was expecting an entry as the only child."),
+            Node::Group(_) => panic!("Was expecting an entry as the first child."),
         };
 
         assert_eq!(decrypted_entry.get_title(), Some("ASDF"));
         assert_eq!(decrypted_entry.get_uuid(), new_entry_uuid);
 
-        let decrypted_root_group = &decrypted_db.root;
-        assert_eq!(decrypted_root_group.name, "Root");
+        assert_eq!(&decrypted_db.root, &root_group);
     }
 
     #[test]
@@ -207,6 +256,12 @@ mod tests {
                         flags: 0,
                         compressed: true,
                         content: b"i am compressed binary data".to_vec(),
+                    },
+                    BinaryAttachment {
+                        identifier: None,
+                        flags: 0,
+                        compressed: true,
+                        content: b"i am compressed binary data without an identifier".to_vec(),
                     },
                 ],
             },

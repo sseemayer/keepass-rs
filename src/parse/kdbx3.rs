@@ -168,10 +168,8 @@ pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, D
     let mut meta = Meta::default();
 
     let mut root = Group {
-        uuid: Default::default(),
         name: "Root".to_owned(),
-        children: Default::default(),
-        times: Default::default(),
+        ..Default::default()
     };
 
     // Parse XML data blocks

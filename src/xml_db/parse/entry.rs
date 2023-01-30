@@ -5,6 +5,7 @@ use secstr::SecStr;
 
 use crate::{
     crypt::ciphers::Cipher,
+    entry::History,
     xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
     AutoType, AutoTypeAssociation, Entry, Times, Value,
 };
@@ -42,7 +43,6 @@ impl FromXml for Entry {
                                 .split(|c| c == ';' || c == ',')
                                 .map(|x| x.to_owned())
                                 .collect();
-                            out.tags.sort();
                         }
                     }
                     "String" => {
@@ -52,11 +52,10 @@ impl FromXml for Entry {
                         }
                     }
                     "CustomData" => {
-                        let value = CustomData::from_xml(iterator, inner_cipher)?;
-                        // TODO
+                        out.custom_data = CustomData::from_xml(iterator, inner_cipher)?;
                     }
                     "Binary" => {
-                        let field = BinaryField::from_xml(iterator, inner_cipher)?;
+                        let _field = BinaryField::from_xml(iterator, inner_cipher)?;
                         // TODO reference into a binary field from the Meta. Might only appear in
                         // kdbx3
                     }
@@ -67,38 +66,31 @@ impl FromXml for Entry {
                         out.times = Times::from_xml(iterator, inner_cipher)?;
                     }
                     "IconID" => {
-                        let icon_id = SimpleTag::<usize>::from_xml(iterator, inner_cipher)?;
-                        // TODO
-                        // out.icon_id = icon_id;
+                        out.icon_id =
+                            SimpleTag::<Option<usize>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "CustomIconUUID" => {
-                        let icon_id = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
+                        out.custom_icon_uuid =
+                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "ForegroundColor" => {
-                        let color = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?;
-                        // TODO
-                        // out.foregrpund_color = color;
+                        out.foreground_color =
+                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "BackgroundColor" => {
-                        let color = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?;
-                        // TODO
-                        // out.background_color = color;
+                        out.background_color =
+                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "OverrideURL" => {
-                        let url = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?;
-                        // TODO
-                        // out.override_url = color;
+                        out.override_url =
+                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "QualityCheck" => {
-                        let qc = SimpleTag::<bool>::from_xml(iterator, inner_cipher)?;
-                        // TODO
-                        // out.quality_check = qc;
+                        out.quality_check =
+                            SimpleTag::<Option<bool>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "History" => {
-                        let history = History::from_xml(iterator, inner_cipher)?;
-                        // TODO
-                        // out.history = history;
+                        out.history = History::from_xml(iterator, inner_cipher)?;
                     }
                     _ => {
                         IgnoreSubfield::from_xml(iterator, inner_cipher)?;
@@ -306,9 +298,9 @@ impl FromXml for AutoType {
                             SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "DataTransferObfuscation" => {
-                        let value =
+                        let _value =
                             SimpleTag::<Option<usize>>::from_xml(iterator, inner_cipher)?.value;
-                        // TODO
+                        // TODO probably not needed?
                     }
                     "Association" => {
                         let ata = AutoTypeAssociation::from_xml(iterator, inner_cipher)?;
@@ -382,10 +374,6 @@ impl FromXml for AutoTypeAssociation {
 
         Ok(out)
     }
-}
-
-struct History {
-    entries: Vec<Entry>,
 }
 
 impl FromXml for History {

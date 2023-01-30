@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use crate::db::{entry::Entry, group::Group};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum Node {
     Group(Group),
