@@ -305,4 +305,17 @@ mod file_read_tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn test_get_version() -> Result<(), DatabaseIntegrityError> {
+        let path = Path::new("tests/resources/test_db_with_password.kdbx");
+        let version = Database::get_version(&mut File::open(path)?)?;
+        assert_eq!(version.to_string(), "KDBX3.1");
+
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2.kdbx");
+        let version = Database::get_version(&mut File::open(path)?)?;
+        assert_eq!(version.to_string(), "KDBX4.0");
+
+        Ok(())
+    }
 }
