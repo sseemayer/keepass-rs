@@ -163,7 +163,7 @@ impl DumpXml for BinaryAttachment {
     fn dump_xml<E: std::io::Write>(
         &self,
         writer: &mut EventWriter<E>,
-        inner_cipher: &mut dyn Cipher,
+        _inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error> {
         let start_tag = WriterEvent::start_element("Binary");
 

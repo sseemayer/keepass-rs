@@ -435,6 +435,7 @@ pub(crate) fn decrypt_xml(
     Ok((header, inner_header, xml.to_vec()))
 }
 
+#[cfg(test)]
 mod kdbx4_tests {
     use super::*;
 
@@ -697,11 +698,7 @@ mod kdbx4_tests {
         assert_eq!(decrypted_db.root.children.len(), 1);
 
         let binaries = match decrypted_db.inner_header {
-            InnerHeader::KDBX4(KDBX4InnerHeader {
-                inner_random_stream,
-                inner_random_stream_key,
-                binaries,
-            }) => binaries,
+            InnerHeader::KDBX4(KDBX4InnerHeader { binaries, .. }) => binaries,
             _ => panic!(""),
         };
         assert_eq!(binaries.len(), 2);

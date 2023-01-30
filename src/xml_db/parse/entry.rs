@@ -169,6 +169,7 @@ impl FromXml for StringField {
     }
 }
 
+#[allow(dead_code)]
 struct BinaryField {
     key: String,
     identifier: String,

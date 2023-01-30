@@ -1,6 +1,5 @@
 /// utility to get the version of a KeePass database.
 use std::fs::File;
-use std::io::Read;
 
 use anyhow::Result;
 use clap::Parser;
