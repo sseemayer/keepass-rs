@@ -202,6 +202,9 @@ pub enum DatabaseIntegrityError {
 
     #[error(transparent)]
     KdfSettings(#[from] KdfSettingsError),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 #[derive(Debug, Error)]
@@ -361,6 +364,16 @@ impl Database {
         };
 
         Ok(data)
+    }
+
+    /// Get the version of a database.
+    pub fn get_version(
+        source: &mut dyn std::io::Read,
+    ) -> Result<DatabaseVersion, DatabaseIntegrityError> {
+        let mut data = Vec::new();
+        data.resize(DatabaseVersion::get_version_header_size(), 0);
+        source.read(&mut data)?;
+        DatabaseVersion::parse(data.as_ref())
     }
 
     pub fn new(

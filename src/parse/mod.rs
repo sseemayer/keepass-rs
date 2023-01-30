@@ -81,6 +81,17 @@ impl DatabaseVersion {
     }
 }
 
+impl ToString for DatabaseVersion {
+    fn to_string(&self) -> String {
+        match self {
+            DatabaseVersion::KDB(_) => "KDB".to_string(),
+            DatabaseVersion::KDB2(_) => "KDBX2".to_string(),
+            DatabaseVersion::KDB3(minor_version) => format!("KDBX3.{}", minor_version),
+            DatabaseVersion::KDB4(minor_version) => format!("KDBX4.{}", minor_version),
+        }
+    }
+}
+
 /// Read the KDBX header to get the file version
 pub fn get_kdbx_version(data: &[u8]) -> Result<(u32, u16, u16), DatabaseIntegrityError> {
     // check identifier

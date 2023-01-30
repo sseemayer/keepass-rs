@@ -78,3 +78,7 @@ required-features = ["utilities"]
 [[bin]]
 name = "kp-show-otp"
 required-features = ["utilities", "totp"]
+
+[[bin]]
+name = "kp-get-version"
+required-features = ["utilities"]
