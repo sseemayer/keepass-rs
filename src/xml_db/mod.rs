@@ -13,7 +13,6 @@ mod tests {
     use secstr::SecStr;
 
     use crate::{
-        config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
         meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
         parse::kdbx4,
         AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database, Entry, Group,
@@ -92,21 +91,8 @@ mod tests {
 
         root_group.children.push(Node::Entry(entry.clone()));
 
-        let db = Database::new(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::Salsa20,
-            KdfSettings::Argon2 {
-                salt: vec![],
-                iterations: 1000,
-                memory: 65536,
-                parallelism: 1,
-                version: argon2::Version::Version13,
-            },
-            root_group,
-            vec![],
-        )
-        .unwrap();
+        let mut db = Database::new(crate::NewDatabaseSettings::default()).unwrap();
+        db.root = root_group;
 
         let key_elements = make_key();
 
@@ -155,21 +141,8 @@ mod tests {
 
         root_group.children.push(Node::Group(subgroup));
 
-        let db = Database::new(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::Salsa20,
-            KdfSettings::Argon2 {
-                salt: vec![],
-                iterations: 1000,
-                memory: 65536,
-                parallelism: 1,
-                version: argon2::Version::Version13,
-            },
-            root_group.clone(),
-            vec![],
-        )
-        .unwrap();
+        let mut db = Database::new(crate::NewDatabaseSettings::default()).unwrap();
+        db.root = root_group.clone();
 
         let key_elements = make_key();
 
@@ -191,21 +164,7 @@ mod tests {
 
     #[test]
     pub fn test_meta() {
-        let mut db = Database::new(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::Salsa20,
-            KdfSettings::Argon2 {
-                salt: vec![],
-                iterations: 1000,
-                memory: 65536,
-                parallelism: 1,
-                version: argon2::Version::Version13,
-            },
-            Group::new("Root"),
-            vec![],
-        )
-        .unwrap();
+        let mut db = Database::new(crate::NewDatabaseSettings::default()).unwrap();
 
         let meta = Meta {
             generator: Some("test-generator".to_string()),

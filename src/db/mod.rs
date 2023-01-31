@@ -67,7 +67,7 @@ pub struct Database {
     /// Root node of the KeePass database
     pub root: Group,
 
-    // Metadata of the KeePass database
+    /// Metadata of the KeePass database
     pub meta: Meta,
 }
 
@@ -273,6 +273,43 @@ impl From<CompressionError> for DatabaseOpenError {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum DatabaseNewError {
+    #[error("Error generating random data: {}", _0)]
+    Random(String),
+}
+
+impl From<getrandom::Error> for DatabaseNewError {
+    fn from(e: getrandom::Error) -> Self {
+        DatabaseNewError::Random(format!("{}", e))
+    }
+}
+
+#[derive(Debug)]
+pub struct NewDatabaseSettings {
+    pub outer_cipher_suite: OuterCipherSuite,
+    pub compression: Compression,
+    pub inner_cipher_suite: InnerCipherSuite,
+    pub kdf_setting: KdfSettings,
+}
+
+impl Default for NewDatabaseSettings {
+    fn default() -> Self {
+        Self {
+            outer_cipher_suite: OuterCipherSuite::AES256,
+            compression: Compression::GZip,
+            inner_cipher_suite: InnerCipherSuite::ChaCha20,
+            kdf_setting: KdfSettings::Argon2 {
+                salt: Vec::new(), // will get filled by new function
+                iterations: 50,
+                memory: 1024 * 1024,
+                parallelism: 4,
+                version: argon2::Version::Version13,
+            },
+        }
+    }
+}
+
 impl Database {
     /// Parse a database from a std::io::Read
     pub fn open(
@@ -378,47 +415,42 @@ impl Database {
     }
 
     pub fn new(
-        outer_cipher_suite: OuterCipherSuite,
-        compression: Compression,
-        inner_cipher_suite: InnerCipherSuite,
-        mut kdf: KdfSettings,
-        root: Group,
-        binaries: Vec<BinaryAttachment>,
-    ) -> std::result::Result<Database, getrandom::Error> {
+        mut settings: NewDatabaseSettings,
+    ) -> std::result::Result<Database, DatabaseNewError> {
         let mut outer_iv: Vec<u8> = vec![];
-        outer_iv.resize(outer_cipher_suite.get_iv_size().into(), 0);
+        outer_iv.resize(settings.outer_cipher_suite.get_iv_size().into(), 0);
         getrandom::getrandom(&mut outer_iv)?;
 
         let mut inner_random_stream_key: Vec<u8> = vec![];
-        inner_random_stream_key.resize(inner_cipher_suite.get_iv_size().into(), 0);
+        inner_random_stream_key.resize(settings.inner_cipher_suite.get_iv_size().into(), 0);
         getrandom::getrandom(&mut inner_random_stream_key)?;
 
         let mut kdf_seed: Vec<u8> = vec![];
-        kdf_seed.resize(kdf.seed_size().into(), 0);
+        kdf_seed.resize(settings.kdf_setting.seed_size().into(), 0);
         getrandom::getrandom(&mut kdf_seed)?;
 
         let mut master_seed: Vec<u8> = vec![];
         master_seed.resize(crate::parse::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
         getrandom::getrandom(&mut master_seed)?;
 
-        kdf.set_seed(kdf_seed);
+        settings.kdf_setting.set_seed(kdf_seed);
 
         Ok(Database {
             header: Header::KDBX4(KDBX4Header {
                 version: DatabaseVersion::KDB4(3),
-                outer_cipher: outer_cipher_suite,
-                compression,
+                outer_cipher: settings.outer_cipher_suite,
+                compression: settings.compression,
                 master_seed,
                 outer_iv,
-                kdf,
+                kdf: settings.kdf_setting,
             }),
             inner_header: InnerHeader::KDBX4(KDBX4InnerHeader {
-                inner_random_stream: inner_cipher_suite,
+                inner_random_stream: settings.inner_cipher_suite,
                 inner_random_stream_key,
-                binaries,
+                binaries: Default::default(),
             }),
-            root,
-            meta: Meta::default(),
+            root: Group::new("Root"),
+            meta: Default::default(),
         })
     }
 }

@@ -441,7 +441,7 @@ mod kdbx4_tests {
 
     use crate::{
         config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
-        Database, Entry, Group, Node,
+        Database, Entry, Group, NewDatabaseSettings, Node, Value,
     };
 
     fn test_with_settings(
@@ -450,19 +450,19 @@ mod kdbx4_tests {
         inner_cipher_suite: InnerCipherSuite,
         kdf_setting: KdfSettings,
     ) {
-        let mut root_group = Group::new("Root");
-        root_group.children.push(Node::Entry(Entry::new()));
-        root_group.children.push(Node::Entry(Entry::new()));
-        root_group.children.push(Node::Entry(Entry::new()));
-        let db = Database::new(
+        let mut db = Database::new(NewDatabaseSettings {
             outer_cipher_suite,
             compression,
             inner_cipher_suite,
             kdf_setting,
-            root_group,
-            vec![],
-        )
+        })
         .unwrap();
+
+        let mut root_group = Group::new("Root");
+        root_group.children.push(Node::Entry(Entry::new()));
+        root_group.children.push(Node::Entry(Entry::new()));
+        root_group.children.push(Node::Entry(Entry::new()));
+        db.root = root_group;
 
         let mut password_bytes: Vec<u8> = vec![];
         let mut password: String = "".to_string();
@@ -659,19 +659,11 @@ mod kdbx4_tests {
     pub fn binary_attachments() {
         let mut root_group = Group::new("Root");
         root_group.children.push(Node::Entry(Entry::new()));
-        let db = Database::new(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::Salsa20,
-            KdfSettings::Argon2 {
-                salt: vec![],
-                iterations: 1000,
-                memory: 65536,
-                parallelism: 1,
-                version: argon2::Version::Version13,
-            },
-            root_group,
-            vec![
+
+        let mut db = Database::new(NewDatabaseSettings::default()).unwrap();
+
+        if let InnerHeader::KDBX4(KDBX4InnerHeader { binaries, .. }) = &mut db.inner_header {
+            *binaries = vec![
                 BinaryAttachment {
                     identifier: None,
                     flags: 1,
@@ -684,9 +676,18 @@ mod kdbx4_tests {
                     compressed: false,
                     content: vec![0x04, 0x03, 0x02, 0x01],
                 },
-            ],
-        )
-        .unwrap();
+            ];
+        } else {
+            panic!("Expected inner kdbx4 header");
+        }
+
+        let mut entry = Entry::new();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("Demo entry".to_string()),
+        );
+
+        db.root.children.push(Node::Entry(entry));
 
         let password = "test".to_string();
         let key_elements = Database::get_key_elements(Some(&password), None).unwrap();
