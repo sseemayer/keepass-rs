@@ -380,7 +380,7 @@ impl Database {
         outer_cipher_suite: OuterCipherSuite,
         compression: Compression,
         inner_cipher_suite: InnerCipherSuite,
-        kdf_setting: KdfSettings,
+        mut kdf: KdfSettings,
         root: Group,
         binaries: Vec<BinaryAttachment>,
     ) -> std::result::Result<Database, getrandom::Error> {
@@ -392,40 +392,15 @@ impl Database {
         inner_random_stream_key.resize(inner_cipher_suite.get_iv_size().into(), 0);
         getrandom::getrandom(&mut inner_random_stream_key)?;
 
-        let kdf: KdfSettings;
         let mut kdf_seed: Vec<u8> = vec![];
-        kdf_seed.resize(kdf_setting.seed_size().into(), 0);
+        kdf_seed.resize(kdf.seed_size().into(), 0);
         getrandom::getrandom(&mut kdf_seed)?;
 
         let mut master_seed: Vec<u8> = vec![];
         master_seed.resize(crate::parse::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
         getrandom::getrandom(&mut master_seed)?;
 
-        // FIXME obviously this is ugly. We should be able to change
-        // the seed without destructuring all the kdf enum types.
-        match kdf_setting {
-            KdfSettings::Aes { rounds, .. } => {
-                kdf = KdfSettings::Aes {
-                    seed: kdf_seed,
-                    rounds,
-                };
-            }
-            KdfSettings::Argon2 {
-                iterations,
-                memory,
-                parallelism,
-                version,
-                ..
-            } => {
-                kdf = KdfSettings::Argon2 {
-                    salt: kdf_seed,
-                    iterations,
-                    memory,
-                    parallelism,
-                    version,
-                };
-            }
-        };
+        kdf.set_seed(kdf_seed);
 
         Ok(Database {
             header: Header::KDBX4(KDBX4Header {

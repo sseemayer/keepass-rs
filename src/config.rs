@@ -170,6 +170,13 @@ pub enum KdfSettings {
 }
 
 impl KdfSettings {
+    pub fn set_seed(&mut self, new_seed: Vec<u8>) {
+        match self {
+            KdfSettings::Aes { seed, .. } => *seed = new_seed,
+            KdfSettings::Argon2 { salt, .. } => *salt = new_seed,
+        }
+    }
+
     pub fn seed_size(&self) -> u8 {
         match self {
             KdfSettings::Aes { .. } => 32,
