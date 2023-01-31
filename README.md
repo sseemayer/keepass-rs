@@ -7,12 +7,10 @@
 [![dependency status](https://deps.rs/repo/github/sseemayer/keepass-rs/status.svg)](https://deps.rs/repo/github/sseemayer/keepass-rs)
 [![License file](https://img.shields.io/github/license/sseemayer/keepass-rs)](https://github.com/sseemayer/keepass-rs/blob/master/LICENSE)
 
-KeePass .kdbx database file parser for Rust
+Rust KeePass database file parser for KDB KDBX3 and KDBX4, with experimental support for KDBX4 writing.
 
 ## Example
 ```rust
-extern crate keepass;
-
 use keepass::{Database, DatabaseOpenError, NodeRef};
 use std::fs::File;
 
@@ -49,10 +47,13 @@ Add the following to the `dependencies` section of your `Cargo.toml`:
 
 ```ignore
 [dependencies]
+# TODO replace with current version
 keepass = "*"
 ```
 
-**Performance note:** Please set the `RUSTFLAGS` environment variable when compiling to enable CPU-specific optimizations (this greatly affects the speed of the AES key derivation):
+### Performance Notes
+
+Please set the `RUSTFLAGS` environment variable when compiling to enable CPU-specific optimizations (this greatly affects the speed of the AES key derivation):
 
 ```bash
 export RUSTFLAGS='-C target-cpu=native'
@@ -62,7 +63,7 @@ For best results, also compile in Release mode.
 
 Alternatively, you can add a `.cargo/config.toml` like in this project to ensure that rustflags are always set.
 
-For AArch64 / ARMv8:
+#### For AArch64 / ARMv8:
 
 The `aes` optimizations are not yet enabled on stable rust. If you want a big performance boost you can build using nightly and enabling the `armv8` feature of the `aes` crate:
 
@@ -73,25 +74,56 @@ version = "0.7.5"
 features = ["armv8"]
 ```
 
+### EXPERIMENTAL: KDBX 4 database saving
+
+**IMPORTANT:** The inner XML data structure will be re-written from scratch from the internal object representation of this crate, so any field that is not parsed by the library will be lost in the written output file! Please make sure to back up your database before trying this feature.
+
+You can enable the experimental support for saving KDBX4 databases using the `save_kdbx4` feature.
+
+```rust
+use anyhow::Result;
+
+use keepass::{Database, DatabaseOpenError, Entry, Group, NewDatabaseSettings, Node, Value};
+
+use std::fs::File;
+
+#[cfg(feature = "save_kdbx4")]
+fn main() -> Result<()> {
+	let mut db = Database::new(NewDatabaseSettings::default())?;
+
+	db.meta.database_name = Some("Demo database".to_string());
+
+	let mut group = Group::new("Demo group");
+
+	let mut entry = Entry::new();
+	entry.fields.insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
+	entry.fields.insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
+	entry.fields.insert("Password".to_string(), Value::Protected("hunter2".as_bytes().into()));
+
+	group.children.push(Node::Entry(entry));
+
+	db.root.children.push(Node::Group(group));
+
+	db.save(
+		&mut File::create("demo.kdbx")?,
+		Some("demopass"),
+		None,
+	)?;
+
+	Ok(())
+}
+
+```
+
 ## [Documentation](https://docs.rs/keepass)
 
 ## Developer Tools
+This crate also contains several command line tools that can be enabled with feature flags. See the `[[bin]]` sections in [Cargo.toml](Cargo.toml) for a complete list.
 
-### `kp-dump-xml`
-This library contains an optionally-compiled command line application to dump out the internal XML representation from a KDBX database. This can be useful for implementing additional features for the XML parser.
-
-Since the tool depends on additional crates, it is not compiled until you specify the `utilities` feature, e.g.
+An example command line for running the `kp-dump-xml` command would be:
 
 ```ignore
 cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database.kdbx
-```
-
-### `kp-show-otp`
-
-This application can dump the OTP value of a given entry
-
-```ignore
-cargo run --release --features "totp,utilities" --bin kp-show-otp -- tests/resources/test_db_kdbx4_with_totp_sha512_entry.kdbx "sha512 totp"
 ```
 
 ## License

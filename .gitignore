@@ -3,6 +3,8 @@
 *.iml
 Cargo.lock
 
+demo.kdbx
+
 #####=== Rust ===#####
 
 Cargo.lock
