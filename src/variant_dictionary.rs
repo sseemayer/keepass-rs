@@ -141,6 +141,9 @@ impl VariantDictionary {
             data.extend_from_slice(&field_buffer);
         }
 
+        // signify end of variant dictionary
+        data.push(0);
+
         data
     }
 
