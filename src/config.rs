@@ -52,11 +52,19 @@ impl OuterCipherSuite {
         }
     }
 
-    pub fn get_iv_size(&self) -> u8 {
+    pub fn get_iv_size(&self) -> usize {
         match self {
             OuterCipherSuite::AES256 => ciphers::AES256Cipher::iv_size(),
             OuterCipherSuite::Twofish => ciphers::TwofishCipher::iv_size(),
             OuterCipherSuite::ChaCha20 => ciphers::ChaCha20Cipher::iv_size(),
+        }
+    }
+
+    pub fn get_key_size(&self) -> usize {
+        match self {
+            OuterCipherSuite::AES256 => ciphers::AES256Cipher::key_size(),
+            OuterCipherSuite::Twofish => ciphers::TwofishCipher::key_size(),
+            OuterCipherSuite::ChaCha20 => ciphers::ChaCha20Cipher::key_size(),
         }
     }
 
@@ -120,11 +128,19 @@ impl InnerCipherSuite {
         }
     }
 
-    pub fn get_iv_size(&self) -> u8 {
+    pub fn get_iv_size(&self) -> usize {
         match self {
             InnerCipherSuite::Plain => ciphers::PlainCipher::iv_size(),
             InnerCipherSuite::Salsa20 => ciphers::Salsa20Cipher::iv_size(),
             InnerCipherSuite::ChaCha20 => ciphers::ChaCha20Cipher::iv_size(),
+        }
+    }
+
+    pub fn get_key_size(&self) -> usize {
+        match self {
+            InnerCipherSuite::Plain => ciphers::PlainCipher::key_size(),
+            InnerCipherSuite::Salsa20 => ciphers::Salsa20Cipher::key_size(),
+            InnerCipherSuite::ChaCha20 => ciphers::ChaCha20Cipher::key_size(),
         }
     }
 }

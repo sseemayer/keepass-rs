@@ -14,7 +14,7 @@ use crate::{
 
 use byteorder::{ByteOrder, LittleEndian};
 
-pub const HEADER_MASTER_SEED_SIZE: u8 = 16;
+pub const HEADER_MASTER_SEED_SIZE: u8 = 32;
 
 pub const HEADER_END: u8 = 0;
 pub const HEADER_COMMENT: u8 = 1;

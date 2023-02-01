@@ -422,7 +422,7 @@ impl Database {
         getrandom::getrandom(&mut outer_iv)?;
 
         let mut inner_random_stream_key: Vec<u8> = vec![];
-        inner_random_stream_key.resize(settings.inner_cipher_suite.get_iv_size().into(), 0);
+        inner_random_stream_key.resize(settings.inner_cipher_suite.get_key_size().into(), 0);
         getrandom::getrandom(&mut inner_random_stream_key)?;
 
         let mut kdf_seed: Vec<u8> = vec![];

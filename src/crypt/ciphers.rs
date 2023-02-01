@@ -10,8 +10,14 @@ use crate::crypt::CryptographyError;
 pub(crate) trait Cipher {
     fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError>;
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError>;
-    /// The number of bytes expected by the cipher as an initialization version.
-    fn iv_size() -> u8
+
+    /// The number of bytes expected by the cipher as an initialization vector.
+    fn iv_size() -> usize
+    where
+        Self: Sized;
+
+    /// The number of bytes expected by the cipher as a key.
+    fn key_size() -> usize
     where
         Self: Sized;
 }
@@ -54,11 +60,13 @@ impl Cipher for AES256Cipher {
 
         Ok(out)
     }
-    fn iv_size() -> u8
-    where
-        Self: Sized,
-    {
+
+    fn iv_size() -> usize {
         16
+    }
+
+    fn key_size() -> usize {
+        32
     }
 }
 
@@ -87,6 +95,7 @@ impl Cipher for TwofishCipher {
 
         Ok(ciphertext)
     }
+
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         let cipher = TwofishCbcDecryptor::new_from_slices(&self.key, &self.iv)?;
 
@@ -94,11 +103,13 @@ impl Cipher for TwofishCipher {
         cipher.decrypt_padded_mut::<twofish::cipher::block_padding::Pkcs7>(&mut buf)?;
         Ok(buf)
     }
-    fn iv_size() -> u8
-    where
-        Self: Sized,
-    {
+
+    fn iv_size() -> usize {
         16
+    }
+
+    fn key_size() -> usize {
+        32
     }
 }
 
@@ -128,11 +139,13 @@ impl Cipher for Salsa20Cipher {
         self.cipher.apply_keystream(&mut buffer);
         Ok(buffer)
     }
-    fn iv_size() -> u8
-    where
-        Self: Sized,
-    {
+
+    fn iv_size() -> usize {
         // or 16
+        32
+    }
+
+    fn key_size() -> usize {
         32
     }
 }
@@ -173,11 +186,13 @@ impl Cipher for ChaCha20Cipher {
         self.cipher.apply_keystream(&mut buffer);
         Ok(buffer)
     }
-    fn iv_size() -> u8
-    where
-        Self: Sized,
-    {
+
+    fn iv_size() -> usize {
         12
+    }
+
+    fn key_size() -> usize {
+        32
     }
 }
 
@@ -194,10 +209,12 @@ impl Cipher for PlainCipher {
     fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         Ok(Vec::from(ciphertext))
     }
-    fn iv_size() -> u8
-    where
-        Self: Sized,
-    {
-        12
+
+    fn iv_size() -> usize {
+        1
+    }
+
+    fn key_size() -> usize {
+        1
     }
 }
