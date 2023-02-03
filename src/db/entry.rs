@@ -30,7 +30,7 @@ pub struct Entry {
     pub override_url: Option<String>,
     pub quality_check: Option<bool>,
 
-    pub history: History,
+    pub history: Option<History>,
 }
 impl Entry {
     pub fn new() -> Entry {

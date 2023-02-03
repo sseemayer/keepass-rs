@@ -13,6 +13,7 @@ mod tests {
     use secstr::SecStr;
 
     use crate::{
+        entry::History,
         meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
         parse::kdbx4,
         AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database, Entry, Group,
@@ -87,7 +88,10 @@ mod tests {
         entry.override_url = Some("https://docs.rs/keepass-rs/".to_string());
         entry.quality_check = Some(true);
 
-        entry.history.entries.push(entry.clone());
+        let mut history = History::default();
+        history.entries.push(entry.clone());
+
+        entry.history = Some(history);
 
         root_group.children.push(Node::Entry(entry.clone()));
 
