@@ -14,8 +14,8 @@ mod tests {
 
     use crate::{
         entry::History,
+        format::kdbx4,
         meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
-        parse::kdbx4,
         AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database, Entry, Group,
         Meta, Node, Value,
     };
