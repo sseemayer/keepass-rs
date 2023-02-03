@@ -90,7 +90,7 @@ impl FromXml for Entry {
                             SimpleTag::<Option<bool>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "History" => {
-                        out.history = History::from_xml(iterator, inner_cipher)?;
+                        out.history = Some(History::from_xml(iterator, inner_cipher)?);
                     }
                     _ => {
                         IgnoreSubfield::from_xml(iterator, inner_cipher)?;
@@ -169,6 +169,7 @@ impl FromXml for StringField {
     }
 }
 
+#[allow(dead_code)]
 struct BinaryField {
     key: String,
     identifier: String,

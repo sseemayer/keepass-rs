@@ -14,9 +14,10 @@ license = "MIT"
 readme = "README.md"
 
 [features]
-utilities = ["anyhow", "clap", "rpassword", "serialization"]
+utilities = ["anyhow", "clap", "rpassword", "serialization", "totp"]
 serialization = ["serde", "serde_json", "chrono/serde"]
 totp = ["totp-lite", "url", "base32"]
+save_kdbx4 = []
 
 default = []
 
@@ -64,21 +65,31 @@ base32 = { version = "0.4.0", optional = true }
 rustfmt = "0.10.0"
 
 [[bin]]
+# parse a KeePass database and output as a JSON document
 name = "kp-dump-json"
 required-features = ["utilities"]
 
 [[bin]]
+# decrypt a KeePass database and output the inner XML document
 name = "kp-dump-xml"
 required-features = ["utilities"]
 
 [[bin]]
+# decrypt a KeePass database and show the contained data
 name = "kp-show-db"
 required-features = ["utilities"]
 
 [[bin]]
+# decrypt a KeePass database and show the TOTP value for an entry
 name = "kp-show-otp"
-required-features = ["utilities", "totp"]
+required-features = ["utilities"]
 
 [[bin]]
+# get the version of a KeePass database file
 name = "kp-get-version"
 required-features = ["utilities"]
+
+[[bin]]
+# parse and write a KeePass database (to check if all fields are kept)
+name = "kp-rewrite"
+required-features = ["utilities", "save_kdbx4"]

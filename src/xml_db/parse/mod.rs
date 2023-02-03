@@ -105,7 +105,6 @@ pub(crate) fn parse_from_bytes<P: FromXml>(
     let mut reader = EventReader::new(xml)
         .into_iter()
         .filter_map(|e| {
-            dbg!(&e);
             // simplify iterator by ignoring unneeded events and flattening the structure
             match e {
                 Ok(XmlEvent::StartElement {

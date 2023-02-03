@@ -61,7 +61,9 @@ impl DumpXml for Entry {
             SimpleTag("QualityCheck", value).dump_xml(writer, inner_cipher)?;
         }
 
-        self.history.dump_xml(writer, inner_cipher)?;
+        if let Some(ref value) = self.history {
+            value.dump_xml(writer, inner_cipher)?;
+        }
 
         writer.write(WriterEvent::end_element())?; // Entry
 

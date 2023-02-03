@@ -51,6 +51,10 @@ pub(crate) fn read_hmac_block_stream(
         pos += 36 + size;
         block_index += 1;
 
+        if size == 0 {
+            break;
+        }
+
         out.extend_from_slice(block);
     }
 
@@ -93,6 +97,18 @@ pub(crate) fn write_hmac_block_stream(
         out.extend_from_slice(&size_bytes);
         out.extend_from_slice(&block);
     }
+
+    // the end of the HMAC block stream should be an empty block, but with a valid HMAC
+    let hmac_block_key = get_hmac_block_key(block_index, key)?;
+    let mut block_index_buf = [0u8; 8];
+    LittleEndian::write_u64(&mut block_index_buf, block_index as u64);
+
+    let size_bytes = vec![0; 4];
+    let hmac =
+        crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, &[]], &hmac_block_key)?;
+
+    out.extend_from_slice(&hmac);
+    out.extend_from_slice(&size_bytes);
 
     Ok(out)
 }

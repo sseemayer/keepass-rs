@@ -29,7 +29,7 @@ jobs:
           toolchain: stable
           override: true
       - name: run cargo test
-        run: cargo test --features utilities
+        run: cargo test --all-features
 
   armv7-test:
     name: ARMv7 Test Suite
@@ -47,7 +47,7 @@ jobs:
         with:
           use-cross: true
           command: test
-          args: --release --target armv7-unknown-linux-musleabihf tests::kdbx4_entry --features utilities
+          args: --release --target armv7-unknown-linux-musleabihf tests::kdbx4_entry --all-features
 
   formatting:
     name: Code Formatting
