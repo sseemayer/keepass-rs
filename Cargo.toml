@@ -88,3 +88,8 @@ required-features = ["utilities"]
 # get the version of a KeePass database file
 name = "kp-get-version"
 required-features = ["utilities"]
+
+[[bin]]
+# parse and write a KeePass database (to check if all fields are kept)
+name = "kp-rewrite"
+required-features = ["utilities", "save_kdbx4"]
