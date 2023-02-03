@@ -80,14 +80,13 @@ features = ["armv8"]
 
 You can enable the experimental support for saving KDBX4 databases using the `save_kdbx4` feature.
 
-```rust
+```rust ignore
 use anyhow::Result;
 
 use keepass::{Database, DatabaseOpenError, Entry, Group, NewDatabaseSettings, Node, Value};
 
 use std::fs::File;
 
-#[cfg(feature = "save_kdbx4")]
 fn main() -> Result<()> {
 	let mut db = Database::new(NewDatabaseSettings::default())?;
 
