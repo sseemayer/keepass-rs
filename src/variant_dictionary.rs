@@ -28,6 +28,9 @@ pub enum VariantDictionaryError {
 
     #[error("Mistyped value: {}", key)]
     Mistyped { key: String },
+
+    #[error("VariantDictionary did not end with null byte, when it should")]
+    NotTerminated,
 }
 
 impl VariantDictionary {
@@ -73,6 +76,13 @@ impl VariantDictionary {
             };
 
             data.insert(key, value);
+        }
+
+        if buffer[pos] != 0 {
+            // even though we can determine when to stop parsing a VariantDictionary by where we
+            // are in the buffer, there should always be a value_type = 0 entry to denote that a
+            // VariantDictionary is finished
+            return Err(VariantDictionaryError::NotTerminated);
         }
 
         Ok(VariantDictionary { data })
