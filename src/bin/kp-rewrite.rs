@@ -44,7 +44,7 @@ pub fn main() -> Result<()> {
         None
     };
 
-    let db = Database::open(
+    let mut db = Database::open(
         &mut source,
         password,
         keyfile.as_mut().map(|kf| kf as &mut dyn Read),
