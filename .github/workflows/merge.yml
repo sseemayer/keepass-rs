@@ -8,6 +8,7 @@ name: Merge on Master
 jobs:
   coverage:
     name: Code Coverage
+    continue-on-error: true
     runs-on: ubuntu-latest
     container:
       image: xd009642/tarpaulin:0.24.0
