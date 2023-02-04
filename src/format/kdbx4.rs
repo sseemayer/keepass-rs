@@ -6,8 +6,8 @@ use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     crypt,
     db::{Database, Header, InnerHeader},
+    format::DatabaseVersion,
     hmac_block_stream,
-    parse::DatabaseVersion,
     variant_dictionary::VariantDictionary,
     DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSaveError,
 };

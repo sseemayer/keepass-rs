@@ -27,14 +27,14 @@ use crate::{
         KdfSettingsError, OuterCipherSuite, OuterCipherSuiteError,
     },
     crypt::{calculate_sha256, CryptographyError},
-    hmac_block_stream::BlockStreamError,
-    keyfile::KeyfileError,
-    parse::{
+    format::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
         kdbx4::{KDBX4Header, KDBX4InnerHeader},
         DatabaseVersion,
     },
+    hmac_block_stream::BlockStreamError,
+    keyfile::KeyfileError,
     variant_dictionary::VariantDictionaryError,
     xml_db::parse::XmlParseError,
 };
@@ -325,10 +325,10 @@ impl Database {
         let database_version = DatabaseVersion::parse(data.as_ref())?;
 
         match database_version {
-            DatabaseVersion::KDB(_) => crate::parse::kdb::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB(_) => crate::format::kdb::parse(data.as_ref(), &key_elements),
             DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB3(_) => crate::parse::kdbx3::parse(data.as_ref(), &key_elements),
-            DatabaseVersion::KDB4(_) => crate::parse::kdbx4::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB3(_) => crate::format::kdbx3::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB4(_) => crate::format::kdbx4::parse(data.as_ref(), &key_elements),
         }
     }
 
@@ -349,7 +349,7 @@ impl Database {
             Header::KDBX3(_) => {
                 return Err(DatabaseSaveError::UnsupportedVersion.into());
             }
-            Header::KDBX4(_) => crate::parse::kdbx4::dump(self, &key_elements),
+            Header::KDBX4(_) => crate::format::kdbx4::dump(self, &key_elements),
         }?;
 
         destination.write_all(&data)?;
@@ -394,10 +394,10 @@ impl Database {
             DatabaseVersion::KDB(_) => panic!("Dumping XML from KDB databases not supported"),
             DatabaseVersion::KDB2(_) => panic!("Dumping XML from KDB2 databases not supported"),
             DatabaseVersion::KDB3(_) => {
-                crate::parse::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
+                crate::format::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
             }
             DatabaseVersion::KDB4(_) => {
-                vec![crate::parse::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
+                vec![crate::format::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
             }
         };
 
@@ -430,7 +430,7 @@ impl Database {
         getrandom::getrandom(&mut kdf_seed)?;
 
         let mut master_seed: Vec<u8> = vec![];
-        master_seed.resize(crate::parse::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
+        master_seed.resize(crate::format::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
         getrandom::getrandom(&mut master_seed)?;
 
         settings.kdf_setting.set_seed(kdf_seed);

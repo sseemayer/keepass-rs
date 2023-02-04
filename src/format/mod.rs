@@ -64,7 +64,7 @@ impl DatabaseVersion {
     fn dump(&self) -> Vec<u8> {
         if let DatabaseVersion::KDB4(minor_version) = self {
             let mut header_data: Vec<u8> = vec![];
-            header_data.extend_from_slice(&crate::parse::KDBX_IDENTIFIER);
+            header_data.extend_from_slice(&crate::format::KDBX_IDENTIFIER);
             header_data.resize(DatabaseVersion::get_version_header_size(), 0);
             LittleEndian::write_u32(&mut header_data[4..8], KEEPASS_LATEST_ID);
             LittleEndian::write_u16(&mut header_data[8..10], *minor_version);

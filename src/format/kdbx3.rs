@@ -2,8 +2,8 @@ use crate::{
     config::{Compression, InnerCipherSuite, OuterCipherSuite},
     crypt::{self, kdf::Kdf},
     db::{Database, DatabaseKeyError, DatabaseOpenError, Group, Header, InnerHeader, Meta, Node},
+    format::DatabaseVersion,
     hmac_block_stream::BlockStreamError,
-    parse::DatabaseVersion,
     DatabaseIntegrityError,
 };
 
