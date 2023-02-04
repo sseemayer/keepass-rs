@@ -223,6 +223,15 @@ pub enum DatabaseSaveError {
 
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
+
+    #[error("Error generating random data: {}", _0)]
+    Random(String),
+}
+
+impl From<getrandom::Error> for DatabaseSaveError {
+    fn from(e: getrandom::Error) -> Self {
+        DatabaseSaveError::Random(format!("{}", e))
+    }
 }
 
 impl From<CryptographyError> for DatabaseOpenError {
@@ -335,25 +344,38 @@ impl Database {
     /// Save a database to a std::io::Write
     #[cfg(feature = "save_kdbx4")]
     pub fn save(
-        &self,
+        &mut self,
         destination: &mut dyn std::io::Write,
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<(), DatabaseSaveError> {
+        let data = self.dump(password, keyfile);
+        destination.write_all(&data?)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    pub fn dump(
+        &mut self,
+        password: Option<&str>,
+        keyfile: Option<&mut dyn std::io::Read>,
+    ) -> Result<Vec<u8>, DatabaseSaveError> {
         let key_elements = Database::get_key_elements(password, keyfile)?;
 
-        let data = match self.header {
+        let encrypted_db = match self.header {
             Header::KDB(_) => {
                 return Err(DatabaseSaveError::UnsupportedVersion.into());
             }
             Header::KDBX3(_) => {
                 return Err(DatabaseSaveError::UnsupportedVersion.into());
             }
-            Header::KDBX4(_) => crate::format::kdbx4::dump(self, &key_elements),
-        }?;
+            Header::KDBX4(_) => {
+                self.generate_ivs()?;
+                crate::format::kdbx4::dump(self, &key_elements)
+            }
+        };
 
-        destination.write_all(&data)?;
-        Ok(())
+        encrypted_db
     }
 
     pub fn get_key_elements(
@@ -414,44 +436,60 @@ impl Database {
         DatabaseVersion::parse(data.as_ref())
     }
 
-    pub fn new(
-        mut settings: NewDatabaseSettings,
-    ) -> std::result::Result<Database, DatabaseNewError> {
-        let mut outer_iv: Vec<u8> = vec![];
-        outer_iv.resize(settings.outer_cipher_suite.get_iv_size().into(), 0);
-        getrandom::getrandom(&mut outer_iv)?;
-
-        let mut inner_random_stream_key: Vec<u8> = vec![];
-        inner_random_stream_key.resize(settings.inner_cipher_suite.get_key_size().into(), 0);
-        getrandom::getrandom(&mut inner_random_stream_key)?;
-
-        let mut kdf_seed: Vec<u8> = vec![];
-        kdf_seed.resize(settings.kdf_setting.seed_size().into(), 0);
-        getrandom::getrandom(&mut kdf_seed)?;
-
-        let mut master_seed: Vec<u8> = vec![];
-        master_seed.resize(crate::format::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
-        getrandom::getrandom(&mut master_seed)?;
-
-        settings.kdf_setting.set_seed(kdf_seed);
-
-        Ok(Database {
+    pub fn new(settings: NewDatabaseSettings) -> std::result::Result<Database, DatabaseNewError> {
+        let mut database = Database {
             header: Header::KDBX4(KDBX4Header {
                 version: DatabaseVersion::KDB4(3),
                 outer_cipher: settings.outer_cipher_suite,
                 compression: settings.compression,
-                master_seed,
-                outer_iv,
+                master_seed: vec![],
+                outer_iv: vec![],
                 kdf: settings.kdf_setting,
             }),
             inner_header: InnerHeader::KDBX4(KDBX4InnerHeader {
                 inner_random_stream: settings.inner_cipher_suite,
-                inner_random_stream_key,
+                inner_random_stream_key: vec![],
                 binaries: Default::default(),
             }),
             root: Group::new("Root"),
             meta: Default::default(),
-        })
+        };
+        database.generate_ivs()?;
+        Ok(database)
+    }
+
+    fn generate_ivs(&mut self) -> std::result::Result<(), getrandom::Error> {
+        let mut master_seed: Vec<u8> = vec![];
+        master_seed.resize(crate::format::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
+        getrandom::getrandom(&mut master_seed)?;
+
+        if let Header::KDBX4(header) = &mut self.header {
+            header.master_seed = master_seed;
+
+            header
+                .outer_iv
+                .resize(header.outer_cipher.get_iv_size().into(), 0);
+            getrandom::getrandom(&mut header.outer_iv)?;
+
+            let mut kdf_seed: Vec<u8> = vec![];
+            kdf_seed.resize(header.kdf.seed_size().into(), 0);
+            getrandom::getrandom(&mut kdf_seed)?;
+
+            header.kdf.set_seed(kdf_seed);
+        } else {
+            panic!("Function only supports KDBX4.");
+        }
+
+        if let InnerHeader::KDBX4(inner_header) = &mut self.inner_header {
+            inner_header
+                .inner_random_stream_key
+                .resize(inner_header.inner_random_stream.get_key_size().into(), 0);
+            getrandom::getrandom(&mut inner_header.inner_random_stream_key)?;
+        } else {
+            panic!("Function only supports KDBX4.");
+        }
+
+        Ok(())
     }
 }
 
@@ -489,4 +527,41 @@ pub struct CustomDataItem {
     pub key: String,
     pub value: Option<Value>,
     pub last_modification_time: Option<NaiveDateTime>,
+}
+
+#[cfg(test)]
+mod db_tests {
+    use super::*;
+
+    #[test]
+    #[cfg(feature = "save_kdbx4")]
+    pub fn generate_ivs() {
+        let mut db = Database::new(NewDatabaseSettings::default()).unwrap();
+
+        let mut entry = Entry::new();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("Demo entry".to_string()),
+        );
+
+        db.root.children.push(Node::Entry(entry));
+
+        let mut master_seed: Vec<u8> = vec![];
+        if let Header::KDBX4(header) = &db.header {
+            master_seed = header.master_seed.clone();
+        } else {
+            panic!("This should never happen.")
+        }
+
+        db.dump(Some("test"), None).unwrap();
+
+        let mut updated_master_seed: Vec<u8> = vec![];
+        if let Header::KDBX4(header) = &db.header {
+            updated_master_seed = header.master_seed.clone();
+        } else {
+            panic!("This should never happen.")
+        }
+
+        assert_ne!(master_seed, updated_master_seed);
+    }
 }
