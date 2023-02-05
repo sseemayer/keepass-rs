@@ -28,9 +28,9 @@ use crate::{
     },
     crypt::{calculate_sha256, CryptographyError},
     format::{
-        kdb::KDBHeader,
-        kdbx3::KDBX3Header,
-        kdbx4::{KDBX4Header, KDBX4InnerHeader},
+        kdb::{parse_kdb, KDBHeader},
+        kdbx3::{parse_kdbx3, KDBX3Header},
+        kdbx4::{parse_kdbx4, KDBX4Header, KDBX4InnerHeader},
         DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION,
     },
     hmac_block_stream::BlockStreamError,
@@ -334,12 +334,10 @@ impl Database {
         let database_version = DatabaseVersion::parse(data.as_ref())?;
 
         match database_version {
-            DatabaseVersion::KDB(_) => crate::format::kdb::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB(_) => parse_kdb(data.as_ref(), &key_elements),
             DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB3(_) => crate::format::kdbx3::parse(data.as_ref(), &key_elements),
-            DatabaseVersion::KDB4(_) => {
-                crate::format::kdbx4::parse_kdbx4(data.as_ref(), &key_elements)
-            }
+            DatabaseVersion::KDB3(_) => parse_kdbx3(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB4(_) => parse_kdbx4(data.as_ref(), &key_elements),
         }
     }
 
