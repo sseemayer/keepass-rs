@@ -222,7 +222,7 @@ pub(crate) fn decrypt_kdbx3(
     // transform the key
     let transformed_key = settings
         .kdf_settings
-        .get_kdf(&header.transform_seed)
+        .get_kdf_seeded(&header.transform_seed)
         .transform_key(&composite_key)?;
 
     let master_key = calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;

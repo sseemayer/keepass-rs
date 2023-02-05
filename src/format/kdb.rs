@@ -320,7 +320,7 @@ pub(crate) fn parse_kdb(
     };
 
     let transformed_key = kdf_settings
-        .get_kdf(&header.transform_seed)
+        .get_kdf_seeded(&header.transform_seed)
         .transform_key(&composite_key)?;
 
     let master_key = calculate_sha256(&[&header.master_seed, &transformed_key])?;
