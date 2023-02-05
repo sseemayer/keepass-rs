@@ -90,7 +90,8 @@ mod kdbx4_tests {
 
         let key_elements = Database::get_key_elements(Some(&password), None).unwrap();
 
-        let encrypted_db = dump_kdbx4(&db, &key_elements).unwrap();
+        let mut encrypted_db = Vec::new();
+        dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &key_elements).unwrap();
 
@@ -308,7 +309,8 @@ mod kdbx4_tests {
         let password = "test".to_string();
         let key_elements = Database::get_key_elements(Some(&password), None).unwrap();
 
-        let encrypted_db = dump_kdbx4(&db, &key_elements).unwrap();
+        let mut encrypted_db = Vec::new();
+        dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &key_elements).unwrap();
 

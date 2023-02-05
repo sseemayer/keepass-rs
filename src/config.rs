@@ -221,7 +221,7 @@ impl KdfSettings {
         }
     }
 
-    pub(crate) fn dump(&self) -> VariantDictionary {
+    pub(crate) fn to_variant_dictionary(&self) -> VariantDictionary {
         let mut data: HashMap<String, VariantDictionaryValue> = HashMap::new();
 
         match self {

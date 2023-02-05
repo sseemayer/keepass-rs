@@ -1,6 +1,11 @@
-use byteorder::{ByteOrder, LittleEndian};
-use std::collections::HashMap;
+use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
+use std::{collections::HashMap, io::Write};
 use thiserror::Error;
+
+use crate::io::WriteLengthTaggedExt;
+
+pub const VARIANT_DICTIONARY_VERSION: u16 = 0x100;
+pub const VARIANT_DICTIONARY_END: u8 = 0x0;
 
 pub const U32_TYPE_ID: u8 = 0x04;
 pub const U64_TYPE_ID: u8 = 0x05;
@@ -37,7 +42,7 @@ impl VariantDictionary {
     pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryError> {
         let version = LittleEndian::read_u16(&buffer[0..2]);
 
-        if version != 0x100 {
+        if version != VARIANT_DICTIONARY_VERSION {
             return Err(VariantDictionaryError::InvalidVersion { version });
         }
 
@@ -78,7 +83,7 @@ impl VariantDictionary {
             data.insert(key, value);
         }
 
-        if buffer[pos] != 0 {
+        if buffer[pos] != VARIANT_DICTIONARY_END {
             // even though we can determine when to stop parsing a VariantDictionary by where we
             // are in the buffer, there should always be a value_type = 0 entry to denote that a
             // VariantDictionary is finished
@@ -88,73 +93,57 @@ impl VariantDictionary {
         Ok(VariantDictionary { data })
     }
 
-    pub(crate) fn dump(&self) -> Vec<u8> {
-        let mut data: Vec<u8> = vec![];
+    pub(crate) fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
+        writer.write_u16::<LittleEndian>(VARIANT_DICTIONARY_VERSION)?;
 
-        data.resize(2, 0);
-        LittleEndian::write_u16(&mut data[0..2], 0x100);
-
-        for field_name in self.data.keys() {
-            let field_value = self.data.get(field_name).unwrap();
-
-            let mut field_buffer: Vec<u8> = vec![];
-            let field_type_id = match field_value {
+        for (field_name, field_value) in &self.data {
+            match field_value {
                 VariantDictionaryValue::UInt32(value) => {
-                    field_buffer.resize(4, 0);
-                    LittleEndian::write_u32(&mut field_buffer, value.clone());
-                    U32_TYPE_ID
+                    writer.write_u8(U32_TYPE_ID)?;
+                    writer.write_with_len(field_name.as_bytes())?;
+                    writer.write_u32::<LittleEndian>(4)?;
+                    writer.write_u32::<LittleEndian>(*value)?;
                 }
                 VariantDictionaryValue::UInt64(value) => {
-                    field_buffer.resize(8, 0);
-                    LittleEndian::write_u64(&mut field_buffer, value.clone());
-                    U64_TYPE_ID
+                    writer.write_u8(U64_TYPE_ID)?;
+                    writer.write_with_len(field_name.as_bytes())?;
+                    writer.write_u32::<LittleEndian>(8)?;
+                    writer.write_u64::<LittleEndian>(*value)?;
                 }
                 VariantDictionaryValue::Bool(value) => {
-                    if *value {
-                        field_buffer.push(1);
-                    } else {
-                        field_buffer.push(0);
-                    }
-                    BOOL_TYPE_ID
+                    writer.write_u8(BOOL_TYPE_ID)?;
+                    writer.write_with_len(field_name.as_bytes())?;
+                    writer.write_u32::<LittleEndian>(1)?;
+                    writer.write_u8(if *value { 1 } else { 0 })?;
                 }
                 VariantDictionaryValue::Int32(value) => {
-                    field_buffer.resize(4, 0);
-                    LittleEndian::write_i32(&mut field_buffer, value.clone());
-                    I32_TYPE_ID
+                    writer.write_u8(I32_TYPE_ID)?;
+                    writer.write_with_len(field_name.as_bytes())?;
+                    writer.write_u32::<LittleEndian>(4)?;
+                    writer.write_i32::<LittleEndian>(*value)?;
                 }
                 VariantDictionaryValue::Int64(value) => {
-                    field_buffer.resize(8, 0);
-                    LittleEndian::write_i64(&mut field_buffer, value.clone());
-                    I64_TYPE_ID
+                    writer.write_u8(I64_TYPE_ID)?;
+                    writer.write_with_len(field_name.as_bytes())?;
+                    writer.write_u32::<LittleEndian>(8)?;
+                    writer.write_i64::<LittleEndian>(*value)?;
                 }
                 VariantDictionaryValue::String(value) => {
-                    field_buffer = value.to_owned().into_bytes();
-                    STR_TYPE_ID
+                    writer.write_u8(STR_TYPE_ID)?;
+                    writer.write_with_len(field_name.as_bytes())?;
+                    writer.write_with_len(value.as_bytes())?;
                 }
                 VariantDictionaryValue::ByteArray(value) => {
-                    field_buffer = value.to_vec();
-                    BYTES_TYPE_ID
+                    writer.write_u8(BYTES_TYPE_ID)?;
+                    writer.write_with_len(field_name.as_bytes())?;
+                    writer.write_with_len(value)?;
                 }
             };
-
-            data.push(field_type_id);
-
-            let field_name_bytes = field_name.as_bytes();
-            let pos = data.len();
-            data.resize(pos + 4, 0);
-            LittleEndian::write_u32(&mut data[pos..pos + 4], field_name_bytes.len() as u32);
-            data.extend_from_slice(field_name_bytes);
-
-            let pos = data.len();
-            data.resize(pos + 4, 0);
-            LittleEndian::write_u32(&mut data[pos..pos + 4], field_buffer.len() as u32);
-            data.extend_from_slice(&field_buffer);
         }
 
         // signify end of variant dictionary
-        data.push(0);
-
-        data
+        writer.write_u8(VARIANT_DICTIONARY_END)?;
+        Ok(())
     }
 
     pub(crate) fn get<T>(&self, key: &str) -> Result<T, VariantDictionaryError>

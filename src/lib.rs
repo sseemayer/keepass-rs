@@ -7,6 +7,7 @@ pub(crate) mod crypt;
 mod db;
 pub(crate) mod format;
 pub(crate) mod hmac_block_stream;
+mod io;
 mod keyfile;
 pub(crate) mod variant_dictionary;
 pub(crate) mod xml_db;

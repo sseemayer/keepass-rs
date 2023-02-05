@@ -2,7 +2,9 @@ pub(crate) mod kdb;
 pub(crate) mod kdbx3;
 pub(crate) mod kdbx4;
 
-use byteorder::{ByteOrder, LittleEndian};
+use std::io::Write;
+
+use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 
 use crate::DatabaseIntegrityError;
 
@@ -63,16 +65,14 @@ impl DatabaseVersion {
         Ok(response)
     }
 
-    fn dump(&self) -> Vec<u8> {
+    fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
         if let DatabaseVersion::KDB4(minor_version) = self {
-            let mut header_data: Vec<u8> = vec![];
-            header_data.extend_from_slice(&crate::format::KDBX_IDENTIFIER);
-            header_data.resize(DatabaseVersion::get_version_header_size(), 0);
-            LittleEndian::write_u32(&mut header_data[4..8], KEEPASS_LATEST_ID);
-            LittleEndian::write_u16(&mut header_data[8..10], *minor_version);
-            LittleEndian::write_u16(&mut header_data[10..12], KDBX4_MAJOR_VERSION);
+            writer.write(&crate::format::KDBX_IDENTIFIER)?;
+            writer.write_u32::<LittleEndian>(KEEPASS_LATEST_ID)?;
+            writer.write_u16::<LittleEndian>(*minor_version)?;
+            writer.write_u16::<LittleEndian>(KDBX4_MAJOR_VERSION)?;
 
-            return header_data;
+            Ok(())
         } else {
             panic!("DatabaseVersion::dump only supports dumping KDBX4.");
         }
