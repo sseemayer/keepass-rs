@@ -67,8 +67,7 @@ mod kdbx4_tests {
             compression,
             inner_cipher_suite,
             kdf_settings: kdf_setting,
-        })
-        .unwrap();
+        });
 
         let mut root_group = Group::new("Root");
         root_group.children.push(Node::Entry(Entry::new()));
@@ -249,7 +248,7 @@ mod kdbx4_tests {
         let mut root_group = Group::new("Root");
         root_group.children.push(Node::Entry(Entry::new()));
 
-        let mut db = Database::new(DatabaseSettings::default()).unwrap();
+        let mut db = Database::new(DatabaseSettings::default());
 
         db.header_attachments = vec![
             HeaderAttachment {
