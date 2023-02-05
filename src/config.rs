@@ -1,6 +1,5 @@
 use hex_literal::hex;
 
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use thiserror::Error;
 
@@ -8,7 +7,7 @@ use crate::crypt::ciphers::Cipher;
 use crate::{
     compression,
     crypt::{ciphers, kdf, CryptographyError},
-    variant_dictionary::{VariantDictionary, VariantDictionaryValue},
+    variant_dictionary::VariantDictionary,
 };
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
@@ -243,22 +242,13 @@ impl KdfSettings {
     }
 
     pub(crate) fn to_variant_dictionary(&self, seed: &[u8]) -> VariantDictionary {
-        let mut data: HashMap<String, VariantDictionaryValue> = HashMap::new();
+        let mut vd = VariantDictionary::new();
 
         match self {
             KdfSettings::Aes { rounds } => {
-                data.insert(
-                    KDF_ID.to_string(),
-                    VariantDictionaryValue::ByteArray(KDF_AES_KDBX4.to_vec()),
-                );
-                data.insert(
-                    KDF_ROUNDS.to_string(),
-                    VariantDictionaryValue::UInt64(rounds.clone()),
-                );
-                data.insert(
-                    KDF_SEED.to_string(),
-                    VariantDictionaryValue::ByteArray(seed.to_vec()),
-                );
+                vd.set(KDF_ID, KDF_AES_KDBX4.to_vec());
+                vd.set(KDF_ROUNDS, *rounds);
+                vd.set(KDF_SEED, seed.to_vec());
             }
             KdfSettings::Argon2 {
                 memory,
@@ -266,43 +256,16 @@ impl KdfSettings {
                 parallelism,
                 version,
             } => {
-                data.insert(
-                    KDF_ID.to_string(),
-                    VariantDictionaryValue::ByteArray(KDF_ARGON2.to_vec()),
-                );
-                data.insert(
-                    KDF_MEMORY.to_string(),
-                    VariantDictionaryValue::UInt64(memory.clone()),
-                );
-                data.insert(
-                    KDF_SALT.to_string(),
-                    VariantDictionaryValue::ByteArray(seed.to_vec()),
-                );
-                data.insert(
-                    KDF_ITERATIONS.to_string(),
-                    VariantDictionaryValue::UInt64(iterations.clone()),
-                );
-                data.insert(
-                    KDF_PARALLELISM.to_string(),
-                    VariantDictionaryValue::UInt32(parallelism.clone()),
-                );
-                match version {
-                    argon2::Version::Version10 => {
-                        data.insert(
-                            KDF_VERSION.to_string(),
-                            VariantDictionaryValue::UInt32(0x10),
-                        );
-                    }
-                    argon2::Version::Version13 => {
-                        data.insert(
-                            KDF_VERSION.to_string(),
-                            VariantDictionaryValue::UInt32(0x13),
-                        );
-                    }
-                }
+                vd.set(KDF_ID, KDF_ARGON2.to_vec());
+                vd.set(KDF_MEMORY, *memory);
+                vd.set(KDF_SALT, seed.to_vec());
+                vd.set(KDF_ITERATIONS, *iterations);
+                vd.set(KDF_PARALLELISM, *parallelism);
+                vd.set(KDF_VERSION, version.as_u32());
             }
         }
-        VariantDictionary { data }
+
+        vd
     }
 }
 
