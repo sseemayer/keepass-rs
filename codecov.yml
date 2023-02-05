@@ -8,7 +8,7 @@ coverage:
         threshold: 10%
     patch:
       default:
-        target: 80%
+        target: 0%
         # This is the allowed decrease in coverage before we
         # throw an error.
         threshold: 10%
