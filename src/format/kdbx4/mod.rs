@@ -4,15 +4,12 @@ mod parse;
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     format::DatabaseVersion,
-    meta::BinaryAttachment,
 };
 
-pub(crate) use crate::format::kdbx4::{
-    dump::dump_kdbx4,
-    parse::{decrypt_kdbx4, parse_kdbx4},
-};
+pub(crate) use crate::format::kdbx4::dump::dump_kdbx4;
+pub(crate) use crate::format::kdbx4::parse::{decrypt_kdbx4, parse_kdbx4};
 
-pub const HEADER_MASTER_SEED_SIZE: u8 = 32;
+pub const HEADER_MASTER_SEED_SIZE: usize = 32;
 
 pub const HEADER_END: u8 = 0;
 pub const HEADER_COMMENT: u8 = 1;
@@ -33,22 +30,19 @@ pub const INNER_HEADER_RANDOM_STREAM_ID: u8 = 0x01;
 pub const INNER_HEADER_RANDOM_STREAM_KEY: u8 = 0x02;
 pub const INNER_HEADER_BINARY_ATTACHMENTS: u8 = 0x03;
 
-#[derive(Debug)]
-pub struct KDBX4Header {
-    // https://gist.github.com/msmuenchen/9318327
-    pub version: DatabaseVersion,
-    pub outer_cipher: OuterCipherSuite,
-    pub compression: Compression,
-    pub master_seed: Vec<u8>,
-    pub outer_iv: Vec<u8>,
-    pub kdf: KdfSettings,
+struct KDBX4OuterHeader {
+    version: DatabaseVersion,
+    outer_cipher_suite: OuterCipherSuite,
+    compression: Compression,
+    master_seed: Vec<u8>,
+    outer_iv: Vec<u8>,
+    kdf_settings: KdfSettings,
+    kdf_seed: Vec<u8>,
 }
 
-#[derive(Debug)]
-pub struct KDBX4InnerHeader {
-    pub inner_random_stream: InnerCipherSuite,
-    pub inner_random_stream_key: Vec<u8>,
-    pub binaries: Vec<BinaryAttachment>,
+struct KDBX4InnerHeader {
+    inner_random_stream: InnerCipherSuite,
+    inner_random_stream_key: Vec<u8>,
 }
 
 #[cfg(test)]
@@ -57,7 +51,8 @@ mod kdbx4_tests {
 
     use crate::{
         config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
-        Database, Entry, Group, InnerHeader, NewDatabaseSettings, Node, Value,
+        format::kdbx4::dump::dump_kdbx4,
+        BinaryAttachment, Database, DatabaseSettings, Entry, Group, Node, Value,
     };
 
     fn test_with_settings(
@@ -66,11 +61,12 @@ mod kdbx4_tests {
         inner_cipher_suite: InnerCipherSuite,
         kdf_setting: KdfSettings,
     ) {
-        let mut db = Database::new(NewDatabaseSettings {
+        let mut db = Database::new(DatabaseSettings {
+            version: DatabaseVersion::KDB4(0),
             outer_cipher_suite,
             compression,
             inner_cipher_suite,
-            kdf_setting,
+            kdf_settings: kdf_setting,
         })
         .unwrap();
 
@@ -104,10 +100,7 @@ mod kdbx4_tests {
             OuterCipherSuite::AES256,
             Compression::GZip,
             InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes {
-                seed: vec![],
-                rounds: 100,
-            },
+            KdfSettings::Aes { rounds: 100 },
         );
     }
 
@@ -118,7 +111,6 @@ mod kdbx4_tests {
             Compression::GZip,
             InnerCipherSuite::ChaCha20,
             KdfSettings::Argon2 {
-                salt: vec![],
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -134,7 +126,6 @@ mod kdbx4_tests {
             Compression::GZip,
             InnerCipherSuite::ChaCha20,
             KdfSettings::Argon2 {
-                salt: vec![],
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -149,10 +140,7 @@ mod kdbx4_tests {
             OuterCipherSuite::AES256,
             Compression::GZip,
             InnerCipherSuite::Salsa20,
-            KdfSettings::Aes {
-                seed: vec![],
-                rounds: 100,
-            },
+            KdfSettings::Aes { rounds: 100 },
         );
     }
 
@@ -163,7 +151,6 @@ mod kdbx4_tests {
             Compression::GZip,
             InnerCipherSuite::Salsa20,
             KdfSettings::Argon2 {
-                salt: vec![],
                 iterations: 100,
                 memory: 65536,
                 parallelism: 1,
@@ -178,10 +165,7 @@ mod kdbx4_tests {
             OuterCipherSuite::ChaCha20,
             Compression::GZip,
             InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes {
-                seed: vec![],
-                rounds: 100,
-            },
+            KdfSettings::Aes { rounds: 100 },
         );
     }
 
@@ -191,10 +175,7 @@ mod kdbx4_tests {
             OuterCipherSuite::ChaCha20,
             Compression::None,
             InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes {
-                seed: vec![],
-                rounds: 100,
-            },
+            KdfSettings::Aes { rounds: 100 },
         );
     }
 
@@ -205,7 +186,6 @@ mod kdbx4_tests {
             Compression::GZip,
             InnerCipherSuite::ChaCha20,
             KdfSettings::Argon2 {
-                salt: vec![],
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -221,7 +201,6 @@ mod kdbx4_tests {
             Compression::None,
             InnerCipherSuite::ChaCha20,
             KdfSettings::Argon2 {
-                salt: vec![],
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -236,10 +215,7 @@ mod kdbx4_tests {
             OuterCipherSuite::Twofish,
             Compression::GZip,
             InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes {
-                seed: vec![],
-                rounds: 100,
-            },
+            KdfSettings::Aes { rounds: 100 },
         );
     }
 
@@ -249,10 +225,7 @@ mod kdbx4_tests {
             OuterCipherSuite::Twofish,
             Compression::None,
             InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes {
-                seed: vec![],
-                rounds: 100,
-            },
+            KdfSettings::Aes { rounds: 100 },
         );
     }
 
@@ -263,7 +236,6 @@ mod kdbx4_tests {
             Compression::GZip,
             InnerCipherSuite::ChaCha20,
             KdfSettings::Argon2 {
-                salt: vec![],
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -277,26 +249,22 @@ mod kdbx4_tests {
         let mut root_group = Group::new("Root");
         root_group.children.push(Node::Entry(Entry::new()));
 
-        let mut db = Database::new(NewDatabaseSettings::default()).unwrap();
+        let mut db = Database::new(DatabaseSettings::default()).unwrap();
 
-        if let InnerHeader::KDBX4(KDBX4InnerHeader { binaries, .. }) = &mut db.inner_header {
-            *binaries = vec![
-                BinaryAttachment {
-                    identifier: None,
-                    flags: 1,
-                    compressed: false,
-                    content: vec![0x01, 0x02, 0x03, 0x04],
-                },
-                BinaryAttachment {
-                    identifier: None,
-                    flags: 2,
-                    compressed: false,
-                    content: vec![0x04, 0x03, 0x02, 0x01],
-                },
-            ];
-        } else {
-            panic!("Expected inner kdbx4 header");
-        }
+        db.header_attachments.binaries = vec![
+            BinaryAttachment {
+                identifier: None,
+                flags: 1,
+                compressed: false,
+                content: vec![0x01, 0x02, 0x03, 0x04],
+            },
+            BinaryAttachment {
+                identifier: None,
+                flags: 2,
+                compressed: false,
+                content: vec![0x04, 0x03, 0x02, 0x01],
+            },
+        ];
 
         let mut entry = Entry::new();
         entry.fields.insert(
@@ -316,10 +284,7 @@ mod kdbx4_tests {
 
         assert_eq!(decrypted_db.root.children.len(), 1);
 
-        let binaries = match decrypted_db.inner_header {
-            InnerHeader::KDBX4(KDBX4InnerHeader { binaries, .. }) => binaries,
-            _ => panic!(""),
-        };
+        let binaries = &decrypted_db.header_attachments.binaries;
         assert_eq!(binaries.len(), 2);
         assert_eq!(binaries[0].flags, 1);
         assert_eq!(binaries[0].content, [0x01, 0x02, 0x03, 0x04]);

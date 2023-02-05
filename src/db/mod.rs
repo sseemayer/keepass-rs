@@ -27,10 +27,11 @@ use crate::{
         KdfSettingsError, OuterCipherSuite, OuterCipherSuiteError,
     },
     crypt::{calculate_sha256, CryptographyError},
+    db::meta::BinaryAttachments,
     format::{
-        kdb::{parse_kdb, KDBHeader},
-        kdbx3::{parse_kdbx3, KDBX3Header},
-        kdbx4::{parse_kdbx4, KDBX4Header, KDBX4InnerHeader},
+        kdb::parse_kdb,
+        kdbx3::{decrypt_kdbx3, parse_kdbx3},
+        kdbx4::{decrypt_kdbx4, parse_kdbx4},
         DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION,
     },
     hmac_block_stream::BlockStreamError,
@@ -39,30 +40,15 @@ use crate::{
     xml_db::parse::XmlParseError,
 };
 
-#[derive(Debug)]
-pub enum Header {
-    KDB(KDBHeader),
-    KDBX3(KDBX3Header),
-    KDBX4(KDBX4Header),
-}
-
-#[derive(Debug)]
-pub enum InnerHeader {
-    None,
-    KDBX4(KDBX4InnerHeader),
-}
-
 /// A decrypted KeePass database
 #[derive(Debug)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Database {
-    /// Header information of the KeePass database
-    #[cfg_attr(feature = "serialization", serde(skip))]
-    pub header: Header,
+    /// Settings of the database such as encryption and compression algorithms
+    pub settings: DatabaseSettings,
 
-    /// Optional inner header information
-    #[cfg_attr(feature = "serialization", serde(skip))]
-    pub inner_header: InnerHeader,
+    /// Binary attachments in the inner header
+    pub header_attachments: BinaryAttachments,
 
     /// Root node of the KeePass database
     pub root: Group,
@@ -295,21 +281,24 @@ impl From<getrandom::Error> for DatabaseNewError {
 }
 
 #[derive(Debug)]
-pub struct NewDatabaseSettings {
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct DatabaseSettings {
+    pub version: DatabaseVersion,
+
     pub outer_cipher_suite: OuterCipherSuite,
     pub compression: Compression,
     pub inner_cipher_suite: InnerCipherSuite,
-    pub kdf_setting: KdfSettings,
+    pub kdf_settings: KdfSettings,
 }
 
-impl Default for NewDatabaseSettings {
+impl Default for DatabaseSettings {
     fn default() -> Self {
         Self {
+            version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
             outer_cipher_suite: OuterCipherSuite::AES256,
             compression: Compression::GZip,
             inner_cipher_suite: InnerCipherSuite::ChaCha20,
-            kdf_setting: KdfSettings::Argon2 {
-                salt: Vec::new(), // will get filled by new function
+            kdf_settings: KdfSettings::Argon2 {
                 iterations: 50,
                 memory: 1024 * 1024,
                 parallelism: 4,
@@ -344,26 +333,26 @@ impl Database {
     /// Save a database to a std::io::Write
     #[cfg(feature = "save_kdbx4")]
     pub fn save(
-        &mut self,
+        &self,
         destination: &mut dyn std::io::Write,
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<(), DatabaseSaveError> {
+        use crate::format::kdbx4::dump_kdbx4;
+
         let key_elements = Database::get_key_elements(password, keyfile)?;
 
-        match self.header {
-            Header::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
-            Header::KDBX3(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
-            Header::KDBX4(_) => {
-                self.generate_ivs()?;
-                crate::format::kdbx4::dump_kdbx4(self, &key_elements, destination)
-            }
+        match self.settings.version {
+            DatabaseVersion::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
+            DatabaseVersion::KDB2(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
+            DatabaseVersion::KDB3(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
+            DatabaseVersion::KDB4(_) => dump_kdbx4(self, &key_elements, destination),
         }
     }
 
     #[cfg(feature = "save_kdbx4")]
     pub fn dump(
-        &mut self,
+        &self,
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<Vec<u8>, DatabaseSaveError> {
@@ -394,11 +383,11 @@ impl Database {
     }
 
     /// Helper function to load a database into its internal XML chunks
-    pub fn get_xml_chunks(
+    pub fn get_xml(
         source: &mut dyn std::io::Read,
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Vec<Vec<u8>>, DatabaseOpenError> {
+    ) -> Result<Vec<u8>, DatabaseOpenError> {
         let key_elements = Database::get_key_elements(password, keyfile)?;
 
         let mut data = Vec::new();
@@ -407,14 +396,10 @@ impl Database {
         let database_version = DatabaseVersion::parse(data.as_ref())?;
 
         let data = match database_version {
-            DatabaseVersion::KDB(_) => panic!("Dumping XML from KDB databases not supported"),
-            DatabaseVersion::KDB2(_) => panic!("Dumping XML from KDB2 databases not supported"),
-            DatabaseVersion::KDB3(_) => {
-                crate::format::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
-            }
-            DatabaseVersion::KDB4(_) => {
-                vec![crate::format::kdbx4::decrypt_kdbx4(data.as_ref(), &key_elements)?.2]
-            }
+            DatabaseVersion::KDB(_) => return Err(DatabaseOpenError::UnsupportedVersion),
+            DatabaseVersion::KDB2(_) => return Err(DatabaseOpenError::UnsupportedVersion),
+            DatabaseVersion::KDB3(_) => decrypt_kdbx3(data.as_ref(), &key_elements)?.2,
+            DatabaseVersion::KDB4(_) => decrypt_kdbx4(data.as_ref(), &key_elements)?.3,
         };
 
         Ok(data)
@@ -430,60 +415,14 @@ impl Database {
         DatabaseVersion::parse(data.as_ref())
     }
 
-    pub fn new(settings: NewDatabaseSettings) -> std::result::Result<Database, DatabaseNewError> {
-        let mut database = Database {
-            header: Header::KDBX4(KDBX4Header {
-                version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
-                outer_cipher: settings.outer_cipher_suite,
-                compression: settings.compression,
-                master_seed: vec![],
-                outer_iv: vec![],
-                kdf: settings.kdf_setting,
-            }),
-            inner_header: InnerHeader::KDBX4(KDBX4InnerHeader {
-                inner_random_stream: settings.inner_cipher_suite,
-                inner_random_stream_key: vec![],
-                binaries: Default::default(),
-            }),
+    pub fn new(settings: DatabaseSettings) -> std::result::Result<Database, DatabaseNewError> {
+        let database = Database {
+            settings,
+            header_attachments: BinaryAttachments::default(),
             root: Group::new("Root"),
             meta: Default::default(),
         };
-        database.generate_ivs()?;
         Ok(database)
-    }
-
-    fn generate_ivs(&mut self) -> std::result::Result<(), getrandom::Error> {
-        let mut master_seed: Vec<u8> = vec![];
-        master_seed.resize(crate::format::kdbx4::HEADER_MASTER_SEED_SIZE.into(), 0);
-        getrandom::getrandom(&mut master_seed)?;
-
-        if let Header::KDBX4(header) = &mut self.header {
-            header.master_seed = master_seed;
-
-            header
-                .outer_iv
-                .resize(header.outer_cipher.get_iv_size().into(), 0);
-            getrandom::getrandom(&mut header.outer_iv)?;
-
-            let mut kdf_seed: Vec<u8> = vec![];
-            kdf_seed.resize(header.kdf.seed_size().into(), 0);
-            getrandom::getrandom(&mut kdf_seed)?;
-
-            header.kdf.set_seed(kdf_seed);
-        } else {
-            panic!("Function only supports KDBX4.");
-        }
-
-        if let InnerHeader::KDBX4(inner_header) = &mut self.inner_header {
-            inner_header
-                .inner_random_stream_key
-                .resize(inner_header.inner_random_stream.get_key_size().into(), 0);
-            getrandom::getrandom(&mut inner_header.inner_random_stream_key)?;
-        } else {
-            panic!("Function only supports KDBX4.");
-        }
-
-        Ok(())
     }
 }
 
@@ -521,41 +460,4 @@ pub struct CustomDataItem {
     pub key: String,
     pub value: Option<Value>,
     pub last_modification_time: Option<NaiveDateTime>,
-}
-
-#[cfg(test)]
-mod db_tests {
-    use super::*;
-
-    #[test]
-    #[cfg(feature = "save_kdbx4")]
-    pub fn generate_ivs() {
-        let mut db = Database::new(NewDatabaseSettings::default()).unwrap();
-
-        let mut entry = Entry::new();
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("Demo entry".to_string()),
-        );
-
-        db.root.children.push(Node::Entry(entry));
-
-        let mut master_seed: Vec<u8> = vec![];
-        if let Header::KDBX4(header) = &db.header {
-            master_seed = header.master_seed.clone();
-        } else {
-            panic!("This should never happen.")
-        }
-
-        db.dump(Some("test"), None).unwrap();
-
-        let mut updated_master_seed: Vec<u8> = vec![];
-        if let Header::KDBX4(header) = &db.header {
-            updated_master_seed = header.master_seed.clone();
-        } else {
-            panic!("This should never happen.")
-        }
-
-        assert_ne!(master_seed, updated_master_seed);
-    }
 }
