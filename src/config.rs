@@ -306,14 +306,14 @@ impl TryFrom<VariantDictionary> for KdfSettings {
     type Error = KdfSettingsError;
 
     fn try_from(vd: VariantDictionary) -> Result<KdfSettings, Self::Error> {
-        let uuid: Vec<u8> = vd.get(KDF_ID)?;
+        let uuid = vd.get::<Vec<u8>>(KDF_ID)?;
 
-        if uuid == KDF_ARGON2 {
-            let memory: u64 = vd.get(KDF_MEMORY)?;
-            let salt: Vec<u8> = vd.get(KDF_SALT)?;
-            let iterations: u64 = vd.get(KDF_ITERATIONS)?;
-            let parallelism: u32 = vd.get(KDF_PARALLELISM)?;
-            let version: u32 = vd.get(KDF_VERSION)?;
+        if uuid == &KDF_ARGON2 {
+            let memory: u64 = *vd.get(KDF_MEMORY)?;
+            let salt: Vec<u8> = vd.get::<Vec<u8>>(KDF_SALT)?.clone();
+            let iterations: u64 = *vd.get(KDF_ITERATIONS)?;
+            let parallelism: u32 = *vd.get(KDF_PARALLELISM)?;
+            let version: u32 = *vd.get(KDF_VERSION)?;
 
             let version = match version {
                 0x10 => argon2::Version::Version10,
@@ -328,13 +328,13 @@ impl TryFrom<VariantDictionary> for KdfSettings {
                 parallelism,
                 version,
             })
-        } else if uuid == KDF_AES_KDBX4 || uuid == KDF_AES_KDBX3 {
-            let rounds: u64 = vd.get(KDF_ROUNDS)?;
-            let seed: Vec<u8> = vd.get(KDF_SEED)?;
+        } else if uuid == &KDF_AES_KDBX4 || uuid == &KDF_AES_KDBX3 {
+            let rounds: u64 = *vd.get(KDF_ROUNDS)?;
+            let seed: Vec<u8> = vd.get::<Vec<u8>>(KDF_SEED)?.clone();
 
             Ok(KdfSettings::Aes { rounds, seed })
         } else {
-            Err(KdfSettingsError::InvalidKDFUUID { uuid })
+            Err(KdfSettingsError::InvalidKDFUUID { uuid: uuid.clone() })
         }
     }
 }
