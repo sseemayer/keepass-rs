@@ -212,19 +212,16 @@ mod tests {
                 binaries: vec![
                     BinaryAttachment {
                         identifier: Some("1".to_string()),
-                        flags: 0,
                         compressed: false,
                         content: b"i am binary data".to_vec(),
                     },
                     BinaryAttachment {
                         identifier: Some("2".to_string()),
-                        flags: 0,
                         compressed: true,
                         content: b"i am compressed binary data".to_vec(),
                     },
                     BinaryAttachment {
                         identifier: None,
-                        flags: 0,
                         compressed: true,
                         content: b"i am compressed binary data without an identifier".to_vec(),
                     },

@@ -101,7 +101,6 @@ pub struct BinaryAttachments {
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct BinaryAttachment {
     pub identifier: Option<String>,
-    pub flags: u8,
     pub compressed: bool,
     pub content: Vec<u8>,
 }

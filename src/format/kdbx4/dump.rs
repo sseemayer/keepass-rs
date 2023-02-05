@@ -16,9 +16,8 @@ use crate::{
     },
     hmac_block_stream,
     io::WriteLengthTaggedExt,
-    meta::{BinaryAttachment, BinaryAttachments},
     variant_dictionary::VariantDictionary,
-    DatabaseSaveError,
+    DatabaseSaveError, HeaderAttachment,
 };
 
 /// Dump a KeePass database using the key elements
@@ -115,7 +114,7 @@ pub fn dump_kdbx4(
     Ok(())
 }
 
-impl BinaryAttachment {
+impl HeaderAttachment {
     fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
         writer.write_u8(self.flags)?;
         writer.write(&self.content)?;
@@ -156,7 +155,7 @@ impl KDBX4OuterHeader {
 impl KDBX4InnerHeader {
     fn dump(
         &self,
-        binaries: &BinaryAttachments,
+        header_attachments: &[HeaderAttachment],
         writer: &mut dyn Write,
     ) -> Result<(), DatabaseSaveError> {
         writer.write(&[INNER_HEADER_RANDOM_STREAM_ID])?;
@@ -166,10 +165,10 @@ impl KDBX4InnerHeader {
         writer.write_u8(INNER_HEADER_RANDOM_STREAM_KEY)?;
         writer.write_with_len(&self.inner_random_stream_key)?;
 
-        for binary in &binaries.binaries {
+        for attachment in header_attachments {
             writer.write_u8(INNER_HEADER_BINARY_ATTACHMENTS)?;
-            writer.write_u32::<LittleEndian>((binary.content.len() + 1) as u32)?;
-            binary.dump(writer)?;
+            writer.write_u32::<LittleEndian>((attachment.content.len() + 1) as u32)?;
+            attachment.dump(writer)?;
         }
 
         writer.write_u8(INNER_HEADER_END)?;

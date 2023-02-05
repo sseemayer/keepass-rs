@@ -27,7 +27,6 @@ use crate::{
         KdfSettingsError, OuterCipherSuite, OuterCipherSuiteError,
     },
     crypt::{calculate_sha256, CryptographyError},
-    db::meta::BinaryAttachments,
     format::{
         kdb::parse_kdb,
         kdbx3::{decrypt_kdbx3, parse_kdbx3},
@@ -48,7 +47,7 @@ pub struct Database {
     pub settings: DatabaseSettings,
 
     /// Binary attachments in the inner header
-    pub header_attachments: BinaryAttachments,
+    pub header_attachments: Vec<HeaderAttachment>,
 
     /// Root node of the KeePass database
     pub root: Group,
@@ -418,7 +417,7 @@ impl Database {
     pub fn new(settings: DatabaseSettings) -> std::result::Result<Database, DatabaseNewError> {
         let database = Database {
             settings,
-            header_attachments: BinaryAttachments::default(),
+            header_attachments: Vec::new(),
             root: Group::new("Root"),
             meta: Default::default(),
         };
@@ -460,4 +459,11 @@ pub struct CustomDataItem {
     pub key: String,
     pub value: Option<Value>,
     pub last_modification_time: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct HeaderAttachment {
+    pub flags: u8,
+    pub content: Vec<u8>,
 }

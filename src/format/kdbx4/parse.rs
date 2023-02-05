@@ -5,6 +5,10 @@ use byteorder::{ByteOrder, LittleEndian};
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
     crypt::{self, ciphers::Cipher},
+    db::{
+        Database, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSettings,
+        HeaderAttachment,
+    },
     format::{
         kdbx4::{
             KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV,
@@ -15,24 +19,17 @@ use crate::{
         DatabaseVersion,
     },
     hmac_block_stream,
-    meta::{BinaryAttachment, BinaryAttachments},
     variant_dictionary::VariantDictionary,
-    Database, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSettings,
 };
 
 use super::KDBX4InnerHeader;
 
-impl From<&[u8]> for BinaryAttachment {
+impl From<&[u8]> for HeaderAttachment {
     fn from(data: &[u8]) -> Self {
         let flags = data[0];
         let content = data[1..].to_vec();
 
-        BinaryAttachment {
-            identifier: None,
-            compressed: false,
-            flags,
-            content,
-        }
+        HeaderAttachment { flags, content }
     }
 }
 
@@ -63,7 +60,7 @@ pub(crate) fn decrypt_kdbx4(
 ) -> Result<
     (
         DatabaseSettings,
-        BinaryAttachments,
+        Vec<HeaderAttachment>,
         Box<dyn Cipher>,
         Vec<u8>,
     ),
@@ -121,7 +118,7 @@ pub(crate) fn decrypt_kdbx4(
         .decompress(&payload_compressed)?;
 
     // KDBX4 has inner header, too - parse it
-    let (binary_attachments, inner_header, body_start) = parse_inner_header(&payload)?;
+    let (header_attachments, inner_header, body_start) = parse_inner_header(&payload)?;
 
     // after inner header is one XML document
     let xml = &payload[body_start..];
@@ -139,7 +136,7 @@ pub(crate) fn decrypt_kdbx4(
         kdf_settings: outer_header.kdf_settings,
     };
 
-    Ok((settings, binary_attachments, inner_decryptor, xml.to_vec()))
+    Ok((settings, header_attachments, inner_decryptor, xml.to_vec()))
 }
 
 fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), DatabaseOpenError> {
@@ -242,12 +239,12 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
 
 fn parse_inner_header(
     data: &[u8],
-) -> Result<(BinaryAttachments, KDBX4InnerHeader, usize), DatabaseOpenError> {
+) -> Result<(Vec<HeaderAttachment>, KDBX4InnerHeader, usize), DatabaseOpenError> {
     let mut pos = 0;
 
     let mut inner_random_stream = None;
     let mut inner_random_stream_key = None;
-    let mut binaries = Vec::new();
+    let mut header_attachments = Vec::new();
 
     loop {
         let entry_type = data[pos];
@@ -268,8 +265,8 @@ fn parse_inner_header(
             INNER_HEADER_RANDOM_STREAM_KEY => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
             INNER_HEADER_BINARY_ATTACHMENTS => {
-                let binary = BinaryAttachment::from(entry_buffer);
-                binaries.push(binary);
+                let header_attachment = HeaderAttachment::from(entry_buffer);
+                header_attachments.push(header_attachment);
             }
 
             _ => {
@@ -287,8 +284,6 @@ fn parse_inner_header(
         })
     }
 
-    let binaries = BinaryAttachments { binaries };
-
     let inner_random_stream = get_or_err(inner_random_stream, "Inner random stream")?;
     let inner_random_stream_key = get_or_err(inner_random_stream_key, "Inner random stream key")?;
 
@@ -297,5 +292,5 @@ fn parse_inner_header(
         inner_random_stream_key,
     };
 
-    Ok((binaries, inner_header, pos))
+    Ok((header_attachments, inner_header, pos))
 }
