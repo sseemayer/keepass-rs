@@ -337,7 +337,9 @@ impl Database {
             DatabaseVersion::KDB(_) => crate::format::kdb::parse(data.as_ref(), &key_elements),
             DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
             DatabaseVersion::KDB3(_) => crate::format::kdbx3::parse(data.as_ref(), &key_elements),
-            DatabaseVersion::KDB4(_) => crate::format::kdbx4::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB4(_) => {
+                crate::format::kdbx4::parse_kdbx4(data.as_ref(), &key_elements)
+            }
         }
     }
 
@@ -371,7 +373,7 @@ impl Database {
             }
             Header::KDBX4(_) => {
                 self.generate_ivs()?;
-                crate::format::kdbx4::dump(self, &key_elements)
+                crate::format::kdbx4::dump_kdbx4(self, &key_elements)
             }
         };
 
@@ -419,7 +421,7 @@ impl Database {
                 crate::format::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
             }
             DatabaseVersion::KDB4(_) => {
-                vec![crate::format::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
+                vec![crate::format::kdbx4::decrypt_kdbx4(data.as_ref(), &key_elements)?.2]
             }
         };
 
