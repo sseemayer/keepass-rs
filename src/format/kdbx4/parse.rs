@@ -98,8 +98,11 @@ pub(crate) fn decrypt_kdbx4(
     }
 
     // verify credentials
-    let hmac_key =
-        crypt::calculate_sha512(&[&outer_header.master_seed, &transformed_key, b"\x01"])?;
+    let hmac_key = crypt::calculate_sha512(&[
+        &outer_header.master_seed,
+        &transformed_key,
+        &hmac_block_stream::HMAC_KEY_END,
+    ])?;
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::max_value(), &hmac_key)?;
     if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key)?.as_slice() {
         return Err(DatabaseKeyError::IncorrectKey.into());

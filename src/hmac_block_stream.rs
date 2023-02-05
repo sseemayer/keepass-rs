@@ -1,8 +1,11 @@
 use byteorder::{ByteOrder, LittleEndian};
 use cipher::generic_array::{typenum::U64, GenericArray};
+use hex_literal::hex;
 use thiserror::Error;
 
 use crate::crypt::CryptographyError;
+
+pub const HMAC_KEY_END: [u8; 1] = hex!("01");
 
 #[derive(Debug, Error)]
 pub enum BlockStreamError {
