@@ -4,7 +4,6 @@ use crate::{
     db::{Database, DatabaseKeyError, DatabaseOpenError},
     format::DatabaseVersion,
     hmac_block_stream::BlockStreamError,
-    meta::BinaryAttachments,
     DatabaseIntegrityError, DatabaseSettings,
 };
 
@@ -174,7 +173,7 @@ pub(crate) fn parse_kdbx3(
 
     let db = Database {
         settings,
-        header_attachments: BinaryAttachments::default(),
+        header_attachments: Vec::new(),
         root: database_content.root.group,
         meta: database_content.meta,
     };

@@ -52,7 +52,7 @@ mod kdbx4_tests {
     use crate::{
         config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
         format::{kdbx4::dump::dump_kdbx4, KDBX4_CURRENT_MINOR_VERSION},
-        BinaryAttachment, Database, DatabaseSettings, Entry, Group, Node, Value,
+        Database, DatabaseSettings, Entry, Group, HeaderAttachment, Node, Value,
     };
 
     fn test_with_settings(
@@ -245,23 +245,19 @@ mod kdbx4_tests {
     }
 
     #[test]
-    pub fn binary_attachments() {
+    pub fn header_attachments() {
         let mut root_group = Group::new("Root");
         root_group.children.push(Node::Entry(Entry::new()));
 
         let mut db = Database::new(DatabaseSettings::default()).unwrap();
 
-        db.header_attachments.binaries = vec![
-            BinaryAttachment {
-                identifier: None,
+        db.header_attachments = vec![
+            HeaderAttachment {
                 flags: 1,
-                compressed: false,
                 content: vec![0x01, 0x02, 0x03, 0x04],
             },
-            BinaryAttachment {
-                identifier: None,
+            HeaderAttachment {
                 flags: 2,
-                compressed: false,
                 content: vec![0x04, 0x03, 0x02, 0x01],
             },
         ];
@@ -284,9 +280,9 @@ mod kdbx4_tests {
 
         assert_eq!(decrypted_db.root.children.len(), 1);
 
-        let binaries = &decrypted_db.header_attachments.binaries;
-        assert_eq!(binaries.len(), 2);
-        assert_eq!(binaries[0].flags, 1);
-        assert_eq!(binaries[0].content, [0x01, 0x02, 0x03, 0x04]);
+        let header_attachments = &decrypted_db.header_attachments;
+        assert_eq!(header_attachments.len(), 2);
+        assert_eq!(header_attachments[0].flags, 1);
+        assert_eq!(header_attachments[0].content, [0x01, 0x02, 0x03, 0x04]);
     }
 }
