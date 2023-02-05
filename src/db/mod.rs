@@ -209,14 +209,8 @@ pub enum DatabaseSaveError {
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
 
-    #[error("Error generating random data: {}", _0)]
-    Random(String),
-}
-
-impl From<getrandom::Error> for DatabaseSaveError {
-    fn from(e: getrandom::Error) -> Self {
-        DatabaseSaveError::Random(format!("{}", e))
-    }
+    #[error(transparent)]
+    Random(#[from] getrandom::Error),
 }
 
 impl From<CryptographyError> for DatabaseOpenError {
@@ -264,18 +258,6 @@ impl From<VariantDictionaryError> for DatabaseOpenError {
 impl From<CompressionError> for DatabaseOpenError {
     fn from(e: CompressionError) -> Self {
         DatabaseIntegrityError::from(e).into()
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum DatabaseNewError {
-    #[error("Error generating random data: {}", _0)]
-    Random(String),
-}
-
-impl From<getrandom::Error> for DatabaseNewError {
-    fn from(e: getrandom::Error) -> Self {
-        DatabaseNewError::Random(format!("{}", e))
     }
 }
 
@@ -414,14 +396,13 @@ impl Database {
         DatabaseVersion::parse(data.as_ref())
     }
 
-    pub fn new(settings: DatabaseSettings) -> std::result::Result<Database, DatabaseNewError> {
-        let database = Database {
+    pub fn new(settings: DatabaseSettings) -> Database {
+        Self {
             settings,
             header_attachments: Vec::new(),
             root: Group::new("Root"),
             meta: Default::default(),
-        };
-        Ok(database)
+        }
     }
 }
 

@@ -95,7 +95,7 @@ mod tests {
 
         root_group.children.push(Node::Entry(entry.clone()));
 
-        let mut db = Database::new(crate::DatabaseSettings::default()).unwrap();
+        let mut db = Database::new(crate::DatabaseSettings::default());
         db.root = root_group;
 
         let key_elements = make_key();
@@ -146,7 +146,7 @@ mod tests {
 
         root_group.children.push(Node::Group(subgroup));
 
-        let mut db = Database::new(crate::DatabaseSettings::default()).unwrap();
+        let mut db = Database::new(crate::DatabaseSettings::default());
         db.root = root_group.clone();
 
         let key_elements = make_key();
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     pub fn test_meta() {
-        let mut db = Database::new(crate::DatabaseSettings::default()).unwrap();
+        let mut db = Database::new(crate::DatabaseSettings::default());
 
         let meta = Meta {
             generator: Some("test-generator".to_string()),
