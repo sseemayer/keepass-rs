@@ -1,8 +1,9 @@
 use crate::{
-    config::OuterCipherSuite,
-    crypt::kdf::Kdf,
-    db::{Database, Entry, Group, Header, InnerHeader, Node, NodeRefMut, Value},
-    DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError,
+    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
+    crypt::calculate_sha256,
+    db::{Database, Entry, Group, Node, NodeRefMut, Value},
+    format::DatabaseVersion,
+    DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSettings,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -11,7 +12,7 @@ use cipher::generic_array::GenericArray;
 use std::{collections::HashMap, convert::TryInto, str};
 
 #[derive(Debug)]
-pub struct KDBHeader {
+struct KDBHeader {
     // https://gist.github.com/lgg/e6ccc6e212d18dd2ecd8a8c116fb1e45
     pub flags: u32,
     pub subversion: u32,
@@ -299,6 +300,7 @@ pub(crate) fn parse_kdb(
     key_elements: &[Vec<u8>],
 ) -> Result<Database, DatabaseOpenError> {
     let header = parse_header(data)?;
+    let version = DatabaseVersion::KDB(header.subversion as u16);
 
     // Rest of file after header is payload
     let payload_encrypted = &data[HEADER_SIZE..];
@@ -309,20 +311,21 @@ pub(crate) fn parse_kdb(
         let key_element: [u8; 32] = key_elements[0].try_into().unwrap();
         GenericArray::from(key_element) // single pass of SHA256, already done before the call to parse()
     } else {
-        crate::crypt::calculate_sha256(&key_elements)? // second pass of SHA256
+        calculate_sha256(&key_elements)? // second pass of SHA256
     };
 
-    // KDF the same as for KDBX
-    let transformed_key = crate::crypt::kdf::AesKdf {
-        seed: header.transform_seed.clone(),
+    // KDF is always AES
+    let kdf_settings = KdfSettings::Aes {
         rounds: header.transform_rounds as u64,
-    }
-    .transform_key(&composite_key)?;
+    };
 
-    let master_key =
-        crate::crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
+    let transformed_key = kdf_settings
+        .get_kdf(&header.transform_seed)
+        .transform_key(&composite_key)?;
 
-    let cipher = if header.flags & 2 != 0 {
+    let master_key = calculate_sha256(&[&header.master_seed, &transformed_key])?;
+
+    let outer_cipher_suite = if header.flags & 2 != 0 {
         OuterCipherSuite::AES256
     } else if header.flags & 8 != 0 {
         OuterCipherSuite::Twofish
@@ -331,23 +334,31 @@ pub(crate) fn parse_kdb(
     };
 
     // Decrypt payload
-    let payload_padded = cipher
+    let payload_padded = outer_cipher_suite
         .get_cipher(&master_key, header.encryption_iv.as_ref())?
         .decrypt(payload_encrypted)?;
     let padlen = payload_padded[payload_padded.len() - 1] as usize;
     let payload = &payload_padded[..payload_padded.len() - padlen];
 
     // Check if we decrypted correctly
-    let hash = crate::crypt::calculate_sha256(&[&payload])?;
+    let hash = calculate_sha256(&[&payload])?;
     if header.contents_hash != hash.as_slice() {
         return Err(DatabaseKeyError::IncorrectKey.into());
     }
 
     let root_group = parse_db(&header, &payload)?;
 
+    let settings = DatabaseSettings {
+        version,
+        outer_cipher_suite,
+        compression: Compression::None,
+        inner_cipher_suite: InnerCipherSuite::Plain,
+        kdf_settings,
+    };
+
     Ok(Database {
-        header: Header::KDB(header),
-        inner_header: InnerHeader::None,
+        settings,
+        header_attachments: Default::default(),
         root: root_group,
         meta: Default::default(),
     })

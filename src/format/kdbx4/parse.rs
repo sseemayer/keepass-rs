@@ -1,24 +1,26 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 use byteorder::{ByteOrder, LittleEndian};
 
 use crate::{
     config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
-    crypt,
+    crypt::{self, ciphers::Cipher},
     format::{
         kdbx4::{
-            KDBX4Header, KDBX4InnerHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID,
-            HEADER_ENCRYPTION_IV, HEADER_END, HEADER_KDF_PARAMS, HEADER_MASTER_SEED,
-            HEADER_OUTER_ENCRYPTION_ID, INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END,
-            INNER_HEADER_RANDOM_STREAM_ID, INNER_HEADER_RANDOM_STREAM_KEY,
+            KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV,
+            HEADER_END, HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_OUTER_ENCRYPTION_ID,
+            INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END, INNER_HEADER_RANDOM_STREAM_ID,
+            INNER_HEADER_RANDOM_STREAM_KEY,
         },
         DatabaseVersion,
     },
     hmac_block_stream,
-    meta::BinaryAttachment,
+    meta::{BinaryAttachment, BinaryAttachments},
     variant_dictionary::VariantDictionary,
-    Database, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, Header, InnerHeader,
+    Database, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSettings,
 };
+
+use super::KDBX4InnerHeader;
 
 impl From<&[u8]> for BinaryAttachment {
     fn from(data: &[u8]) -> Self {
@@ -39,18 +41,14 @@ pub(crate) fn parse_kdbx4(
     data: &[u8],
     key_elements: &[Vec<u8>],
 ) -> Result<Database, DatabaseOpenError> {
-    let (header, inner_header, xml) = decrypt_kdbx4(data, key_elements)?;
-
-    // Initialize inner decryptor from inner header params
-    let mut inner_decryptor = inner_header
-        .inner_random_stream
-        .get_cipher(&inner_header.inner_random_stream_key)?;
+    let (settings, header_attachments, mut inner_decryptor, xml) =
+        decrypt_kdbx4(data, key_elements)?;
 
     let database_content = crate::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
 
     let db = Database {
-        header: Header::KDBX4(header),
-        inner_header: InnerHeader::KDBX4(inner_header),
+        settings,
+        header_attachments,
         root: database_content.root.group,
         meta: database_content.meta,
     };
@@ -62,9 +60,17 @@ pub(crate) fn parse_kdbx4(
 pub(crate) fn decrypt_kdbx4(
     data: &[u8],
     key_elements: &[Vec<u8>],
-) -> Result<(KDBX4Header, KDBX4InnerHeader, Vec<u8>), DatabaseOpenError> {
+) -> Result<
+    (
+        DatabaseSettings,
+        BinaryAttachments,
+        Box<dyn Cipher>,
+        Vec<u8>,
+    ),
+    DatabaseOpenError,
+> {
     // parse header
-    let (header, inner_header_start) = parse_outer_header(data)?;
+    let (outer_header, inner_header_start) = parse_outer_header(data)?;
 
     // split file into segments:
     //      header_data         - The outer header data
@@ -79,8 +85,12 @@ pub(crate) fn decrypt_kdbx4(
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = crypt::calculate_sha256(&key_elements)?;
-    let transformed_key = header.kdf.get_kdf().transform_key(&composite_key)?;
-    let master_key = crypt::calculate_sha256(&[header.master_seed.as_ref(), &transformed_key])?;
+    let transformed_key = outer_header
+        .kdf_settings
+        .get_kdf(&outer_header.kdf_seed)
+        .transform_key(&composite_key)?;
+    let master_key =
+        crypt::calculate_sha256(&[outer_header.master_seed.as_ref(), &transformed_key])?;
 
     // verify header
     if header_sha256 != crypt::calculate_sha256(&[&data[0..inner_header_start]])?.as_slice() {
@@ -88,7 +98,8 @@ pub(crate) fn decrypt_kdbx4(
     }
 
     // verify credentials
-    let hmac_key = crypt::calculate_sha512(&[&header.master_seed, &transformed_key, b"\x01"])?;
+    let hmac_key =
+        crypt::calculate_sha512(&[&outer_header.master_seed, &transformed_key, b"\x01"])?;
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::max_value(), &hmac_key)?;
     if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key)?.as_slice() {
         return Err(DatabaseKeyError::IncorrectKey.into());
@@ -99,26 +110,41 @@ pub(crate) fn decrypt_kdbx4(
         hmac_block_stream::read_hmac_block_stream(&hmac_block_stream, &hmac_key)?;
 
     // Decrypt and decompress encrypted payload
-    let payload_compressed = header
-        .outer_cipher
-        .get_cipher(&master_key, header.outer_iv.as_ref())?
+    let payload_compressed = outer_header
+        .outer_cipher_suite
+        .get_cipher(&master_key, &outer_header.outer_iv)?
         .decrypt(&payload_encrypted)?;
-    let payload = header
+
+    let payload = outer_header
         .compression
         .get_compression()
         .decompress(&payload_compressed)?;
 
     // KDBX4 has inner header, too - parse it
-    let (inner_header, body_start) = parse_inner_header(&payload)?;
+    let (binary_attachments, inner_header, body_start) = parse_inner_header(&payload)?;
 
     // after inner header is one XML document
     let xml = &payload[body_start..];
 
-    Ok((header, inner_header, xml.to_vec()))
+    // initialize the inner decryptor
+    let inner_decryptor = inner_header
+        .inner_random_stream
+        .get_cipher(&inner_header.inner_random_stream_key)?;
+
+    let settings = DatabaseSettings {
+        version: outer_header.version,
+        outer_cipher_suite: outer_header.outer_cipher_suite,
+        compression: outer_header.compression,
+        inner_cipher_suite: inner_header.inner_random_stream,
+        kdf_settings: outer_header.kdf_settings,
+    };
+
+    Ok((settings, binary_attachments, inner_decryptor, xml.to_vec()))
 }
 
-fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenError> {
-    let database_version = DatabaseVersion::parse(data)?;
+fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), DatabaseOpenError> {
+    let version = DatabaseVersion::parse(data)?;
+
     // skip over the version header
     let mut pos = DatabaseVersion::get_version_header_size();
 
@@ -126,7 +152,8 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenE
     let mut compression: Option<Compression> = None;
     let mut master_seed: Option<Vec<u8>> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
-    let mut kdf: Option<KdfSettings> = None;
+    let mut kdf_settings: Option<KdfSettings> = None;
+    let mut kdf_seed: Option<Vec<u8>> = None;
 
     // parse header
     loop {
@@ -169,7 +196,9 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenE
 
             HEADER_KDF_PARAMS => {
                 let vd = VariantDictionary::parse(entry_buffer)?;
-                kdf = Some(KdfSettings::try_from(vd)?);
+                let (ksettings, kseed) = vd.try_into()?;
+                kdf_settings = Some(ksettings);
+                kdf_seed = Some(kseed)
             }
 
             _ => {
@@ -190,26 +219,30 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4Header, usize), DatabaseOpenE
         })
     }
 
-    let outer_cipher = get_or_err(outer_cipher, "Outer Cipher ID")?;
+    let outer_cipher_suite = get_or_err(outer_cipher, "Outer Cipher ID")?;
     let compression = get_or_err(compression, "Compression ID")?;
     let master_seed = get_or_err(master_seed, "Master seed")?;
     let outer_iv = get_or_err(outer_iv, "Outer IV")?;
-    let kdf = get_or_err(kdf, "Key Derivation Function Parameters")?;
+    let kdf_settings = get_or_err(kdf_settings, "Key Derivation Function Parameters")?;
+    let kdf_seed = get_or_err(kdf_seed, "Key Derivation Function Seed")?;
 
     Ok((
-        KDBX4Header {
-            version: database_version,
-            outer_cipher,
+        KDBX4OuterHeader {
+            version,
+            outer_cipher_suite,
             compression,
             master_seed,
             outer_iv,
-            kdf,
+            kdf_settings,
+            kdf_seed,
         },
         pos,
     ))
 }
 
-fn parse_inner_header(data: &[u8]) -> Result<(KDBX4InnerHeader, usize), DatabaseOpenError> {
+fn parse_inner_header(
+    data: &[u8],
+) -> Result<(BinaryAttachments, KDBX4InnerHeader, usize), DatabaseOpenError> {
     let mut pos = 0;
 
     let mut inner_random_stream = None;
@@ -254,15 +287,15 @@ fn parse_inner_header(data: &[u8]) -> Result<(KDBX4InnerHeader, usize), Database
         })
     }
 
-    let inner_random_stream = get_or_err(inner_random_stream, "Inner random stream UUID")?;
+    let binaries = BinaryAttachments { binaries };
+
+    let inner_random_stream = get_or_err(inner_random_stream, "Inner random stream")?;
     let inner_random_stream_key = get_or_err(inner_random_stream_key, "Inner random stream key")?;
 
-    Ok((
-        KDBX4InnerHeader {
-            inner_random_stream,
-            inner_random_stream_key,
-            binaries,
-        },
-        pos,
-    ))
+    let inner_header = KDBX4InnerHeader {
+        inner_random_stream,
+        inner_random_stream_key,
+    };
+
+    Ok((binaries, inner_header, pos))
 }

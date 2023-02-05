@@ -21,7 +21,8 @@ const PLAIN: u32 = 0;
 const SALSA_20: u32 = 2;
 const CHA_CHA_20: u32 = 3;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum OuterCipherSuite {
     AES256,
     Twofish,
@@ -92,7 +93,8 @@ impl TryFrom<&[u8]> for OuterCipherSuite {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum InnerCipherSuite {
     Plain,
     Salsa20,
@@ -170,50 +172,55 @@ const KDF_VERSION: &str = "V";
 const KDF_SEED: &str = "S";
 const KDF_ROUNDS: &str = "R";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum KdfSettings {
     Aes {
-        seed: Vec<u8>,
         rounds: u64,
     },
     Argon2 {
-        salt: Vec<u8>,
         iterations: u64,
         memory: u64,
         parallelism: u32,
+
+        #[cfg_attr(
+            feature = "serialization",
+            serde(serialize_with = "serialize_argon2_version")
+        )]
         version: argon2::Version,
     },
 }
 
-impl KdfSettings {
-    pub fn set_seed(&mut self, new_seed: Vec<u8>) {
-        match self {
-            KdfSettings::Aes { seed, .. } => *seed = new_seed,
-            KdfSettings::Argon2 { salt, .. } => *salt = new_seed,
-        }
-    }
+#[cfg(feature = "serialization")]
+fn serialize_argon2_version<S: serde::Serializer>(
+    version: &argon2::Version,
+    serializer: S,
+) -> Result<<S as serde::Serializer>::Ok, <S as serde::Serializer>::Error> {
+    serializer.serialize_u32(version.as_u32())
+}
 
-    pub fn seed_size(&self) -> u8 {
+impl KdfSettings {
+    pub fn seed_size(&self) -> usize {
         match self {
             KdfSettings::Aes { .. } => 32,
             KdfSettings::Argon2 { .. } => 32,
         }
     }
-    pub(crate) fn get_kdf(&self) -> Box<dyn kdf::Kdf> {
+
+    pub(crate) fn get_kdf(&self, seed: &[u8]) -> Box<dyn kdf::Kdf> {
         match self {
-            KdfSettings::Aes { seed, rounds } => Box::new(kdf::AesKdf {
-                seed: seed.clone(),
+            KdfSettings::Aes { rounds } => Box::new(kdf::AesKdf {
+                seed: seed.to_vec(),
                 rounds: *rounds,
             }),
             KdfSettings::Argon2 {
                 memory,
-                salt,
                 iterations,
                 parallelism,
                 version,
             } => Box::new(kdf::Argon2Kdf {
                 memory: *memory,
-                salt: salt.clone(),
+                salt: seed.to_vec(),
                 iterations: *iterations,
                 parallelism: *parallelism,
                 version: *version,
@@ -221,11 +228,11 @@ impl KdfSettings {
         }
     }
 
-    pub(crate) fn to_variant_dictionary(&self) -> VariantDictionary {
+    pub(crate) fn to_variant_dictionary(&self, seed: &[u8]) -> VariantDictionary {
         let mut data: HashMap<String, VariantDictionaryValue> = HashMap::new();
 
         match self {
-            KdfSettings::Aes { seed, rounds } => {
+            KdfSettings::Aes { rounds } => {
                 data.insert(
                     KDF_ID.to_string(),
                     VariantDictionaryValue::ByteArray(KDF_AES_KDBX4.to_vec()),
@@ -241,7 +248,6 @@ impl KdfSettings {
             }
             KdfSettings::Argon2 {
                 memory,
-                salt,
                 iterations,
                 parallelism,
                 version,
@@ -256,7 +262,7 @@ impl KdfSettings {
                 );
                 data.insert(
                     KDF_SALT.to_string(),
-                    VariantDictionaryValue::ByteArray(salt.to_vec()),
+                    VariantDictionaryValue::ByteArray(seed.to_vec()),
                 );
                 data.insert(
                     KDF_ITERATIONS.to_string(),
@@ -302,10 +308,10 @@ pub enum KdfSettingsError {
     VariantDictionary(#[from] crate::variant_dictionary::VariantDictionaryError),
 }
 
-impl TryFrom<VariantDictionary> for KdfSettings {
+impl TryFrom<VariantDictionary> for (KdfSettings, Vec<u8>) {
     type Error = KdfSettingsError;
 
-    fn try_from(vd: VariantDictionary) -> Result<KdfSettings, Self::Error> {
+    fn try_from(vd: VariantDictionary) -> Result<(KdfSettings, Vec<u8>), Self::Error> {
         let uuid = vd.get::<Vec<u8>>(KDF_ID)?;
 
         if uuid == &KDF_ARGON2 {
@@ -321,25 +327,28 @@ impl TryFrom<VariantDictionary> for KdfSettings {
                 _ => return Err(KdfSettingsError::InvalidKDFVersion { version }),
             };
 
-            Ok(KdfSettings::Argon2 {
-                memory,
+            Ok((
+                KdfSettings::Argon2 {
+                    memory,
+                    iterations,
+                    parallelism,
+                    version,
+                },
                 salt,
-                iterations,
-                parallelism,
-                version,
-            })
+            ))
         } else if uuid == &KDF_AES_KDBX4 || uuid == &KDF_AES_KDBX3 {
             let rounds: u64 = *vd.get(KDF_ROUNDS)?;
             let seed: Vec<u8> = vd.get::<Vec<u8>>(KDF_SEED)?.clone();
 
-            Ok(KdfSettings::Aes { rounds, seed })
+            Ok((KdfSettings::Aes { rounds }, seed))
         } else {
             Err(KdfSettingsError::InvalidKDFUUID { uuid: uuid.clone() })
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum Compression {
     None,
     GZip,
