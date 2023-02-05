@@ -18,6 +18,8 @@ pub const KEEPASS_LATEST_ID: u32 = 0xb54bfb67;
 pub const KDBX3_MAJOR_VERSION: u16 = 3;
 pub const KDBX4_MAJOR_VERSION: u16 = 4;
 
+pub const KDBX4_CURRENT_MINOR_VERSION: u16 = 0;
+
 /// Supported KDB database versions, with the associated
 /// minor version.
 #[derive(Debug)]
