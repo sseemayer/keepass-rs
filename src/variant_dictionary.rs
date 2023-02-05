@@ -15,7 +15,7 @@ pub const I64_TYPE_ID: u8 = 0x0d;
 pub const STR_TYPE_ID: u8 = 0x18;
 pub const BYTES_TYPE_ID: u8 = 0x42;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct VariantDictionary {
     pub data: HashMap<String, VariantDictionaryValue>,
 }
@@ -39,6 +39,12 @@ pub enum VariantDictionaryError {
 }
 
 impl VariantDictionary {
+    pub fn new() -> Self {
+        Self {
+            data: HashMap::new(),
+        }
+    }
+
     pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryError> {
         let version = LittleEndian::read_u16(&buffer[0..2]);
 
@@ -161,9 +167,16 @@ impl VariantDictionary {
             key: key.to_owned(),
         })
     }
+
+    pub(crate) fn set<T>(&mut self, key: &str, value: T)
+    where
+        T: Into<VariantDictionaryValue>,
+    {
+        self.data.insert(key.to_string(), value.into());
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum VariantDictionaryValue {
     UInt32(u32),
     UInt64(u64),
@@ -172,6 +185,48 @@ pub(crate) enum VariantDictionaryValue {
     Int64(i64),
     String(String),
     ByteArray(Vec<u8>),
+}
+
+impl From<u32> for VariantDictionaryValue {
+    fn from(v: u32) -> Self {
+        VariantDictionaryValue::UInt32(v)
+    }
+}
+
+impl From<u64> for VariantDictionaryValue {
+    fn from(v: u64) -> Self {
+        VariantDictionaryValue::UInt64(v)
+    }
+}
+
+impl From<i32> for VariantDictionaryValue {
+    fn from(v: i32) -> Self {
+        VariantDictionaryValue::Int32(v)
+    }
+}
+
+impl From<i64> for VariantDictionaryValue {
+    fn from(v: i64) -> Self {
+        VariantDictionaryValue::Int64(v)
+    }
+}
+
+impl From<bool> for VariantDictionaryValue {
+    fn from(v: bool) -> Self {
+        VariantDictionaryValue::Bool(v)
+    }
+}
+
+impl From<String> for VariantDictionaryValue {
+    fn from(v: String) -> Self {
+        VariantDictionaryValue::String(v)
+    }
+}
+
+impl From<Vec<u8>> for VariantDictionaryValue {
+    fn from(v: Vec<u8>) -> Self {
+        VariantDictionaryValue::ByteArray(v)
+    }
 }
 
 impl<'a> Into<Option<&'a u32>> for &'a VariantDictionaryValue {
@@ -234,5 +289,40 @@ impl<'a> Into<Option<&'a Vec<u8>>> for &'a VariantDictionaryValue {
             VariantDictionaryValue::ByteArray(v) => Some(v),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod variant_dictionary_tests {
+    use super::*;
+
+    #[test]
+    fn variant_dictionary() {
+        let mut vd = VariantDictionary::new();
+
+        vd.set("a-u32", 42u32);
+        vd.set("a-u64", 1337u64);
+        vd.set("a-i32", -2i32);
+        vd.set("a-i64", -31337i64);
+        vd.set("a-bool", true);
+        vd.set("a-string", "Testing".to_string());
+        vd.set("a-bytes", "testing".as_bytes().to_vec());
+
+        assert!(vd.get::<bool>("key-not-exist").is_err());
+        assert!(vd.get::<bool>("a-u32").is_err());
+
+        assert_eq!(vd.get::<u32>("a-u32").unwrap(), &42u32);
+        assert_eq!(vd.get::<u64>("a-u64").unwrap(), &1337u64);
+        assert_eq!(vd.get::<i32>("a-i32").unwrap(), &-2i32);
+        assert_eq!(vd.get::<i64>("a-i64").unwrap(), &-31337i64);
+        assert_eq!(vd.get::<bool>("a-bool").unwrap(), &true);
+        assert_eq!(vd.get::<String>("a-string").unwrap(), "Testing");
+        assert_eq!(vd.get::<Vec<u8>>("a-bytes").unwrap(), "testing".as_bytes());
+
+        let mut vd_data = Vec::new();
+        vd.dump(&mut vd_data).unwrap();
+
+        let vd_parsed = VariantDictionary::parse(&vd_data).unwrap();
+        assert_eq!(vd_parsed, vd);
     }
 }
