@@ -31,7 +31,7 @@ use crate::{
         kdb::KDBHeader,
         kdbx3::KDBX3Header,
         kdbx4::{KDBX4Header, KDBX4InnerHeader},
-        DatabaseVersion,
+        DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION,
     },
     hmac_block_stream::BlockStreamError,
     keyfile::KeyfileError,
@@ -439,7 +439,7 @@ impl Database {
     pub fn new(settings: NewDatabaseSettings) -> std::result::Result<Database, DatabaseNewError> {
         let mut database = Database {
             header: Header::KDBX4(KDBX4Header {
-                version: DatabaseVersion::KDB4(3),
+                version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
                 outer_cipher: settings.outer_cipher_suite,
                 compression: settings.compression,
                 master_seed: vec![],
