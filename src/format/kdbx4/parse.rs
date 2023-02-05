@@ -87,7 +87,7 @@ pub(crate) fn decrypt_kdbx4(
     let composite_key = crypt::calculate_sha256(&key_elements)?;
     let transformed_key = outer_header
         .kdf_settings
-        .get_kdf(&outer_header.kdf_seed)
+        .get_kdf_seeded(&outer_header.kdf_seed)
         .transform_key(&composite_key)?;
     let master_key =
         crypt::calculate_sha256(&[outer_header.master_seed.as_ref(), &transformed_key])?;

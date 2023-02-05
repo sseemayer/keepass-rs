@@ -207,7 +207,21 @@ impl KdfSettings {
         }
     }
 
-    pub(crate) fn get_kdf(&self, seed: &[u8]) -> Box<dyn kdf::Kdf> {
+    /// For writing out a database, generate a new KDF seed from the settings and return the KDF
+    /// and the generated seed
+    pub(crate) fn get_kdf_and_seed(
+        &self,
+    ) -> Result<(Box<dyn kdf::Kdf>, Vec<u8>), getrandom::Error> {
+        let mut kdf_seed = vec![0; self.seed_size()];
+        getrandom::getrandom(&mut kdf_seed)?;
+
+        let kdf = self.get_kdf_seeded(&kdf_seed);
+
+        Ok((kdf, kdf_seed))
+    }
+
+    /// For reading a database, generate a KDF from the KDF settings and a provided seed
+    pub(crate) fn get_kdf_seeded(&self, seed: &[u8]) -> Box<dyn kdf::Kdf> {
         match self {
             KdfSettings::Aes { rounds } => Box::new(kdf::AesKdf {
                 seed: seed.to_vec(),

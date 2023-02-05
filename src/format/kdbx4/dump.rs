@@ -41,8 +41,7 @@ pub fn dump_kdbx4(
     let mut inner_random_stream_key = vec![0; db.settings.inner_cipher_suite.get_key_size()];
     getrandom::getrandom(&mut inner_random_stream_key)?;
 
-    let mut kdf_seed = vec![0; db.settings.kdf_settings.seed_size()];
-    getrandom::getrandom(&mut kdf_seed)?;
+    let (kdf, kdf_seed) = db.settings.kdf_settings.get_kdf_and_seed()?;
 
     // dump the outer header - need to buffer so that SHA256 can be computed
     let mut header_data = Vec::new();
@@ -53,7 +52,7 @@ pub fn dump_kdbx4(
         master_seed: master_seed.clone(),
         outer_iv: outer_iv.clone(),
         kdf_settings: db.settings.kdf_settings.clone(),
-        kdf_seed: kdf_seed.clone(),
+        kdf_seed,
     }
     .dump(&mut header_data)?;
 
@@ -66,11 +65,7 @@ pub fn dump_kdbx4(
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = crypt::calculate_sha256(&key_elements)?;
-    let transformed_key = db
-        .settings
-        .kdf_settings
-        .get_kdf(&kdf_seed)
-        .transform_key(&composite_key)?;
+    let transformed_key = kdf.transform_key(&composite_key)?;
     let master_key = crypt::calculate_sha256(&[&master_seed, &transformed_key])?;
 
     // verify credentials
