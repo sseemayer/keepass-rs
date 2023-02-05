@@ -100,8 +100,9 @@ mod tests {
 
         let key_elements = make_key();
 
-        let encrypted_db = kdbx4::dump(&db, &key_elements).unwrap();
-        let decrypted_db = kdbx4::parse(&encrypted_db, &key_elements).unwrap();
+        let mut encrypted_db = Vec::new();
+        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 1);
 
@@ -150,8 +151,9 @@ mod tests {
 
         let key_elements = make_key();
 
-        let encrypted_db = kdbx4::dump(&db, &key_elements).unwrap();
-        let decrypted_db = kdbx4::parse(&encrypted_db, &key_elements).unwrap();
+        let mut encrypted_db = Vec::new();
+        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 2);
 
@@ -253,8 +255,9 @@ mod tests {
 
         let key_elements = make_key();
 
-        let encrypted_db = kdbx4::dump(&db, &key_elements).unwrap();
-        let decrypted_db = kdbx4::parse(&encrypted_db, &key_elements).unwrap();
+        let mut encrypted_db = Vec::new();
+        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
 
         assert_eq!(decrypted_db.meta, meta);
     }

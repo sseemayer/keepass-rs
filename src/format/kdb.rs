@@ -294,7 +294,10 @@ fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group, DatabaseIntegrityE
     Ok(root)
 }
 
-pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, DatabaseOpenError> {
+pub(crate) fn parse_kdb(
+    data: &[u8],
+    key_elements: &[Vec<u8>],
+) -> Result<Database, DatabaseOpenError> {
     let header = parse_header(data)?;
 
     // Rest of file after header is payload

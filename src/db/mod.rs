@@ -28,9 +28,9 @@ use crate::{
     },
     crypt::{calculate_sha256, CryptographyError},
     format::{
-        kdb::KDBHeader,
-        kdbx3::KDBX3Header,
-        kdbx4::{KDBX4Header, KDBX4InnerHeader},
+        kdb::{parse_kdb, KDBHeader},
+        kdbx3::{parse_kdbx3, KDBX3Header},
+        kdbx4::{parse_kdbx4, KDBX4Header, KDBX4InnerHeader},
         DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION,
     },
     hmac_block_stream::BlockStreamError,
@@ -334,10 +334,10 @@ impl Database {
         let database_version = DatabaseVersion::parse(data.as_ref())?;
 
         match database_version {
-            DatabaseVersion::KDB(_) => crate::format::kdb::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB(_) => parse_kdb(data.as_ref(), &key_elements),
             DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB3(_) => crate::format::kdbx3::parse(data.as_ref(), &key_elements),
-            DatabaseVersion::KDB4(_) => crate::format::kdbx4::parse(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB3(_) => parse_kdbx3(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB4(_) => parse_kdbx4(data.as_ref(), &key_elements),
         }
     }
 
@@ -349,9 +349,16 @@ impl Database {
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<(), DatabaseSaveError> {
-        let data = self.dump(password, keyfile);
-        destination.write_all(&data?)?;
-        Ok(())
+        let key_elements = Database::get_key_elements(password, keyfile)?;
+
+        match self.header {
+            Header::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
+            Header::KDBX3(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
+            Header::KDBX4(_) => {
+                self.generate_ivs()?;
+                crate::format::kdbx4::dump_kdbx4(self, &key_elements, destination)
+            }
+        }
     }
 
     #[cfg(feature = "save_kdbx4")]
@@ -360,22 +367,9 @@ impl Database {
         password: Option<&str>,
         keyfile: Option<&mut dyn std::io::Read>,
     ) -> Result<Vec<u8>, DatabaseSaveError> {
-        let key_elements = Database::get_key_elements(password, keyfile)?;
-
-        let encrypted_db = match self.header {
-            Header::KDB(_) => {
-                return Err(DatabaseSaveError::UnsupportedVersion.into());
-            }
-            Header::KDBX3(_) => {
-                return Err(DatabaseSaveError::UnsupportedVersion.into());
-            }
-            Header::KDBX4(_) => {
-                self.generate_ivs()?;
-                crate::format::kdbx4::dump(self, &key_elements)
-            }
-        };
-
-        encrypted_db
+        let mut data = Vec::new();
+        self.save(&mut data, password, keyfile)?;
+        Ok(data)
     }
 
     pub fn get_key_elements(
@@ -419,7 +413,7 @@ impl Database {
                 crate::format::kdbx3::decrypt_xml(data.as_ref(), &key_elements)?.1
             }
             DatabaseVersion::KDB4(_) => {
-                vec![crate::format::kdbx4::decrypt_xml(data.as_ref(), &key_elements)?.2]
+                vec![crate::format::kdbx4::decrypt_kdbx4(data.as_ref(), &key_elements)?.2]
             }
         };
 

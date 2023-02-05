@@ -2,6 +2,8 @@ mod entry;
 mod group;
 mod meta;
 
+use std::io::Write;
+
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use xml::{
     writer::{EventWriter, XmlEvent as WriterEvent},
@@ -25,15 +27,15 @@ pub fn format_xml_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
 pub(crate) fn dump(
     db: &Database,
     inner_cipher: &mut dyn Cipher,
-) -> Result<Vec<u8>, xml::writer::Error> {
-    let mut data: Vec<u8> = Vec::new();
-    let mut writer = EmitterConfig::new()
+    writer: &mut dyn Write,
+) -> Result<(), xml::writer::Error> {
+    let mut xml_writer = EmitterConfig::new()
         .perform_indent(false)
-        .create_writer(&mut data);
+        .create_writer(writer);
 
-    db.dump_xml(&mut writer, inner_cipher)?;
+    db.dump_xml(&mut xml_writer, inner_cipher)?;
 
-    Ok(data)
+    Ok(())
 }
 
 /// A trait that denotes an inner KeePass database object can be stored into an XML database.

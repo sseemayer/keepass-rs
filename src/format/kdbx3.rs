@@ -154,7 +154,10 @@ fn parse_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub(crate) fn parse(data: &[u8], key_elements: &[Vec<u8>]) -> Result<Database, DatabaseOpenError> {
+pub(crate) fn parse_kdbx3(
+    data: &[u8],
+    key_elements: &[Vec<u8>],
+) -> Result<Database, DatabaseOpenError> {
     let (header, xml_blocks) = decrypt_xml(data, key_elements)?;
 
     // Derive stream key for decrypting inner protected values and set up decryption context
