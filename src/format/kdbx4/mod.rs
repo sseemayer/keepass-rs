@@ -51,7 +51,7 @@ mod kdbx4_tests {
 
     use crate::{
         config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
-        format::kdbx4::dump::dump_kdbx4,
+        format::{kdbx4::dump::dump_kdbx4, KDBX4_CURRENT_MINOR_VERSION},
         BinaryAttachment, Database, DatabaseSettings, Entry, Group, Node, Value,
     };
 
@@ -62,7 +62,7 @@ mod kdbx4_tests {
         kdf_setting: KdfSettings,
     ) {
         let mut db = Database::new(DatabaseSettings {
-            version: DatabaseVersion::KDB4(0),
+            version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
             outer_cipher_suite,
             compression,
             inner_cipher_suite,
