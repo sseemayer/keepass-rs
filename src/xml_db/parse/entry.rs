@@ -5,9 +5,8 @@ use secstr::SecStr;
 
 use crate::{
     crypt::ciphers::Cipher,
-    entry::History,
+    db::{AutoType, AutoTypeAssociation, Entry, History, Times, Value},
     xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
-    AutoType, AutoTypeAssociation, Entry, Times, Value,
 };
 
 use super::IgnoreSubfield;

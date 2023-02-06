@@ -13,11 +13,14 @@ mod tests {
     use secstr::SecStr;
 
     use crate::{
-        entry::History,
+        db::{
+            entry::History,
+            meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
+            AutoType, AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database,
+            DatabaseSettings, Entry, Group, Meta, Node, Value,
+        },
         format::kdbx4,
-        meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
-        AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database, Entry, Group,
-        Meta, Node, Value,
+        key::Key,
     };
 
     fn make_key() -> Vec<Vec<u8>> {
@@ -29,7 +32,7 @@ mod tests {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
 
-        let key_elements = Database::get_key_elements(Some(&password), None).unwrap();
+        let key_elements = Key::with_password(&password).get_key_elements().unwrap();
         key_elements
     }
 
@@ -38,17 +41,16 @@ mod tests {
         let mut root_group = Group::new("Root");
         let mut entry = Entry::new();
 
-        entry.fields.insert(
-            "Title".to_string(),
-            crate::Value::Unprotected("ASDF".to_string()),
-        );
+        entry
+            .fields
+            .insert("Title".to_string(), Value::Unprotected("ASDF".to_string()));
         entry.fields.insert(
             "UserName".to_string(),
-            crate::Value::Unprotected("ghj".to_string()),
+            Value::Unprotected("ghj".to_string()),
         );
         entry.fields.insert(
             "Password".to_string(),
-            crate::Value::Protected(std::str::from_utf8(b"klmno").unwrap().into()),
+            Value::Protected(std::str::from_utf8(b"klmno").unwrap().into()),
         );
         entry.tags.push("test".to_string());
         entry.tags.push("keepass-rs".to_string());
@@ -58,7 +60,7 @@ mod tests {
             .times
             .times
             .insert("Created".to_string(), NaiveDateTime::default());
-        entry.autotype = Some(crate::AutoType {
+        entry.autotype = Some(AutoType {
             enabled: true,
             sequence: Some("Autotype-sequence".to_string()),
             associations: vec![
@@ -95,7 +97,7 @@ mod tests {
 
         root_group.children.push(Node::Entry(entry.clone()));
 
-        let mut db = Database::new(crate::DatabaseSettings::default());
+        let mut db = Database::new(DatabaseSettings::default());
         db.root = root_group;
 
         let key_elements = make_key();
@@ -119,10 +121,9 @@ mod tests {
         let mut root_group = Group::new("Root");
         let mut entry = Entry::new();
         let new_entry_uuid = entry.uuid.clone();
-        entry.fields.insert(
-            "Title".to_string(),
-            crate::Value::Unprotected("ASDF".to_string()),
-        );
+        entry
+            .fields
+            .insert("Title".to_string(), Value::Unprotected("ASDF".to_string()));
 
         root_group.children.push(Node::Entry(entry));
 
@@ -146,7 +147,7 @@ mod tests {
 
         root_group.children.push(Node::Group(subgroup));
 
-        let mut db = Database::new(crate::DatabaseSettings::default());
+        let mut db = Database::new(DatabaseSettings::default());
         db.root = root_group.clone();
 
         let key_elements = make_key();
@@ -170,7 +171,7 @@ mod tests {
 
     #[test]
     pub fn test_meta() {
-        let mut db = Database::new(crate::DatabaseSettings::default());
+        let mut db = Database::new(DatabaseSettings::default());
 
         let meta = Meta {
             generator: Some("test-generator".to_string()),

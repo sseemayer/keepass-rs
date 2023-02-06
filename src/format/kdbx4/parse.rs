@@ -3,12 +3,10 @@ use std::convert::{TryFrom, TryInto};
 use byteorder::{ByteOrder, LittleEndian};
 
 use crate::{
-    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
+    config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{
-        Database, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSettings,
-        HeaderAttachment,
-    },
+    db::{Database, DatabaseSettings, HeaderAttachment},
+    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
     format::{
         kdbx4::{
             KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV,
@@ -148,11 +146,11 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
     // skip over the version header
     let mut pos = DatabaseVersion::get_version_header_size();
 
-    let mut outer_cipher: Option<OuterCipherSuite> = None;
-    let mut compression: Option<Compression> = None;
+    let mut outer_cipher: Option<OuterCipherConfig> = None;
+    let mut compression: Option<CompressionConfig> = None;
     let mut master_seed: Option<Vec<u8>> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
-    let mut kdf_settings: Option<KdfSettings> = None;
+    let mut kdf_settings: Option<KdfConfig> = None;
     let mut kdf_seed: Option<Vec<u8>> = None;
 
     // parse header
@@ -181,11 +179,11 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
             HEADER_COMMENT => {}
 
             HEADER_OUTER_ENCRYPTION_ID => {
-                outer_cipher = Some(OuterCipherSuite::try_from(entry_buffer)?);
+                outer_cipher = Some(OuterCipherConfig::try_from(entry_buffer)?);
             }
 
             HEADER_COMPRESSION_ID => {
-                compression = Some(Compression::try_from(LittleEndian::read_u32(
+                compression = Some(CompressionConfig::try_from(LittleEndian::read_u32(
                     &entry_buffer,
                 ))?);
             }
@@ -260,7 +258,7 @@ fn parse_inner_header(
             INNER_HEADER_END => break,
 
             INNER_HEADER_RANDOM_STREAM_ID => {
-                inner_random_stream = Some(InnerCipherSuite::try_from(LittleEndian::read_u32(
+                inner_random_stream = Some(InnerCipherConfig::try_from(LittleEndian::read_u32(
                     &entry_buffer,
                 ))?);
             }

@@ -1,3 +1,5 @@
+//! Types for representing data contained in a KeePass database
+
 pub(crate) mod entry;
 pub(crate) mod group;
 pub(crate) mod meta;
@@ -9,34 +11,27 @@ pub(crate) mod otp;
 use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
-use thiserror::Error;
 
 pub use crate::db::{
-    entry::{AutoType, AutoTypeAssociation, Entry, Value},
+    entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
     group::Group,
-    meta::{BinaryAttachment, Meta},
+    meta::{BinaryAttachment, BinaryAttachments, Meta},
     node::{Node, NodeIter, NodeRef, NodeRefMut},
 };
 
 #[cfg(feature = "totp")]
-pub use crate::otp::{TOTPError, TOTP};
+pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
 use crate::{
-    config::{
-        Compression, CompressionError, InnerCipherSuite, InnerCipherSuiteError, KdfSettings,
-        KdfSettingsError, OuterCipherSuite, OuterCipherSuiteError,
-    },
-    crypt::{calculate_sha256, CryptographyError},
+    config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
+    error::{DatabaseIntegrityError, DatabaseOpenError},
     format::{
         kdb::parse_kdb,
         kdbx3::{decrypt_kdbx3, parse_kdbx3},
         kdbx4::{decrypt_kdbx4, parse_kdbx4},
         DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION,
     },
-    hmac_block_stream::BlockStreamError,
-    keyfile::KeyfileError,
-    variant_dictionary::VariantDictionaryError,
-    xml_db::parse::XmlParseError,
+    key::Key,
 };
 
 /// A decrypted KeePass database
@@ -56,230 +51,35 @@ pub struct Database {
     pub meta: Meta,
 }
 
-#[derive(Debug, Error)]
-pub enum DatabaseKeyError {
-    #[error("Incorrect key")]
-    IncorrectKey,
-
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error(transparent)]
-    Keyfile(#[from] KeyfileError),
-}
-
-#[derive(Debug, Error)]
-pub enum DatabaseOpenError {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Key(#[from] DatabaseKeyError),
-
-    #[error(transparent)]
-    DatabaseIntegrity(#[from] DatabaseIntegrityError),
-
-    #[error("Opening this database version is not supported")]
-    UnsupportedVersion,
-}
-
-#[derive(Debug, Error)]
-pub enum DatabaseIntegrityError {
-    #[error("Invalid KDBX identifier")]
-    InvalidKDBXIdentifier,
-
-    #[error(
-        "Invalid KDBX version: {}.{}.{}",
-        version,
-        file_major_version,
-        file_minor_version
-    )]
-    InvalidKDBXVersion {
-        version: u32,
-        file_major_version: u32,
-        file_minor_version: u32,
-    },
-
-    #[error("Invalid header size: {}", size)]
-    InvalidFixedHeader { size: usize },
-
-    #[error(
-        "Invalid field length for type {}: {} (expected {})",
-        field_type,
-        field_size,
-        expected_field_size
-    )]
-    InvalidKDBFieldLength {
-        field_type: u16,
-        field_size: u32,
-        expected_field_size: u32,
-    },
-
-    #[error("Missing group level")]
-    MissingKDBGroupLevel,
-
-    #[error(
-        "Invalid group level {} (current level {})",
-        group_level,
-        current_level
-    )]
-    InvalidKDBGroupLevel {
-        group_level: u16,
-        current_level: u16,
-    },
-
-    #[error("Missing group ID")]
-    MissingKDBGroupId,
-
-    #[error("Invalid group ID {}", group_id)]
-    InvalidKDBGroupId { group_id: u32 },
-
-    #[error("Invalid group field type: {}", field_type)]
-    InvalidKDBGroupFieldType { field_type: u16 },
-
-    #[error("Invalid entry field type: {}", field_type)]
-    InvalidKDBEntryFieldType { field_type: u16 },
-
-    #[error("Incomplete group")]
-    IncompleteKDBGroup,
-
-    #[error("Incomplete entry")]
-    IncompleteKDBEntry,
-
-    #[error("Invalid fixed cipher ID: {}", cid)]
-    InvalidFixedCipherID { cid: u32 },
-
-    #[error("Header hash masmatch")]
-    HeaderHashMismatch,
-
-    #[error("Invalid outer header entry: {}", entry_type)]
-    InvalidOuterHeaderEntry { entry_type: u8 },
-
-    #[error("Incomplete outer header: Missing {}", missing_field)]
-    IncompleteOuterHeader { missing_field: String },
-
-    #[error("Invalid inner header entry: {}", entry_type)]
-    InvalidInnerHeaderEntry { entry_type: u8 },
-
-    #[error("Incomplete outer header: Missing {}", missing_field)]
-    IncompleteInnerHeader { missing_field: String },
-
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error(transparent)]
-    Xml(#[from] XmlParseError),
-
-    #[error(transparent)]
-    OuterCipher(#[from] OuterCipherSuiteError),
-
-    #[error(transparent)]
-    InnerCipher(#[from] InnerCipherSuiteError),
-
-    #[error(transparent)]
-    Compression(#[from] CompressionError),
-
-    #[error(transparent)]
-    BlockStream(#[from] BlockStreamError),
-
-    #[error(transparent)]
-    VariantDictionary(#[from] VariantDictionaryError),
-
-    #[error(transparent)]
-    KdfSettings(#[from] KdfSettingsError),
-
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-}
-
-#[derive(Debug, Error)]
-pub enum DatabaseSaveError {
-    #[error("Saving this database version is not supported")]
-    UnsupportedVersion,
-
-    #[error("Error while generating XML")]
-    Xml(#[from] xml::writer::Error),
-
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Key(#[from] DatabaseKeyError),
-
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error(transparent)]
-    Random(#[from] getrandom::Error),
-}
-
-impl From<CryptographyError> for DatabaseOpenError {
-    fn from(e: CryptographyError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
-impl From<BlockStreamError> for DatabaseOpenError {
-    fn from(e: BlockStreamError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
-impl From<XmlParseError> for DatabaseOpenError {
-    fn from(e: XmlParseError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
-impl From<InnerCipherSuiteError> for DatabaseOpenError {
-    fn from(e: InnerCipherSuiteError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
-impl From<OuterCipherSuiteError> for DatabaseOpenError {
-    fn from(e: OuterCipherSuiteError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
-impl From<KdfSettingsError> for DatabaseOpenError {
-    fn from(e: KdfSettingsError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
-impl From<VariantDictionaryError> for DatabaseOpenError {
-    fn from(e: VariantDictionaryError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
-impl From<CompressionError> for DatabaseOpenError {
-    fn from(e: CompressionError) -> Self {
-        DatabaseIntegrityError::from(e).into()
-    }
-}
-
+/// Settings for how a database is stored on disk
 #[derive(Debug)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct DatabaseSettings {
+    /// Version of the outer database file
     pub version: DatabaseVersion,
 
-    pub outer_cipher_suite: OuterCipherSuite,
-    pub compression: Compression,
-    pub inner_cipher_suite: InnerCipherSuite,
-    pub kdf_settings: KdfSettings,
+    /// What encryption to use for the outer encryption
+    pub outer_cipher_suite: OuterCipherConfig,
+
+    /// What algorithm to use to compress the inner data
+    pub compression: CompressionConfig,
+
+    /// What encryption to use for protected fields inside the database
+    pub inner_cipher_suite: InnerCipherConfig,
+
+    /// Settings for the Key Derivation Function (KDF)
+    pub kdf_settings: KdfConfig,
 }
 
+/// Sensible default database settings for new databases
 impl Default for DatabaseSettings {
     fn default() -> Self {
         Self {
             version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
-            outer_cipher_suite: OuterCipherSuite::AES256,
-            compression: Compression::GZip,
-            inner_cipher_suite: InnerCipherSuite::ChaCha20,
-            kdf_settings: KdfSettings::Argon2 {
+            outer_cipher_suite: OuterCipherConfig::AES256,
+            compression: CompressionConfig::GZip,
+            inner_cipher_suite: InnerCipherConfig::ChaCha20,
+            kdf_settings: KdfConfig::Argon2 {
                 iterations: 50,
                 memory: 1024 * 1024,
                 parallelism: 4,
@@ -291,12 +91,8 @@ impl Default for DatabaseSettings {
 
 impl Database {
     /// Parse a database from a std::io::Read
-    pub fn open(
-        source: &mut dyn std::io::Read,
-        password: Option<&str>,
-        keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Database, DatabaseOpenError> {
-        let key_elements = Database::get_key_elements(password, keyfile)?;
+    pub fn open(source: &mut dyn std::io::Read, key: Key) -> Result<Database, DatabaseOpenError> {
+        let key_elements = key.get_key_elements()?;
 
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
@@ -316,12 +112,12 @@ impl Database {
     pub fn save(
         &self,
         destination: &mut dyn std::io::Write,
-        password: Option<&str>,
-        keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<(), DatabaseSaveError> {
+        key: Key,
+    ) -> Result<(), crate::error::DatabaseSaveError> {
+        use crate::error::DatabaseSaveError;
         use crate::format::kdbx4::dump_kdbx4;
 
-        let key_elements = Database::get_key_elements(password, keyfile)?;
+        let key_elements = key.get_key_elements()?;
 
         match self.settings.version {
             DatabaseVersion::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
@@ -331,45 +127,9 @@ impl Database {
         }
     }
 
-    #[cfg(feature = "save_kdbx4")]
-    pub fn dump(
-        &self,
-        password: Option<&str>,
-        keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Vec<u8>, DatabaseSaveError> {
-        let mut data = Vec::new();
-        self.save(&mut data, password, keyfile)?;
-        Ok(data)
-    }
-
-    pub fn get_key_elements(
-        password: Option<&str>,
-        keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Vec<Vec<u8>>, DatabaseKeyError> {
-        let mut key_elements: Vec<Vec<u8>> = Vec::new();
-
-        if let Some(p) = password {
-            key_elements.push(calculate_sha256(&[p.as_bytes()])?.as_slice().to_vec());
-        }
-
-        if let Some(f) = keyfile {
-            key_elements.push(crate::keyfile::parse(f)?);
-        }
-
-        if key_elements.is_empty() {
-            return Err(DatabaseKeyError::IncorrectKey);
-        }
-
-        Ok(key_elements)
-    }
-
     /// Helper function to load a database into its internal XML chunks
-    pub fn get_xml(
-        source: &mut dyn std::io::Read,
-        password: Option<&str>,
-        keyfile: Option<&mut dyn std::io::Read>,
-    ) -> Result<Vec<u8>, DatabaseOpenError> {
-        let key_elements = Database::get_key_elements(password, keyfile)?;
+    pub fn get_xml(source: &mut dyn std::io::Read, key: Key) -> Result<Vec<u8>, DatabaseOpenError> {
+        let key_elements = key.get_key_elements()?;
 
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
@@ -386,7 +146,7 @@ impl Database {
         Ok(data)
     }
 
-    /// Get the version of a database.
+    /// Get the version of a database without loading it
     pub fn get_version(
         source: &mut dyn std::io::Read,
     ) -> Result<DatabaseVersion, DatabaseIntegrityError> {
@@ -396,6 +156,7 @@ impl Database {
         DatabaseVersion::parse(data.as_ref())
     }
 
+    /// Create a new, empty database
     pub fn new(settings: DatabaseSettings) -> Database {
         Self {
             settings,
@@ -406,6 +167,7 @@ impl Database {
     }
 }
 
+/// Timestamps for a Group or Entry
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Times {
@@ -428,12 +190,14 @@ impl Times {
     }
 }
 
+/// Collection of custom data fields for an entry or metadata
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomData {
     pub items: Vec<CustomDataItem>,
 }
 
+/// Custom data field for an entry or metadata
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomDataItem {
@@ -442,6 +206,7 @@ pub struct CustomDataItem {
     pub last_modification_time: Option<NaiveDateTime>,
 }
 
+/// Binary attachments stored in a database inner header
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct HeaderAttachment {

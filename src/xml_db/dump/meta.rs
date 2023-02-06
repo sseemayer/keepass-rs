@@ -2,11 +2,10 @@ use base64::{engine::general_purpose as base64_engine, Engine as _};
 use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 
 use crate::{
-    compression::{Decompress, GZipCompression},
+    compression::{Compression, GZipCompression},
     crypt::ciphers::Cipher,
-    meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
+    db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     xml_db::dump::{DumpXml, SimpleTag},
-    BinaryAttachment, Meta,
 };
 
 impl DumpXml for Meta {

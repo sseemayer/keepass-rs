@@ -7,6 +7,7 @@ use crate::crypt::CryptographyError;
 
 pub const HMAC_KEY_END: [u8; 1] = hex!("01");
 
+/// Errors reading from the HMAC block stream
 #[derive(Debug, Error)]
 pub enum BlockStreamError {
     #[error(transparent)]

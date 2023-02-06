@@ -11,7 +11,11 @@ Rust KeePass database file parser for KDB, KDBX3 and KDBX4, with experimental su
 
 ## Example
 ```rust
-use keepass::{Database, DatabaseOpenError, NodeRef};
+use keepass::{
+    db::{Database, NodeRef},
+    error::DatabaseOpenError,
+    Key
+};
 use std::fs::File;
 
 fn main() -> Result<(), DatabaseOpenError> {
@@ -19,8 +23,7 @@ fn main() -> Result<(), DatabaseOpenError> {
     let path = std::path::Path::new("tests/resources/test_db_with_password.kdbx");
     let db = Database::open(
         &mut File::open(path)?,         // the database
-        Some("demopass"),               // password
-        None                            // keyfile
+        Key::with_password("demopass"), // password (keyfile is also supported)
     )?;
 
     // Iterate over all Groups and Nodes
@@ -47,8 +50,7 @@ Add the following to the `dependencies` section of your `Cargo.toml`:
 
 ```ignore
 [dependencies]
-# TODO replace with current version
-keepass = "*"
+keepass = "*" # TODO replace with current version
 ```
 
 ### Performance Notes
@@ -82,34 +84,35 @@ You can enable the experimental support for saving KDBX4 databases using the `sa
 
 ```rust ignore
 use anyhow::Result;
-
-use keepass::{Database, DatabaseOpenError, Entry, Group, NewDatabaseSettings, Node, Value};
-
+use keepass::{
+    db::{Database, DatabaseSettings, Entry, Group, Node, NodeRef, Value},
+    error::DatabaseOpenError,
+    Key
+};
 use std::fs::File;
 
 fn main() -> Result<()> {
-	let mut db = Database::new(NewDatabaseSettings::default())?;
+    let mut db = Database::new(DatabaseSettings::default())?;
 
-	db.meta.database_name = Some("Demo database".to_string());
+    db.meta.database_name = Some("Demo database".to_string());
 
-	let mut group = Group::new("Demo group");
+    let mut group = Group::new("Demo group");
 
-	let mut entry = Entry::new();
-	entry.fields.insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
-	entry.fields.insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
-	entry.fields.insert("Password".to_string(), Value::Protected("hunter2".as_bytes().into()));
+    let mut entry = Entry::new();
+    entry.fields.insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
+    entry.fields.insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
+    entry.fields.insert("Password".to_string(), Value::Protected("hunter2".as_bytes().into()));
 
-	group.children.push(Node::Entry(entry));
+    group.children.push(Node::Entry(entry));
 
-	db.root.children.push(Node::Group(group));
+    db.root.children.push(Node::Group(group));
 
-	db.save(
-		&mut File::create("demo.kdbx")?,
-		Some("demopass"),
-		None,
-	)?;
+    db.save(
+        &mut File::create("demo.kdbx")?,
+        Key::with_password("demopass"),
+    )?;
 
-	Ok(())
+    Ok(())
 }
 
 ```

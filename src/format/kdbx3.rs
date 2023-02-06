@@ -1,10 +1,10 @@
 use crate::{
-    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
+    config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{calculate_sha256, ciphers::Cipher},
-    db::{Database, DatabaseKeyError, DatabaseOpenError},
+    db::{Database, DatabaseSettings},
+    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
     format::DatabaseVersion,
     hmac_block_stream::BlockStreamError,
-    DatabaseIntegrityError, DatabaseSettings,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -14,30 +14,30 @@ use std::convert::TryFrom;
 #[derive(Debug)]
 struct KDBX3Header {
     // https://gist.github.com/msmuenchen/9318327
-    outer_cipher: OuterCipherSuite,
-    compression: Compression,
+    outer_cipher: OuterCipherConfig,
+    compression: CompressionConfig,
     master_seed: Vec<u8>,
 
     transform_seed: Vec<u8>,
-    kdf_settings: KdfSettings,
+    kdf_settings: KdfConfig,
 
     outer_iv: Vec<u8>,
     protected_stream_key: Vec<u8>,
     stream_start: Vec<u8>,
-    inner_cipher: InnerCipherSuite,
+    inner_cipher: InnerCipherConfig,
     body_start: usize,
 }
 
 fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
-    let mut outer_cipher: Option<OuterCipherSuite> = None;
-    let mut compression: Option<Compression> = None;
+    let mut outer_cipher: Option<OuterCipherConfig> = None;
+    let mut compression: Option<CompressionConfig> = None;
     let mut master_seed: Option<Vec<u8>> = None;
     let mut transform_seed: Option<Vec<u8>> = None;
     let mut transform_rounds: Option<u64> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
     let mut protected_stream_key: Option<Vec<u8>> = None;
     let mut stream_start: Option<Vec<u8>> = None;
-    let mut inner_cipher: Option<InnerCipherSuite> = None;
+    let mut inner_cipher: Option<InnerCipherConfig> = None;
 
     // skip over the version header
     let mut pos = DatabaseVersion::get_version_header_size();
@@ -73,7 +73,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
             //            should be used to encrypt the payload
             2 => {
                 outer_cipher = Some(
-                    OuterCipherSuite::try_from(entry_buffer)
+                    OuterCipherConfig::try_from(entry_buffer)
                         .map_err(|e| DatabaseIntegrityError::from(e))?,
                 );
             }
@@ -81,7 +81,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
             // COMPRESSIONFLAGS - first byte determines compression of payload
             3 => {
                 compression = Some(
-                    Compression::try_from(LittleEndian::read_u32(&entry_buffer))
+                    CompressionConfig::try_from(LittleEndian::read_u32(&entry_buffer))
                         .map_err(|e| DatabaseIntegrityError::from(e))?,
                 );
             }
@@ -108,7 +108,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
             //                       to use for decrypting the inner protected values
             10 => {
                 inner_cipher = Some(
-                    InnerCipherSuite::try_from(LittleEndian::read_u32(entry_buffer))
+                    InnerCipherConfig::try_from(LittleEndian::read_u32(entry_buffer))
                         .map_err(|e| DatabaseIntegrityError::from(e))?,
                 );
             }
@@ -142,7 +142,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
     let inner_cipher = get_or_err(inner_cipher, "Inner cipher ID")?;
 
     // KDF type is always AES for KDBX3
-    let kdf_settings = KdfSettings::Aes {
+    let kdf_settings = KdfConfig::Aes {
         rounds: transform_rounds,
     };
 

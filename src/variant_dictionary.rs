@@ -20,6 +20,7 @@ pub(crate) struct VariantDictionary {
     pub data: HashMap<String, VariantDictionaryValue>,
 }
 
+/// Errors while parsing a VariantDictionary
 #[derive(Debug, Error)]
 pub enum VariantDictionaryError {
     #[error("Invalid variant dictionary version: {}", version)]
@@ -39,7 +40,7 @@ pub enum VariantDictionaryError {
 }
 
 impl VariantDictionary {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             data: HashMap::new(),
         }

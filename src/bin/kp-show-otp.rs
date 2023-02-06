@@ -4,7 +4,7 @@ use std::io::Read;
 
 use anyhow::Result;
 use clap::Parser;
-use keepass::NodeRef;
+use keepass::{db::NodeRef, Database, Key};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -36,11 +36,9 @@ pub fn main() -> Result<()> {
         Some(&password[..])
     };
 
-    let db = keepass::Database::open(
-        &mut source,
-        password,
-        keyfile.as_mut().map(|kf| kf as &mut dyn Read),
-    )?;
+    let keyfile = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
+
+    let db = Database::open(&mut source, Key { password, keyfile })?;
 
     if let Some(NodeRef::Entry(e)) = db.root.get(&[&args.entry]) {
         let totp = e.get_otp().unwrap();

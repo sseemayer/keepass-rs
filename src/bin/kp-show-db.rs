@@ -5,7 +5,7 @@ use std::io::Read;
 use anyhow::Result;
 use clap::Parser;
 
-use keepass::Database;
+use keepass::{Database, Key};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -33,11 +33,9 @@ pub fn main() -> Result<()> {
         Some(&password[..])
     };
 
-    let db = Database::open(
-        &mut source,
-        password,
-        keyfile.as_mut().map(|kf| kf as &mut dyn Read),
-    )?;
+    let keyfile = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
+
+    let db = Database::open(&mut source, Key { password, keyfile })?;
 
     println!("{:#?}", db);
 

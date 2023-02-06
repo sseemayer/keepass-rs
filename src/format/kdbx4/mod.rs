@@ -2,7 +2,7 @@ mod dump;
 mod parse;
 
 use crate::{
-    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
+    config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     format::DatabaseVersion,
 };
 
@@ -32,16 +32,16 @@ pub const INNER_HEADER_BINARY_ATTACHMENTS: u8 = 0x03;
 
 struct KDBX4OuterHeader {
     version: DatabaseVersion,
-    outer_cipher_suite: OuterCipherSuite,
-    compression: Compression,
+    outer_cipher_suite: OuterCipherConfig,
+    compression: CompressionConfig,
     master_seed: Vec<u8>,
     outer_iv: Vec<u8>,
-    kdf_settings: KdfSettings,
+    kdf_settings: KdfConfig,
     kdf_seed: Vec<u8>,
 }
 
 struct KDBX4InnerHeader {
-    inner_random_stream: InnerCipherSuite,
+    inner_random_stream: InnerCipherConfig,
     inner_random_stream_key: Vec<u8>,
 }
 
@@ -50,16 +50,17 @@ mod kdbx4_tests {
     use super::*;
 
     use crate::{
-        config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
+        config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
+        db::{Database, DatabaseSettings, Entry, Group, HeaderAttachment, Node, Value},
         format::{kdbx4::dump::dump_kdbx4, KDBX4_CURRENT_MINOR_VERSION},
-        Database, DatabaseSettings, Entry, Group, HeaderAttachment, Node, Value,
+        key::Key,
     };
 
     fn test_with_settings(
-        outer_cipher_suite: OuterCipherSuite,
-        compression: Compression,
-        inner_cipher_suite: InnerCipherSuite,
-        kdf_setting: KdfSettings,
+        outer_cipher_suite: OuterCipherConfig,
+        compression: CompressionConfig,
+        inner_cipher_suite: InnerCipherConfig,
+        kdf_setting: KdfConfig,
     ) {
         let mut db = Database::new(DatabaseSettings {
             version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
@@ -83,7 +84,7 @@ mod kdbx4_tests {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
 
-        let key_elements = Database::get_key_elements(Some(&password), None).unwrap();
+        let key_elements = Key::with_password(&password).get_key_elements().unwrap();
 
         let mut encrypted_db = Vec::new();
         dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
@@ -96,20 +97,20 @@ mod kdbx4_tests {
     #[test]
     pub fn aes256_chacha20_aes() {
         test_with_settings(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes { rounds: 100 },
+            OuterCipherConfig::AES256,
+            CompressionConfig::GZip,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Aes { rounds: 100 },
         );
     }
 
     #[test]
     pub fn aes256_chacha20_argon2() {
         test_with_settings(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Argon2 {
+            OuterCipherConfig::AES256,
+            CompressionConfig::GZip,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Argon2 {
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -121,10 +122,10 @@ mod kdbx4_tests {
     #[test]
     pub fn aes256_chacha20_argon2_no_compression() {
         test_with_settings(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Argon2 {
+            OuterCipherConfig::AES256,
+            CompressionConfig::GZip,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Argon2 {
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -136,20 +137,20 @@ mod kdbx4_tests {
     #[test]
     pub fn aes256_salsa20_aes() {
         test_with_settings(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::Salsa20,
-            KdfSettings::Aes { rounds: 100 },
+            OuterCipherConfig::AES256,
+            CompressionConfig::GZip,
+            InnerCipherConfig::Salsa20,
+            KdfConfig::Aes { rounds: 100 },
         );
     }
 
     #[test]
     pub fn aes256_salsa20_argon2() {
         test_with_settings(
-            OuterCipherSuite::AES256,
-            Compression::GZip,
-            InnerCipherSuite::Salsa20,
-            KdfSettings::Argon2 {
+            OuterCipherConfig::AES256,
+            CompressionConfig::GZip,
+            InnerCipherConfig::Salsa20,
+            KdfConfig::Argon2 {
                 iterations: 100,
                 memory: 65536,
                 parallelism: 1,
@@ -161,30 +162,30 @@ mod kdbx4_tests {
     #[test]
     pub fn chacha20_chacha20_aes() {
         test_with_settings(
-            OuterCipherSuite::ChaCha20,
-            Compression::GZip,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes { rounds: 100 },
+            OuterCipherConfig::ChaCha20,
+            CompressionConfig::GZip,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Aes { rounds: 100 },
         );
     }
 
     #[test]
     pub fn chacha20_chacha20_aes_no_compression() {
         test_with_settings(
-            OuterCipherSuite::ChaCha20,
-            Compression::None,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes { rounds: 100 },
+            OuterCipherConfig::ChaCha20,
+            CompressionConfig::None,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Aes { rounds: 100 },
         );
     }
 
     #[test]
     pub fn chacha20_chacha20_argon2() {
         test_with_settings(
-            OuterCipherSuite::ChaCha20,
-            Compression::GZip,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Argon2 {
+            OuterCipherConfig::ChaCha20,
+            CompressionConfig::GZip,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Argon2 {
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -196,10 +197,10 @@ mod kdbx4_tests {
     #[test]
     pub fn chacha20_chacha20_argon2_no_compression() {
         test_with_settings(
-            OuterCipherSuite::ChaCha20,
-            Compression::None,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Argon2 {
+            OuterCipherConfig::ChaCha20,
+            CompressionConfig::None,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Argon2 {
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -211,30 +212,30 @@ mod kdbx4_tests {
     #[test]
     pub fn twofish_chacha20_aes() {
         test_with_settings(
-            OuterCipherSuite::Twofish,
-            Compression::GZip,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes { rounds: 100 },
+            OuterCipherConfig::Twofish,
+            CompressionConfig::GZip,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Aes { rounds: 100 },
         );
     }
 
     #[test]
     pub fn twofish_chacha20_aes_no_compression() {
         test_with_settings(
-            OuterCipherSuite::Twofish,
-            Compression::None,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Aes { rounds: 100 },
+            OuterCipherConfig::Twofish,
+            CompressionConfig::None,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Aes { rounds: 100 },
         );
     }
 
     #[test]
     pub fn twofish_chacha20_argon2() {
         test_with_settings(
-            OuterCipherSuite::Twofish,
-            Compression::GZip,
-            InnerCipherSuite::ChaCha20,
-            KdfSettings::Argon2 {
+            OuterCipherConfig::Twofish,
+            CompressionConfig::GZip,
+            InnerCipherConfig::ChaCha20,
+            KdfConfig::Argon2 {
                 iterations: 1000,
                 memory: 65536,
                 parallelism: 8,
@@ -269,8 +270,7 @@ mod kdbx4_tests {
 
         db.root.children.push(Node::Entry(entry));
 
-        let password = "test".to_string();
-        let key_elements = Database::get_key_elements(Some(&password), None).unwrap();
+        let key_elements = Key::with_password("test").get_key_elements().unwrap();
 
         let mut encrypted_db = Vec::new();
         dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();

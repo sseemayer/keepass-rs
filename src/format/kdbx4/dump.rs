@@ -4,7 +4,8 @@ use byteorder::{LittleEndian, WriteBytesExt};
 
 use crate::{
     crypt,
-    db::Database,
+    db::{Database, HeaderAttachment},
+    error::DatabaseSaveError,
     format::{
         kdbx4::{
             KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV,
@@ -17,7 +18,6 @@ use crate::{
     hmac_block_stream,
     io::WriteLengthTaggedExt,
     variant_dictionary::VariantDictionary,
-    DatabaseSaveError, HeaderAttachment,
 };
 
 /// Dump a KeePass database using the key elements

@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256, Sha512};
 pub(crate) mod ciphers;
 pub(crate) mod kdf;
 
+/// Errors while performing cryptographic operations
 #[derive(Debug, Error)]
 pub enum CryptographyError {
     #[error(transparent)]

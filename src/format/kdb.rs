@@ -1,9 +1,9 @@
 use crate::{
-    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
+    config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::calculate_sha256,
-    db::{Database, Entry, Group, Node, NodeRefMut, Value},
+    db::{Database, DatabaseSettings, Entry, Group, Node, NodeRefMut, Value},
+    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
     format::DatabaseVersion,
-    DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSettings,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -315,7 +315,7 @@ pub(crate) fn parse_kdb(
     };
 
     // KDF is always AES
-    let kdf_settings = KdfSettings::Aes {
+    let kdf_settings = KdfConfig::Aes {
         rounds: header.transform_rounds as u64,
     };
 
@@ -326,9 +326,9 @@ pub(crate) fn parse_kdb(
     let master_key = calculate_sha256(&[&header.master_seed, &transformed_key])?;
 
     let outer_cipher_suite = if header.flags & 2 != 0 {
-        OuterCipherSuite::AES256
+        OuterCipherConfig::AES256
     } else if header.flags & 8 != 0 {
-        OuterCipherSuite::Twofish
+        OuterCipherConfig::Twofish
     } else {
         return Err(DatabaseIntegrityError::InvalidFixedCipherID { cid: header.flags }.into());
     };
@@ -351,8 +351,8 @@ pub(crate) fn parse_kdb(
     let settings = DatabaseSettings {
         version,
         outer_cipher_suite,
-        compression: Compression::None,
-        inner_cipher_suite: InnerCipherSuite::Plain,
+        compression: CompressionConfig::None,
+        inner_cipher_suite: InnerCipherConfig::Plain,
         kdf_settings,
     };
 

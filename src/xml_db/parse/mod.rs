@@ -11,10 +11,11 @@ use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
+    db::{CustomData, CustomDataItem, Group, Meta, Times, Value},
     xml_db::get_epoch_baseline,
-    CustomData, CustomDataItem, Group, Meta, Times, Value,
 };
 
+/// Errors while parsing the XML document inside of a KeePass database
 #[derive(Debug, Error)]
 pub enum XmlParseError {
     #[error(transparent)]
@@ -38,12 +39,15 @@ pub enum XmlParseError {
     #[error("Decompression error: {}", _0)]
     Compression(#[source] std::io::Error),
 
+    /// An unexpected XML event occurred, such as opening an unexpected tag, or an error in the
+    /// underlying XML reader
     #[error("Bad XML event: expected {}, got {:?}", expected, event)]
     BadEvent {
         expected: &'static str,
         event: SimpleXmlEvent,
     },
 
+    /// The stream of XML events ended when more events were expected
     #[error("Unexpected end of XML document")]
     Eof,
 }
@@ -663,10 +667,10 @@ impl FromXml for IgnoreSubfield {
 #[cfg(test)]
 mod parse_test {
     use crate::{
-        config::InnerCipherSuite,
+        config::InnerCipherConfig,
         crypt::ciphers::PlainCipher,
+        db::{CustomData, CustomDataItem, Times},
         xml_db::parse::{DeletedObject, DeletedObjects, IgnoreSubfield, Root},
-        CustomData, CustomDataItem, Times,
     };
 
     use super::{parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError};
@@ -681,15 +685,7 @@ mod parse_test {
     fn test_custom_xml_fields() -> Result<(), XmlParseError> {
         let xml = include_bytes!("../../../tests/resources/inner_xml_with_custom_fields.xml");
 
-        let inner_cipher_suite = InnerCipherSuite::Salsa20;
-
-        let mut inner_random_stream_key: Vec<u8> = vec![];
-        inner_random_stream_key.resize(inner_cipher_suite.get_iv_size().into(), 0);
-        getrandom::getrandom(&mut inner_random_stream_key).unwrap();
-
-        let mut inner_cipher = inner_cipher_suite
-            .get_cipher(&inner_random_stream_key)
-            .unwrap();
+        let mut inner_cipher = InnerCipherConfig::Plain.get_cipher(&[]).unwrap();
 
         let _database_content = parse(&xml[..], &mut *inner_cipher)?;
 

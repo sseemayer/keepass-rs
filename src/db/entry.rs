@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use secstr::SecStr;
 use uuid::Uuid;
 
-use crate::{db::Times, CustomData};
+use crate::db::{CustomData, Times};
 
 #[cfg(feature = "totp")]
-use crate::otp::{TOTPError, TOTP};
+use crate::db::otp::{TOTPError, TOTP};
 
 /// A database entry containing several key-value fields.
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -114,6 +114,7 @@ impl<'a> Entry {
     }
 }
 
+/// A value that can be a raw string, byte array, or protected memory region
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Value {
     Bytes(Vec<u8>),
@@ -162,6 +163,7 @@ pub struct AutoTypeAssociation {
     pub sequence: Option<String>,
 }
 
+/// An entry's history
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct History {
