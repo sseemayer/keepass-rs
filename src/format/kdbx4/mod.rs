@@ -81,7 +81,9 @@ mod kdbx4_tests {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
 
-        let key_elements = DatabaseKey::with_password(&password).get_key_elements().unwrap();
+        let key_elements = DatabaseKey::with_password(&password)
+            .get_key_elements()
+            .unwrap();
 
         let mut encrypted_db = Vec::new();
         dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
@@ -164,7 +166,9 @@ mod kdbx4_tests {
 
         db.root.children.push(Node::Entry(entry));
 
-        let key_elements = DatabaseKey::with_password("test").get_key_elements().unwrap();
+        let key_elements = DatabaseKey::with_password("test")
+            .get_key_elements()
+            .unwrap();
 
         let mut encrypted_db = Vec::new();
         dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
