@@ -193,27 +193,16 @@ impl FromXml for BinaryField {
         let key = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
 
         let value_event = iterator.next().ok_or(XmlParseError::Eof)?;
-        let identifier = if let SimpleXmlEvent::Start(ref name, ref attributes) = value_event {
-            if name != "Value" {
-                return Err(XmlParseError::BadEvent {
-                    expected: "Open Value tag",
-                    event: value_event,
-                });
+        let identifier = match value_event {
+            SimpleXmlEvent::Start(ref name, ref attributes) if name == "Value" => {
+                attributes.get("Ref").cloned()
             }
-
-            attributes
-                .get("Ref")
-                .ok_or_else(|| XmlParseError::BadEvent {
-                    expected: "Value tag with Ref attribute",
-                    event: value_event.clone(),
-                })?
-                .to_string()
-        } else {
-            return Err(XmlParseError::BadEvent {
-                expected: "Open Value tag",
-                event: value_event,
-            });
-        };
+            _ => None,
+        }
+        .ok_or_else(|| XmlParseError::BadEvent {
+            expected: "Open Value tag with \"Ref\" attribute",
+            event: value_event,
+        })?;
 
         let close_value_tag = iterator.next().ok_or(XmlParseError::Eof)?;
         if !matches!(close_value_tag, SimpleXmlEvent::End(ref tag) if tag == "Value") {

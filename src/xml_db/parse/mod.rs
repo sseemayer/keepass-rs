@@ -632,7 +632,7 @@ mod parse_test {
     use crate::{
         config::InnerCipherConfig,
         crypt::ciphers::PlainCipher,
-        db::{CustomData, CustomDataItem, Times},
+        db::{CustomData, CustomDataItem, Entry, Times},
         xml_db::parse::{DeletedObject, DeletedObjects, IgnoreSubfield, Root},
     };
 
@@ -882,10 +882,23 @@ mod parse_test {
         assert_eq!(value.key, "MyField");
         assert_eq!(value.identifier, "asdf");
 
+        let value = parse_test_xml::<BinaryField>("<TestTag></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
         let value = parse_test_xml::<BinaryField>("<Binary></TestTag>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<BinaryField>("<Binary></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><WrongTag/><Key>asdf</Key><Value Ref=\"asdf\"/></Binary>",
+        );
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><Key>asdf</Key><WrongTag/><Value Ref=\"asdf\"/></Binary>",
+        );
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<BinaryField>(
@@ -904,6 +917,17 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<BinaryField>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_entry_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<Entry>("<Entry>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Entry>("<WrongTag></WrongTag>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         Ok(())
