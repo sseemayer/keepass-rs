@@ -1,34 +1,10 @@
 use std::io::Read;
 
-use crate::crypt::{calculate_sha256, CryptographyError};
 use base64::{engine::general_purpose as base64_engine, Engine as _};
-use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 
-/// Errors related to the database key
-#[derive(Debug, Error)]
-pub enum DatabaseKeyError {
-    /// The key specified was incorrect, e.g. because of a wrong password
-    #[error("Incorrect key")]
-    IncorrectKey,
-
-    /// An error occurred in an underlying cryptographic operation while computing the key
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    /// An I/O error occurred while loading the keyfile
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    /// An XML error occurred while loading the keyfile
-    #[error(transparent)]
-    Xml(#[from] xml::reader::Error),
-
-    /// The keyfile is invalid and did not contain a key
-    #[error("Could not obtain a key from the keyfile")]
-    InvalidKeyFile,
-}
+use crate::{crypt::calculate_sha256, error::DatabaseKeyError};
 
 fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>, DatabaseKeyError> {
     let parser = EventReader::new(xml);
@@ -82,12 +58,12 @@ fn parse_keyfile(source: &mut dyn std::io::Read) -> Result<Vec<u8>, DatabaseKeyE
 }
 
 /// A KeePass key, which might consist of a password and/or a keyfile
-pub struct Key<'p, 'f> {
+pub struct DatabaseKey<'p, 'f> {
     pub password: Option<&'p str>,
     pub keyfile: Option<&'f mut dyn Read>,
 }
 
-impl<'p, 'f> Key<'p, 'f> {
+impl<'p, 'f> DatabaseKey<'p, 'f> {
     pub fn with_password(password: &'p str) -> Self {
         Self {
             password: Some(password),

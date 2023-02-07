@@ -61,9 +61,10 @@ pub struct Meta {
     /// last time the group containing entry templates was changed
     pub entry_templates_group_changed: Option<NaiveDateTime>,
 
-    /// last selected group UUID
+    /// UUID of the last selected group
     pub last_selected_group: Option<String>,
 
+    /// UUID of the last top-visible group
     pub last_top_visible_group: Option<String>,
 
     /// Maximum number of items of history to keep

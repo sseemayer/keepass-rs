@@ -13,14 +13,15 @@ mod tests {
     use secstr::SecStr;
 
     use crate::{
+        config::DatabaseConfig,
         db::{
             entry::History,
             meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
             AutoType, AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database,
-            DatabaseSettings, Entry, Group, Meta, Node, Value,
+            Entry, Group, Meta, Node, Value,
         },
         format::kdbx4,
-        key::Key,
+        key::DatabaseKey,
     };
 
     fn make_key() -> Vec<Vec<u8>> {
@@ -32,7 +33,9 @@ mod tests {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
 
-        let key_elements = Key::with_password(&password).get_key_elements().unwrap();
+        let key_elements = DatabaseKey::with_password(&password)
+            .get_key_elements()
+            .unwrap();
         key_elements
     }
 
@@ -97,7 +100,7 @@ mod tests {
 
         root_group.children.push(Node::Entry(entry.clone()));
 
-        let mut db = Database::new(DatabaseSettings::default());
+        let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group;
 
         let key_elements = make_key();
@@ -147,7 +150,7 @@ mod tests {
 
         root_group.children.push(Node::Group(subgroup));
 
-        let mut db = Database::new(DatabaseSettings::default());
+        let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group.clone();
 
         let key_elements = make_key();
@@ -171,7 +174,7 @@ mod tests {
 
     #[test]
     pub fn test_meta() {
-        let mut db = Database::new(DatabaseSettings::default());
+        let mut db = Database::new(DatabaseConfig::default());
 
         let meta = Meta {
             generator: Some("test-generator".to_string()),

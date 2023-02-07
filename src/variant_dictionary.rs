@@ -1,8 +1,7 @@
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::{collections::HashMap, io::Write};
-use thiserror::Error;
 
-use crate::io::WriteLengthTaggedExt;
+use crate::{error::VariantDictionaryError, io::WriteLengthTaggedExt};
 
 pub const VARIANT_DICTIONARY_VERSION: u16 = 0x100;
 pub const VARIANT_DICTIONARY_END: u8 = 0x0;
@@ -18,25 +17,6 @@ pub const BYTES_TYPE_ID: u8 = 0x42;
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct VariantDictionary {
     pub data: HashMap<String, VariantDictionaryValue>,
-}
-
-/// Errors while parsing a VariantDictionary
-#[derive(Debug, Error)]
-pub enum VariantDictionaryError {
-    #[error("Invalid variant dictionary version: {}", version)]
-    InvalidVersion { version: u16 },
-
-    #[error("Invalid value type: {}", value_type)]
-    InvalidValueType { value_type: u8 },
-
-    #[error("Missing key: {}", key)]
-    MissingKey { key: String },
-
-    #[error("Mistyped value: {}", key)]
-    Mistyped { key: String },
-
-    #[error("VariantDictionary did not end with null byte, when it should")]
-    NotTerminated,
 }
 
 impl VariantDictionary {

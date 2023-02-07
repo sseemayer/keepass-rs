@@ -23,23 +23,23 @@ pub use crate::db::{
 pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
 use crate::{
-    config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
+    config::DatabaseConfig,
     error::{DatabaseIntegrityError, DatabaseOpenError},
     format::{
         kdb::parse_kdb,
         kdbx3::{decrypt_kdbx3, parse_kdbx3},
         kdbx4::{decrypt_kdbx4, parse_kdbx4},
-        DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION,
+        DatabaseVersion,
     },
-    key::Key,
+    key::DatabaseKey,
 };
 
 /// A decrypted KeePass database
 #[derive(Debug)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Database {
-    /// Settings of the database such as encryption and compression algorithms
-    pub settings: DatabaseSettings,
+    /// Configuration settings of the database such as encryption and compression algorithms
+    pub config: DatabaseConfig,
 
     /// Binary attachments in the inner header
     pub header_attachments: Vec<HeaderAttachment>,
@@ -51,47 +51,12 @@ pub struct Database {
     pub meta: Meta,
 }
 
-/// Settings for how a database is stored on disk
-#[derive(Debug)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct DatabaseSettings {
-    /// Version of the outer database file
-    pub version: DatabaseVersion,
-
-    /// What encryption to use for the outer encryption
-    pub outer_cipher_suite: OuterCipherConfig,
-
-    /// What algorithm to use to compress the inner data
-    pub compression: CompressionConfig,
-
-    /// What encryption to use for protected fields inside the database
-    pub inner_cipher_suite: InnerCipherConfig,
-
-    /// Settings for the Key Derivation Function (KDF)
-    pub kdf_settings: KdfConfig,
-}
-
-/// Sensible default database settings for new databases
-impl Default for DatabaseSettings {
-    fn default() -> Self {
-        Self {
-            version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
-            outer_cipher_suite: OuterCipherConfig::AES256,
-            compression: CompressionConfig::GZip,
-            inner_cipher_suite: InnerCipherConfig::ChaCha20,
-            kdf_settings: KdfConfig::Argon2 {
-                iterations: 50,
-                memory: 1024 * 1024,
-                parallelism: 4,
-                version: argon2::Version::Version13,
-            },
-        }
-    }
-}
-
 impl Database {
     /// Parse a database from a std::io::Read
-    pub fn open(source: &mut dyn std::io::Read, key: Key) -> Result<Database, DatabaseOpenError> {
+    pub fn open(
+        source: &mut dyn std::io::Read,
+        key: DatabaseKey,
+    ) -> Result<Database, DatabaseOpenError> {
         let key_elements = key.get_key_elements()?;
 
         let mut data = Vec::new();
@@ -112,14 +77,14 @@ impl Database {
     pub fn save(
         &self,
         destination: &mut dyn std::io::Write,
-        key: Key,
+        key: DatabaseKey,
     ) -> Result<(), crate::error::DatabaseSaveError> {
         use crate::error::DatabaseSaveError;
         use crate::format::kdbx4::dump_kdbx4;
 
         let key_elements = key.get_key_elements()?;
 
-        match self.settings.version {
+        match self.config.version {
             DatabaseVersion::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
             DatabaseVersion::KDB2(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
             DatabaseVersion::KDB3(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
@@ -128,7 +93,10 @@ impl Database {
     }
 
     /// Helper function to load a database into its internal XML chunks
-    pub fn get_xml(source: &mut dyn std::io::Read, key: Key) -> Result<Vec<u8>, DatabaseOpenError> {
+    pub fn get_xml(
+        source: &mut dyn std::io::Read,
+        key: DatabaseKey,
+    ) -> Result<Vec<u8>, DatabaseOpenError> {
         let key_elements = key.get_key_elements()?;
 
         let mut data = Vec::new();
@@ -146,7 +114,7 @@ impl Database {
         Ok(data)
     }
 
-    /// Get the version of a database without loading it
+    /// Get the version of a database without decrypting it
     pub fn get_version(
         source: &mut dyn std::io::Read,
     ) -> Result<DatabaseVersion, DatabaseIntegrityError> {
@@ -157,9 +125,9 @@ impl Database {
     }
 
     /// Create a new, empty database
-    pub fn new(settings: DatabaseSettings) -> Database {
+    pub fn new(config: DatabaseConfig) -> Database {
         Self {
-            settings,
+            config,
             header_attachments: Vec::new(),
             root: Group::new("Root"),
             meta: Default::default(),

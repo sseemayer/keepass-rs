@@ -2,7 +2,7 @@
 #![recursion_limit = "1024"]
 
 mod compression;
-mod config;
+pub mod config;
 pub(crate) mod crypt;
 pub mod db;
 pub mod error;
@@ -14,5 +14,4 @@ pub(crate) mod variant_dictionary;
 pub(crate) mod xml_db;
 
 pub use self::db::Database;
-pub use self::key::Key;
-// see https://gist.github.com/msmuenchen/9318327 for file format details
+pub use self::key::DatabaseKey;

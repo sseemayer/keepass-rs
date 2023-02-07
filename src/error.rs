@@ -2,17 +2,6 @@
 
 use thiserror::Error;
 
-pub use crate::{
-    config::{
-        CompressionConfigError, InnerCipherConfigError, KdfConfigError, OuterCipherConfigError,
-    },
-    crypt::CryptographyError,
-    hmac_block_stream::BlockStreamError,
-    key::DatabaseKeyError,
-    variant_dictionary::VariantDictionaryError,
-    xml_db::parse::XmlParseError,
-};
-
 #[cfg(feature = "totp")]
 pub use crate::db::otp::TOTPError;
 
@@ -175,6 +164,153 @@ pub enum DatabaseSaveError {
     /// An error getting randomness for keys occurred
     #[error(transparent)]
     Random(#[from] getrandom::Error),
+}
+
+/// Errors related to the database key
+#[derive(Debug, Error)]
+pub enum DatabaseKeyError {
+    /// The key specified was incorrect, e.g. because of a wrong password
+    #[error("Incorrect key")]
+    IncorrectKey,
+
+    /// An error occurred in an underlying cryptographic operation while computing the key
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    /// An I/O error occurred while loading the keyfile
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    /// An XML error occurred while loading the keyfile
+    #[error(transparent)]
+    Xml(#[from] xml::reader::Error),
+
+    /// The keyfile is invalid and did not contain a key
+    #[error("Could not obtain a key from the keyfile")]
+    InvalidKeyFile,
+}
+
+/// Errors with the configuration of the outer encryption
+#[derive(Debug, Error)]
+pub enum OuterCipherConfigError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Invalid outer cipher ID: {:?}", cid)]
+    InvalidOuterCipherID { cid: Vec<u8> },
+}
+
+/// Errors with the configuration of the inner encryption
+#[derive(Debug, Error)]
+pub enum InnerCipherConfigError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Invalid inner cipher ID: {}", cid)]
+    InvalidInnerCipherID { cid: u32 },
+}
+
+/// Errors with the configuration of the compression algorithm
+#[derive(Debug, Error)]
+pub enum CompressionConfigError {
+    /// The identifier for the compression algorithm specified in the database is invalid
+    #[error("Invalid compression algorithm: {}", cid)]
+    InvalidCompressionSuite { cid: u32 },
+}
+
+/// Errors with the configuration of the Key Derivation Function
+#[derive(Debug, Error)]
+pub enum KdfConfigError {
+    #[error("Invalid KDF version: {}", version)]
+    InvalidKDFVersion { version: u32 },
+
+    #[error("Invalid KDF UUID: {:?}", uuid)]
+    InvalidKDFUUID { uuid: Vec<u8> },
+
+    #[error(transparent)]
+    VariantDictionary(#[from] VariantDictionaryError),
+}
+
+/// Errors while performing cryptographic operations
+#[derive(Debug, Error)]
+pub enum CryptographyError {
+    #[error(transparent)]
+    InvalidLength(#[from] cipher::InvalidLength),
+
+    #[error(transparent)]
+    Unpadding(#[from] cipher::block_padding::UnpadError),
+
+    #[error(transparent)]
+    Padding(#[from] cipher::inout::PadError),
+
+    #[error(transparent)]
+    Argon2(#[from] argon2::Error),
+}
+
+/// Errors reading from the HMAC block stream
+#[derive(Debug, Error)]
+pub enum BlockStreamError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Block hash mismatch for block {}", block_index)]
+    BlockHashMismatch { block_index: u64 },
+}
+
+/// Errors while parsing a VariantDictionary
+#[derive(Debug, Error)]
+pub enum VariantDictionaryError {
+    #[error("Invalid variant dictionary version: {}", version)]
+    InvalidVersion { version: u16 },
+
+    #[error("Invalid value type: {}", value_type)]
+    InvalidValueType { value_type: u8 },
+
+    #[error("Missing key: {}", key)]
+    MissingKey { key: String },
+
+    #[error("Mistyped value: {}", key)]
+    Mistyped { key: String },
+
+    #[error("VariantDictionary did not end with null byte, when it should")]
+    NotTerminated,
+}
+
+/// Errors while parsing the XML document inside of a KeePass database
+#[derive(Debug, Error)]
+pub enum XmlParseError {
+    #[error(transparent)]
+    Xml(#[from] xml::reader::Error),
+
+    #[error(transparent)]
+    Base64(#[from] base64::DecodeError),
+
+    #[error(transparent)]
+    TimestampFormat(#[from] chrono::ParseError),
+
+    #[error(transparent)]
+    IntFormat(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    BoolFormat(#[from] std::str::ParseBoolError),
+
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Decompression error: {}", _0)]
+    Compression(#[source] std::io::Error),
+
+    /// An unexpected XML event occurred, such as opening an unexpected tag, or an error in the
+    /// underlying XML reader
+    #[error("Bad XML event: expected {}, got {:?}", expected, event)]
+    BadEvent {
+        expected: &'static str,
+        event: crate::xml_db::parse::SimpleXmlEvent,
+    },
+
+    /// The stream of XML events ended when more events were expected
+    #[error("Unexpected end of XML document")]
+    Eof,
 }
 
 // move error type conversions to a module and exclude them from coverage counting.

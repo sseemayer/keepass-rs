@@ -6,51 +6,14 @@ use std::{collections::HashMap, iter::Peekable};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
-use thiserror::Error;
 use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 
 use crate::{
-    crypt::{ciphers::Cipher, CryptographyError},
+    crypt::ciphers::Cipher,
     db::{CustomData, CustomDataItem, Group, Meta, Times, Value},
+    error::XmlParseError,
     xml_db::get_epoch_baseline,
 };
-
-/// Errors while parsing the XML document inside of a KeePass database
-#[derive(Debug, Error)]
-pub enum XmlParseError {
-    #[error(transparent)]
-    Xml(#[from] xml::reader::Error),
-
-    #[error(transparent)]
-    Base64(#[from] base64::DecodeError),
-
-    #[error(transparent)]
-    TimestampFormat(#[from] chrono::ParseError),
-
-    #[error(transparent)]
-    IntFormat(#[from] std::num::ParseIntError),
-
-    #[error(transparent)]
-    BoolFormat(#[from] std::str::ParseBoolError),
-
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error("Decompression error: {}", _0)]
-    Compression(#[source] std::io::Error),
-
-    /// An unexpected XML event occurred, such as opening an unexpected tag, or an error in the
-    /// underlying XML reader
-    #[error("Bad XML event: expected {}, got {:?}", expected, event)]
-    BadEvent {
-        expected: &'static str,
-        event: SimpleXmlEvent,
-    },
-
-    /// The stream of XML events ended when more events were expected
-    #[error("Unexpected end of XML document")]
-    Eof,
-}
 
 /// Parse a KeePass timestamp string
 pub fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime, XmlParseError> {

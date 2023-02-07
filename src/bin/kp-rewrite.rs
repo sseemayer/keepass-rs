@@ -5,7 +5,7 @@ use std::io::{Cursor, Read};
 use anyhow::Result;
 use clap::Parser;
 
-use keepass::{Database, Key};
+use keepass::{Database, DatabaseKey};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -46,7 +46,7 @@ pub fn main() -> Result<()> {
 
     let db = Database::open(
         &mut source,
-        Key {
+        DatabaseKey {
             password,
             keyfile: keyfile.as_mut().map(|kf| kf as &mut dyn Read),
         },
@@ -54,7 +54,7 @@ pub fn main() -> Result<()> {
 
     db.save(
         &mut File::create(args.out_kdbx)?,
-        Key {
+        DatabaseKey {
             password,
             keyfile: keyfile.as_mut().map(|kf| kf as &mut dyn Read),
         },

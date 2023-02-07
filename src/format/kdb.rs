@@ -1,7 +1,7 @@
 use crate::{
-    config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
+    config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::calculate_sha256,
-    db::{Database, DatabaseSettings, Entry, Group, Node, NodeRefMut, Value},
+    db::{Database, Entry, Group, Node, NodeRefMut, Value},
     error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
     format::DatabaseVersion,
 };
@@ -315,17 +315,17 @@ pub(crate) fn parse_kdb(
     };
 
     // KDF is always AES
-    let kdf_settings = KdfConfig::Aes {
+    let kdf_config = KdfConfig::Aes {
         rounds: header.transform_rounds as u64,
     };
 
-    let transformed_key = kdf_settings
+    let transformed_key = kdf_config
         .get_kdf_seeded(&header.transform_seed)
         .transform_key(&composite_key)?;
 
     let master_key = calculate_sha256(&[&header.master_seed, &transformed_key])?;
 
-    let outer_cipher_suite = if header.flags & 2 != 0 {
+    let outer_cipher_config = if header.flags & 2 != 0 {
         OuterCipherConfig::AES256
     } else if header.flags & 8 != 0 {
         OuterCipherConfig::Twofish
@@ -334,7 +334,7 @@ pub(crate) fn parse_kdb(
     };
 
     // Decrypt payload
-    let payload_padded = outer_cipher_suite
+    let payload_padded = outer_cipher_config
         .get_cipher(&master_key, header.encryption_iv.as_ref())?
         .decrypt(payload_encrypted)?;
     let padlen = payload_padded[payload_padded.len() - 1] as usize;
@@ -348,16 +348,16 @@ pub(crate) fn parse_kdb(
 
     let root_group = parse_db(&header, &payload)?;
 
-    let settings = DatabaseSettings {
+    let config = DatabaseConfig {
         version,
-        outer_cipher_suite,
-        compression: CompressionConfig::None,
-        inner_cipher_suite: InnerCipherConfig::Plain,
-        kdf_settings,
+        outer_cipher_config,
+        compression_config: CompressionConfig::None,
+        inner_cipher_config: InnerCipherConfig::Plain,
+        kdf_config,
     };
 
     Ok(Database {
-        settings,
+        config,
         header_attachments: Default::default(),
         root: root_group,
         meta: Default::default(),

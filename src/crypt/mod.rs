@@ -1,36 +1,15 @@
-use cipher::{
-    block_padding::UnpadError,
-    generic_array::{
-        typenum::{U32, U64},
-        GenericArray,
-    },
-    inout::PadError,
-    InvalidLength,
+use cipher::generic_array::{
+    typenum::{U32, U64},
+    GenericArray,
 };
-
-use thiserror::Error;
 
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256, Sha512};
 
+use crate::error::CryptographyError;
+
 pub(crate) mod ciphers;
 pub(crate) mod kdf;
-
-/// Errors while performing cryptographic operations
-#[derive(Debug, Error)]
-pub enum CryptographyError {
-    #[error(transparent)]
-    InvalidLength(#[from] InvalidLength),
-
-    #[error(transparent)]
-    Unpadding(#[from] UnpadError),
-
-    #[error(transparent)]
-    Padding(#[from] PadError),
-
-    #[error(transparent)]
-    Argon2(#[from] argon2::Error),
-}
 
 pub(crate) fn calculate_hmac(
     elements: &[&[u8]],

@@ -1,12 +1,19 @@
+//! Configuration options for how to compress and encrypt databases
 use hex_literal::hex;
 
 use std::convert::TryFrom;
-use thiserror::Error;
 
-use crate::crypt::ciphers::Cipher;
 use crate::{
     compression,
-    crypt::{ciphers, kdf, CryptographyError},
+    crypt::{
+        ciphers::{self, Cipher},
+        kdf,
+    },
+    error::{
+        CompressionConfigError, CryptographyError, InnerCipherConfigError, KdfConfigError,
+        OuterCipherConfigError,
+    },
+    format::{DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION},
     variant_dictionary::VariantDictionary,
 };
 
@@ -20,6 +27,44 @@ const PLAIN: u32 = 0;
 const SALSA_20: u32 = 2;
 const CHA_CHA_20: u32 = 3;
 
+/// Configuration of how a database should be stored
+#[derive(Debug)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct DatabaseConfig {
+    /// Version of the outer database file
+    pub version: DatabaseVersion,
+
+    /// What encryption to use for the outer encryption
+    pub outer_cipher_config: OuterCipherConfig,
+
+    /// What algorithm to use to compress the inner data
+    pub compression_config: CompressionConfig,
+
+    /// What encryption to use for protected fields inside the database
+    pub inner_cipher_config: InnerCipherConfig,
+
+    /// Settings for the Key Derivation Function (KDF)
+    pub kdf_config: KdfConfig,
+}
+
+/// Sensible default configuration for new databases
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            version: DatabaseVersion::KDB4(KDBX4_CURRENT_MINOR_VERSION),
+            outer_cipher_config: OuterCipherConfig::AES256,
+            compression_config: CompressionConfig::GZip,
+            inner_cipher_config: InnerCipherConfig::ChaCha20,
+            kdf_config: KdfConfig::Argon2 {
+                iterations: 50,
+                memory: 1024 * 1024,
+                parallelism: 4,
+                version: argon2::Version::Version13,
+            },
+        }
+    }
+}
+
 /// Choices for outer encryption
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
@@ -27,16 +72,6 @@ pub enum OuterCipherConfig {
     AES256,
     Twofish,
     ChaCha20,
-}
-
-/// Errors for outer encryption configuration
-#[derive(Debug, Error)]
-pub enum OuterCipherConfigError {
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error("Invalid outer cipher ID: {:?}", cid)]
-    InvalidOuterCipherID { cid: Vec<u8> },
 }
 
 impl OuterCipherConfig {
@@ -93,16 +128,6 @@ pub enum InnerCipherConfig {
     Plain,
     Salsa20,
     ChaCha20,
-}
-
-/// Errors with inner protected value encryption
-#[derive(Debug, Error)]
-pub enum InnerCipherConfigError {
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error("Invalid inner cipher ID: {}", cid)]
-    InvalidInnerCipherID { cid: u32 },
 }
 
 impl InnerCipherConfig {
@@ -195,7 +220,7 @@ impl KdfConfig {
         }
     }
 
-    /// For writing out a database, generate a new KDF seed from the settings and return the KDF
+    /// For writing out a database, generate a new KDF seed from the config and return the KDF
     /// and the generated seed
     pub(crate) fn get_kdf_and_seed(
         &self,
@@ -208,7 +233,7 @@ impl KdfConfig {
         Ok((kdf, kdf_seed))
     }
 
-    /// For reading a database, generate a KDF from the KDF settings and a provided seed
+    /// For reading a database, generate a KDF from the KDF config and a provided seed
     pub(crate) fn get_kdf_seeded(&self, seed: &[u8]) -> Box<dyn kdf::Kdf> {
         match self {
             KdfConfig::Aes { rounds } => Box::new(kdf::AesKdf {
@@ -262,19 +287,6 @@ const KDF_AES_KDBX3: [u8; 16] = hex!("c9d9f39a628a4460bf740d08c18a4fea");
 const KDF_AES_KDBX4: [u8; 16] = hex!("7c02bb8279a74ac0927d114a00648238");
 const KDF_ARGON2: [u8; 16] = hex!("ef636ddf8c29444b91f7a9a403e30a0c");
 
-/// Configuration errors for Key Derivation Function
-#[derive(Debug, Error)]
-pub enum KdfConfigError {
-    #[error("Invalid KDF version: {}", version)]
-    InvalidKDFVersion { version: u32 },
-
-    #[error("Invalid KDF UUID: {:?}", uuid)]
-    InvalidKDFUUID { uuid: Vec<u8> },
-
-    #[error(transparent)]
-    VariantDictionary(#[from] crate::variant_dictionary::VariantDictionaryError),
-}
-
 impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
     type Error = KdfConfigError;
 
@@ -320,14 +332,6 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
 pub enum CompressionConfig {
     None,
     GZip,
-}
-
-/// Errors with compression choice
-#[derive(Debug, Error)]
-pub enum CompressionConfigError {
-    /// The identifier for the compression algorithm specified in the database is invalid
-    #[error("Invalid compression suite: {}", cid)]
-    InvalidCompressionSuite { cid: u32 },
 }
 
 impl CompressionConfig {
