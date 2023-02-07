@@ -35,7 +35,7 @@ use crate::{
 };
 
 /// A decrypted KeePass database
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Database {
     /// Configuration settings of the database such as encryption and compression algorithms
@@ -180,4 +180,47 @@ pub struct CustomDataItem {
 pub struct HeaderAttachment {
     pub flags: u8,
     pub content: Vec<u8>,
+}
+
+#[cfg(test)]
+mod database_tests {
+    use std::fs::File;
+
+    use crate::{error::DatabaseOpenError, Database, DatabaseKey};
+
+    #[test]
+    fn test_xml() -> Result<(), DatabaseOpenError> {
+        let xml = Database::get_xml(
+            &mut File::open("tests/resources/test_db_with_password.kdbx")?,
+            DatabaseKey::with_password("demopass"),
+        )?;
+
+        assert!(xml.len() > 100);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    #[test]
+    fn test_save() {
+        use crate::db::{Entry, Node};
+        let mut db = Database::new(Default::default());
+
+        db.root.children.push(Node::Entry(Entry::new()));
+        db.root.children.push(Node::Entry(Entry::new()));
+        db.root.children.push(Node::Entry(Entry::new()));
+
+        let mut buffer = Vec::new();
+
+        db.save(&mut buffer, DatabaseKey::with_password("testing"))
+            .unwrap();
+
+        let db_loaded = Database::open(
+            &mut buffer.as_slice(),
+            DatabaseKey::with_password("testing"),
+        )
+        .unwrap();
+
+        assert_eq!(db, db_loaded);
+    }
 }

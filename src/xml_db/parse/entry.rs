@@ -168,10 +168,11 @@ impl FromXml for StringField {
     }
 }
 
+#[derive(Debug)]
 #[allow(dead_code)]
-struct BinaryField {
-    key: String,
-    identifier: String,
+pub(crate) struct BinaryField {
+    pub key: String,
+    pub identifier: String,
 }
 
 impl FromXml for BinaryField {

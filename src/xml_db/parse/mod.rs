@@ -636,7 +636,9 @@ mod parse_test {
         xml_db::parse::{DeletedObject, DeletedObjects, IgnoreSubfield, Root},
     };
 
-    use super::{parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError};
+    use super::{
+        entry::BinaryField, parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError,
+    };
 
     pub(crate) fn parse_test_xml<P: FromXml>(
         xml: &str,
@@ -866,6 +868,42 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<IgnoreSubfield>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_binary_field() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><Key>MyField</Key><Value Ref=\"asdf\"/></Binary>",
+        )?;
+
+        assert_eq!(value.key, "MyField");
+        assert_eq!(value.identifier, "asdf");
+
+        let value = parse_test_xml::<BinaryField>("<Binary></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("<Binary></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><Key>mykey</Key><Value Ref=\"asdf\">Value data</Value></Binary>",
+        );
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<BinaryField>("<Binary><Key></Key><Value Ref=\"asdf\"/></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("<Binary><Key>mykey</Key><Value/></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("</Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("Not a tag");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         Ok(())

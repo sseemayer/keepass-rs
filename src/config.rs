@@ -28,7 +28,7 @@ const SALSA_20: u32 = 2;
 const CHA_CHA_20: u32 = 3;
 
 /// Configuration of how a database should be stored
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct DatabaseConfig {
     /// Version of the outer database file
@@ -66,7 +66,7 @@ impl Default for DatabaseConfig {
 }
 
 /// Choices for outer encryption
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum OuterCipherConfig {
     AES256,
@@ -122,7 +122,7 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
 }
 
 /// Choices for encrypting protected values inside of databases
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum InnerCipherConfig {
     Plain,
@@ -185,7 +185,7 @@ const KDF_SEED: &str = "S";
 const KDF_ROUNDS: &str = "R";
 
 /// Choices for Key Derivation Functions (KDFs)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum KdfConfig {
     /// Derive keys with repeated AES encryption
@@ -327,7 +327,7 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
 }
 
 /// Choices of compression algorithm
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum CompressionConfig {
     None,
