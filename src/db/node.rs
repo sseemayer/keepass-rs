@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use crate::db::{entry::Entry, group::Group};
 
+/// An owned node in the database tree structure which can either be an Entry or Group
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum Node {
@@ -10,15 +11,16 @@ pub enum Node {
 }
 
 impl Node {
-    pub fn to_ref<'a>(&'a self) -> NodeRef<'a> {
+    pub fn as_ref<'a>(&'a self) -> NodeRef<'a> {
         self.into()
     }
 
-    pub fn to_ref_mut<'a>(&'a mut self) -> NodeRefMut<'a> {
+    pub fn as_mut<'a>(&'a mut self) -> NodeRefMut<'a> {
         self.into()
     }
 }
 
+/// A shared reference to a node in the database tree structure which can either point to an Entry or a Group
 #[derive(Debug, Eq, PartialEq)]
 pub enum NodeRef<'a> {
     Group(&'a Group),
@@ -34,6 +36,7 @@ impl<'a> std::convert::From<&'a Node> for NodeRef<'a> {
     }
 }
 
+/// An exclusive mutable reference to a node in the database tree structure which can either point to an Entry or a Group
 #[derive(Debug, Eq, PartialEq)]
 pub enum NodeRefMut<'a> {
     Group(&'a mut Group),
@@ -49,7 +52,7 @@ impl<'a> std::convert::From<&'a mut Node> for NodeRefMut<'a> {
     }
 }
 
-/// An iterator over Groups and Entries
+/// An iterator over Group and Entry references
 pub struct NodeIter<'a> {
     queue: VecDeque<NodeRef<'a>>,
 }

@@ -12,9 +12,8 @@ use xml::{
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{Database, Times},
+    db::{CustomData, CustomDataItem, Database, Times},
     xml_db::get_epoch_baseline,
-    CustomData, CustomDataItem,
 };
 
 /// Format a timestamp suitable for an XML database

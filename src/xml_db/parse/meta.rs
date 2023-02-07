@@ -2,10 +2,9 @@ use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
 
 use crate::{
-    compression::{Decompress, GZipCompression},
-    meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection},
+    compression::{Compression, GZipCompression},
+    db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
-    Meta,
 };
 
 use super::IgnoreSubfield;
@@ -307,7 +306,7 @@ impl FromXml for BinaryAttachment {
         out.identifier = identifier;
         out.compressed = compressed;
         out.content = if compressed {
-            Decompress::decompress(&GZipCompression, &buf).map_err(XmlParseError::Compression)?
+            Compression::decompress(&GZipCompression, &buf).map_err(XmlParseError::Compression)?
         } else {
             buf
         };
@@ -417,9 +416,10 @@ impl FromXml for Icon {
 mod parse_meta_test {
 
     use crate::{
-        meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
+        db::meta::{
+            BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta,
+        },
         xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
-        BinaryAttachment, Meta,
     };
 
     #[test]

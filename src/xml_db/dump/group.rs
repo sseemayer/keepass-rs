@@ -2,8 +2,8 @@ use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 
 use crate::{
     crypt::ciphers::Cipher,
+    db::{Group, Node},
     xml_db::dump::{DumpXml, SimpleTag},
-    Group, Node,
 };
 
 impl DumpXml for Group {

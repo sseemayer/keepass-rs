@@ -1,11 +1,18 @@
 mod file_read_tests {
-    use keepass::*;
+    use keepass::{
+        db::{Database, NodeRef},
+        error::{DatabaseIntegrityError, DatabaseOpenError},
+        DatabaseKey,
+    };
     use std::{fs::File, path::Path};
 
     #[test]
     fn open_kdbx3_with_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "sample");
@@ -43,8 +50,7 @@ mod file_read_tests {
         let kf_path = Path::new("tests/resources/test_key.key");
         let db = Database::open(
             &mut File::open(path)?,
-            None,
-            Some(&mut File::open(kf_path)?),
+            DatabaseKey::with_keyfile(&mut File::open(kf_path)?),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -83,8 +89,7 @@ mod file_read_tests {
         let kf_path = Path::new("tests/resources/test_key_xml.key");
         let db = Database::open(
             &mut File::open(path)?,
-            None,
-            Some(&mut File::open(kf_path)?),
+            DatabaseKey::with_keyfile(&mut File::open(kf_path)?),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -121,7 +126,10 @@ mod file_read_tests {
     fn open_kdbx4_with_password_kdf_argon2_cipher_aes() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2.kdbx");
 
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         println!("{:?} DB Opened", db);
 
@@ -134,7 +142,10 @@ mod file_read_tests {
     #[test]
     fn open_kdbx4_with_password_kdf_aes_cipher_aes() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         println!("{:?} DB Opened", db);
 
@@ -148,7 +159,10 @@ mod file_read_tests {
     fn open_kdbx4_with_password_kdf_argon2_cipher_twofish() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2_twofish.kdbx");
 
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         println!("{:?} DB Opened", db);
 
@@ -162,7 +176,10 @@ mod file_read_tests {
     fn open_kdbx4_with_password_kdf_argon2_cipher_chacha20() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2_chacha20.kdbx");
 
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         println!("{:?} DB Opened", db);
 
@@ -179,8 +196,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            None,
-            Some(&mut File::open(kf_path)?),
+            DatabaseKey::with_keyfile(&mut File::open(kf_path)?),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -195,20 +211,28 @@ mod file_read_tests {
     #[should_panic(expected = r#"InvalidKDBXIdentifier"#)]
     fn open_broken_random_data() {
         let path = Path::new("tests/resources/broken_random_data.kdbx");
-        Database::open(&mut File::open(path).unwrap(), Some(""), None).unwrap();
+        Database::open(
+            &mut File::open(path).unwrap(),
+            DatabaseKey::with_password(""),
+        )
+        .unwrap();
     }
 
     #[test]
     #[should_panic(expected = r#"InvalidKDBXVersion"#)]
     fn open_broken_kdbx_version() {
         let path = Path::new("tests/resources/broken_kdbx_version.kdbx");
-        Database::open(&mut File::open(path).unwrap(), Some(""), None).unwrap();
+        Database::open(
+            &mut File::open(path).unwrap(),
+            DatabaseKey::with_password(""),
+        )
+        .unwrap();
     }
 
     #[test]
     fn open_kdb_with_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdb_with_password.kdb");
-        let db = Database::open(&mut File::open(path)?, Some("foobar"), None)?;
+        let db = Database::open(&mut File::open(path)?, DatabaseKey::with_password("foobar"))?;
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "Root");
@@ -243,7 +267,10 @@ mod file_read_tests {
     #[test]
     fn open_kdb_with_larger_than_1mb_file_does_not_crash() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdb3_with_file_larger_1mb.kdbx");
-        let db = Database::open(&mut File::open(path)?, Some("samplepassword"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("samplepassword"),
+        )?;
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.children.len(), 1);
@@ -277,7 +304,10 @@ mod file_read_tests {
     fn open_kdbx4_with_password_deleted_entry() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_deleted_entry.kdbx");
 
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         println!("{:?} DB Opened", db);
 

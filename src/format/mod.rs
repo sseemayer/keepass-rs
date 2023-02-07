@@ -6,7 +6,7 @@ use std::io::Write;
 
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 
-use crate::DatabaseIntegrityError;
+use crate::error::DatabaseIntegrityError;
 
 const KDBX_IDENTIFIER: [u8; 4] = [0x03, 0xd9, 0xa2, 0x9a];
 

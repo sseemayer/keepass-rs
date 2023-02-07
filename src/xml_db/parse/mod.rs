@@ -6,47 +6,14 @@ use std::{collections::HashMap, iter::Peekable};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
-use thiserror::Error;
 use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 
 use crate::{
-    crypt::{ciphers::Cipher, CryptographyError},
+    crypt::ciphers::Cipher,
+    db::{CustomData, CustomDataItem, Group, Meta, Times, Value},
+    error::XmlParseError,
     xml_db::get_epoch_baseline,
-    CustomData, CustomDataItem, Group, Meta, Times, Value,
 };
-
-#[derive(Debug, Error)]
-pub enum XmlParseError {
-    #[error(transparent)]
-    Xml(#[from] xml::reader::Error),
-
-    #[error(transparent)]
-    Base64(#[from] base64::DecodeError),
-
-    #[error(transparent)]
-    TimestampFormat(#[from] chrono::ParseError),
-
-    #[error(transparent)]
-    IntFormat(#[from] std::num::ParseIntError),
-
-    #[error(transparent)]
-    BoolFormat(#[from] std::str::ParseBoolError),
-
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error("Decompression error: {}", _0)]
-    Compression(#[source] std::io::Error),
-
-    #[error("Bad XML event: expected {}, got {:?}", expected, event)]
-    BadEvent {
-        expected: &'static str,
-        event: SimpleXmlEvent,
-    },
-
-    #[error("Unexpected end of XML document")]
-    Eof,
-}
 
 /// Parse a KeePass timestamp string
 pub fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime, XmlParseError> {
@@ -663,10 +630,10 @@ impl FromXml for IgnoreSubfield {
 #[cfg(test)]
 mod parse_test {
     use crate::{
-        config::InnerCipherSuite,
+        config::InnerCipherConfig,
         crypt::ciphers::PlainCipher,
+        db::{CustomData, CustomDataItem, Times},
         xml_db::parse::{DeletedObject, DeletedObjects, IgnoreSubfield, Root},
-        CustomData, CustomDataItem, Times,
     };
 
     use super::{parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError};
@@ -681,15 +648,7 @@ mod parse_test {
     fn test_custom_xml_fields() -> Result<(), XmlParseError> {
         let xml = include_bytes!("../../../tests/resources/inner_xml_with_custom_fields.xml");
 
-        let inner_cipher_suite = InnerCipherSuite::Salsa20;
-
-        let mut inner_random_stream_key: Vec<u8> = vec![];
-        inner_random_stream_key.resize(inner_cipher_suite.get_iv_size().into(), 0);
-        getrandom::getrandom(&mut inner_random_stream_key).unwrap();
-
-        let mut inner_cipher = inner_cipher_suite
-            .get_cipher(&inner_random_stream_key)
-            .unwrap();
+        let mut inner_cipher = InnerCipherConfig::Plain.get_cipher(&[]).unwrap();
 
         let _database_content = parse(&xml[..], &mut *inner_cipher)?;
 

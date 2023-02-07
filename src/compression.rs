@@ -1,16 +1,16 @@
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
+use flate2::Compression as Flate2Compression;
 use std::io::{Read, Write};
 
-pub trait Decompress {
+pub trait Compression {
     fn compress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error>;
     fn decompress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error>;
 }
 
 pub struct NoCompression;
 
-impl Decompress for NoCompression {
+impl Compression for NoCompression {
     fn compress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error> {
         Ok(in_buffer.to_vec())
     }
@@ -21,10 +21,10 @@ impl Decompress for NoCompression {
 
 pub struct GZipCompression;
 
-impl Decompress for GZipCompression {
+impl Compression for GZipCompression {
     fn compress(&self, in_buffer: &[u8]) -> Result<Vec<u8>, std::io::Error> {
         let mut res = Vec::new();
-        let mut encoder = GzEncoder::new(&mut res, Compression::default());
+        let mut encoder = GzEncoder::new(&mut res, Flate2Compression::default());
         encoder.write_all(in_buffer)?;
         encoder.flush()?;
         encoder.finish()?;

@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use clap::Parser;
 
-use keepass::Database;
+use keepass::{Database, DatabaseKey};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -36,11 +36,9 @@ pub fn main() -> Result<()> {
         Some(&password[..])
     };
 
-    let xml = Database::get_xml(
-        &mut source,
-        password,
-        keyfile.as_mut().map(|kf| kf as &mut dyn Read),
-    )?;
+    let keyfile = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
+
+    let xml = Database::get_xml(&mut source, DatabaseKey { password, keyfile })?;
 
     File::create(args.out_xml)?.write_all(&xml)?;
 

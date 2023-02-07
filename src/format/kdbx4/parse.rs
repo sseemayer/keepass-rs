@@ -3,12 +3,10 @@ use std::convert::{TryFrom, TryInto};
 use byteorder::{ByteOrder, LittleEndian};
 
 use crate::{
-    config::{Compression, InnerCipherSuite, KdfSettings, OuterCipherSuite},
+    config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{
-        Database, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, DatabaseSettings,
-        HeaderAttachment,
-    },
+    db::{Database, HeaderAttachment},
+    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
     format::{
         kdbx4::{
             KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV,
@@ -38,13 +36,12 @@ pub(crate) fn parse_kdbx4(
     data: &[u8],
     key_elements: &[Vec<u8>],
 ) -> Result<Database, DatabaseOpenError> {
-    let (settings, header_attachments, mut inner_decryptor, xml) =
-        decrypt_kdbx4(data, key_elements)?;
+    let (config, header_attachments, mut inner_decryptor, xml) = decrypt_kdbx4(data, key_elements)?;
 
     let database_content = crate::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
 
     let db = Database {
-        settings,
+        config,
         header_attachments,
         root: database_content.root.group,
         meta: database_content.meta,
@@ -59,7 +56,7 @@ pub(crate) fn decrypt_kdbx4(
     key_elements: &[Vec<u8>],
 ) -> Result<
     (
-        DatabaseSettings,
+        DatabaseConfig,
         Vec<HeaderAttachment>,
         Box<dyn Cipher>,
         Vec<u8>,
@@ -83,7 +80,7 @@ pub(crate) fn decrypt_kdbx4(
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = crypt::calculate_sha256(&key_elements)?;
     let transformed_key = outer_header
-        .kdf_settings
+        .kdf_config
         .get_kdf_seeded(&outer_header.kdf_seed)
         .transform_key(&composite_key)?;
     let master_key =
@@ -111,12 +108,12 @@ pub(crate) fn decrypt_kdbx4(
 
     // Decrypt and decompress encrypted payload
     let payload_compressed = outer_header
-        .outer_cipher_suite
+        .outer_cipher_config
         .get_cipher(&master_key, &outer_header.outer_iv)?
         .decrypt(&payload_encrypted)?;
 
     let payload = outer_header
-        .compression
+        .compression_config
         .get_compression()
         .decompress(&payload_compressed)?;
 
@@ -131,15 +128,15 @@ pub(crate) fn decrypt_kdbx4(
         .inner_random_stream
         .get_cipher(&inner_header.inner_random_stream_key)?;
 
-    let settings = DatabaseSettings {
+    let config = DatabaseConfig {
         version: outer_header.version,
-        outer_cipher_suite: outer_header.outer_cipher_suite,
-        compression: outer_header.compression,
-        inner_cipher_suite: inner_header.inner_random_stream,
-        kdf_settings: outer_header.kdf_settings,
+        outer_cipher_config: outer_header.outer_cipher_config,
+        compression_config: outer_header.compression_config,
+        inner_cipher_config: inner_header.inner_random_stream,
+        kdf_config: outer_header.kdf_config,
     };
 
-    Ok((settings, header_attachments, inner_decryptor, xml.to_vec()))
+    Ok((config, header_attachments, inner_decryptor, xml.to_vec()))
 }
 
 fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), DatabaseOpenError> {
@@ -148,11 +145,11 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
     // skip over the version header
     let mut pos = DatabaseVersion::get_version_header_size();
 
-    let mut outer_cipher: Option<OuterCipherSuite> = None;
-    let mut compression: Option<Compression> = None;
+    let mut outer_cipher: Option<OuterCipherConfig> = None;
+    let mut compression_config: Option<CompressionConfig> = None;
     let mut master_seed: Option<Vec<u8>> = None;
     let mut outer_iv: Option<Vec<u8>> = None;
-    let mut kdf_settings: Option<KdfSettings> = None;
+    let mut kdf_config: Option<KdfConfig> = None;
     let mut kdf_seed: Option<Vec<u8>> = None;
 
     // parse header
@@ -181,11 +178,11 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
             HEADER_COMMENT => {}
 
             HEADER_OUTER_ENCRYPTION_ID => {
-                outer_cipher = Some(OuterCipherSuite::try_from(entry_buffer)?);
+                outer_cipher = Some(OuterCipherConfig::try_from(entry_buffer)?);
             }
 
             HEADER_COMPRESSION_ID => {
-                compression = Some(Compression::try_from(LittleEndian::read_u32(
+                compression_config = Some(CompressionConfig::try_from(LittleEndian::read_u32(
                     &entry_buffer,
                 ))?);
             }
@@ -196,8 +193,8 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
 
             HEADER_KDF_PARAMS => {
                 let vd = VariantDictionary::parse(entry_buffer)?;
-                let (ksettings, kseed) = vd.try_into()?;
-                kdf_settings = Some(ksettings);
+                let (kconf, kseed) = vd.try_into()?;
+                kdf_config = Some(kconf);
                 kdf_seed = Some(kseed)
             }
 
@@ -219,21 +216,21 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
         })
     }
 
-    let outer_cipher_suite = get_or_err(outer_cipher, "Outer Cipher ID")?;
-    let compression = get_or_err(compression, "Compression ID")?;
+    let outer_cipher_config = get_or_err(outer_cipher, "Outer Cipher ID")?;
+    let compression_config = get_or_err(compression_config, "Compression ID")?;
     let master_seed = get_or_err(master_seed, "Master seed")?;
     let outer_iv = get_or_err(outer_iv, "Outer IV")?;
-    let kdf_settings = get_or_err(kdf_settings, "Key Derivation Function Parameters")?;
+    let kdf_config = get_or_err(kdf_config, "Key Derivation Function Parameters")?;
     let kdf_seed = get_or_err(kdf_seed, "Key Derivation Function Seed")?;
 
     Ok((
         KDBX4OuterHeader {
             version,
-            outer_cipher_suite,
-            compression,
+            outer_cipher_config,
+            compression_config,
             master_seed,
             outer_iv,
-            kdf_settings,
+            kdf_config,
             kdf_seed,
         },
         pos,
@@ -260,7 +257,7 @@ fn parse_inner_header(
             INNER_HEADER_END => break,
 
             INNER_HEADER_RANDOM_STREAM_ID => {
-                inner_random_stream = Some(InnerCipherSuite::try_from(LittleEndian::read_u32(
+                inner_random_stream = Some(InnerCipherConfig::try_from(LittleEndian::read_u32(
                     &entry_buffer,
                 ))?);
             }

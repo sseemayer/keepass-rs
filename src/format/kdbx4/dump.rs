@@ -4,7 +4,8 @@ use byteorder::{LittleEndian, WriteBytesExt};
 
 use crate::{
     crypt,
-    db::Database,
+    db::{Database, HeaderAttachment},
+    error::DatabaseSaveError,
     format::{
         kdbx4::{
             KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV,
@@ -17,7 +18,6 @@ use crate::{
     hmac_block_stream,
     io::WriteLengthTaggedExt,
     variant_dictionary::VariantDictionary,
-    DatabaseSaveError, HeaderAttachment,
 };
 
 /// Dump a KeePass database using the key elements
@@ -26,7 +26,7 @@ pub fn dump_kdbx4(
     key_elements: &[Vec<u8>],
     writer: &mut dyn Write,
 ) -> Result<(), DatabaseSaveError> {
-    if !matches!(db.settings.version, DatabaseVersion::KDB4(_)) {
+    if !matches!(db.config.version, DatabaseVersion::KDB4(_)) {
         return Err(DatabaseSaveError::UnsupportedVersion.into());
     }
 
@@ -34,23 +34,23 @@ pub fn dump_kdbx4(
     let mut master_seed = vec![0; HEADER_MASTER_SEED_SIZE];
     getrandom::getrandom(&mut master_seed)?;
 
-    let mut outer_iv = vec![0; db.settings.outer_cipher_suite.get_iv_size()];
+    let mut outer_iv = vec![0; db.config.outer_cipher_config.get_iv_size()];
     getrandom::getrandom(&mut outer_iv)?;
 
-    let mut inner_random_stream_key = vec![0; db.settings.inner_cipher_suite.get_key_size()];
+    let mut inner_random_stream_key = vec![0; db.config.inner_cipher_config.get_key_size()];
     getrandom::getrandom(&mut inner_random_stream_key)?;
 
-    let (kdf, kdf_seed) = db.settings.kdf_settings.get_kdf_and_seed()?;
+    let (kdf, kdf_seed) = db.config.kdf_config.get_kdf_and_seed()?;
 
     // dump the outer header - need to buffer so that SHA256 can be computed
     let mut header_data = Vec::new();
     KDBX4OuterHeader {
-        version: db.settings.version.clone(),
-        outer_cipher_suite: db.settings.outer_cipher_suite.clone(),
-        compression: db.settings.compression.clone(),
+        version: db.config.version.clone(),
+        outer_cipher_config: db.config.outer_cipher_config.clone(),
+        compression_config: db.config.compression_config.clone(),
         master_seed: master_seed.clone(),
         outer_iv: outer_iv.clone(),
-        kdf_settings: db.settings.kdf_settings.clone(),
+        kdf_config: db.config.kdf_config.clone(),
         kdf_seed,
     }
     .dump(&mut header_data)?;
@@ -80,14 +80,14 @@ pub fn dump_kdbx4(
 
     // Initialize inner encryptor from inner header params
     let mut inner_cipher = db
-        .settings
-        .inner_cipher_suite
+        .config
+        .inner_cipher_config
         .get_cipher(&inner_random_stream_key)?;
 
     // dump inner header into buffer
     let mut payload = Vec::new();
     KDBX4InnerHeader {
-        inner_random_stream: db.settings.inner_cipher_suite.clone(),
+        inner_random_stream: db.config.inner_cipher_config.clone(),
         inner_random_stream_key,
     }
     .dump(&db.header_attachments, &mut payload)?;
@@ -96,14 +96,14 @@ pub fn dump_kdbx4(
     crate::xml_db::dump::dump(&db, &mut *inner_cipher, &mut payload)?;
 
     let payload_compressed = db
-        .settings
-        .compression
+        .config
+        .compression_config
         .get_compression()
         .compress(&payload)?;
 
     let payload_encrypted = db
-        .settings
-        .outer_cipher_suite
+        .config
+        .outer_cipher_config
         .get_cipher(&master_key, &outer_iv)?
         .encrypt(&payload_compressed)?;
 
@@ -126,10 +126,10 @@ impl KDBX4OuterHeader {
         self.version.dump(writer)?;
 
         writer.write_u8(HEADER_OUTER_ENCRYPTION_ID)?;
-        writer.write_with_len(&self.outer_cipher_suite.dump())?;
+        writer.write_with_len(&self.outer_cipher_config.dump())?;
 
         writer.write_u8(HEADER_COMPRESSION_ID)?;
-        writer.write_with_len(&self.compression.dump())?;
+        writer.write_with_len(&self.compression_config.dump())?;
 
         writer.write_u8(HEADER_ENCRYPTION_IV)?;
         writer.write_with_len(&self.outer_iv)?;
@@ -137,7 +137,7 @@ impl KDBX4OuterHeader {
         writer.write_u8(HEADER_MASTER_SEED)?;
         writer.write_with_len(&self.master_seed)?;
 
-        let vd: VariantDictionary = self.kdf_settings.to_variant_dictionary(&self.kdf_seed);
+        let vd: VariantDictionary = self.kdf_config.to_variant_dictionary(&self.kdf_seed);
         let mut vd_buffer = Vec::new();
         vd.dump(&mut vd_buffer)?;
 

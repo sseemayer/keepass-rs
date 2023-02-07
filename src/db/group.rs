@@ -63,11 +63,14 @@ impl Group {
 
     /// Recursively get a Group or Entry reference by specifying a path relative to the current Group
     /// ```
-    /// use keepass::{Database, NodeRef};
+    /// use keepass::{Database, DatabaseKey, db::NodeRef};
     /// use std::{fs::File, path::Path};
     ///
     /// let path = Path::new("tests/resources/test_db_with_password.kdbx");
-    /// let db = Database::open(&mut File::open(path).unwrap(), Some("demopass"), None).unwrap();
+    /// let db = Database::open(
+    ///     &mut File::open(path).unwrap(),
+    ///     DatabaseKey::with_password("demopass")
+    /// ).unwrap();
     ///
     /// if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Sample Entry #2"]) {
     ///     println!("User: {}", e.get_username().unwrap());
@@ -83,7 +86,7 @@ impl Group {
                     Node::Group(_) => None,
                     Node::Entry(e) => {
                         e.get_title()
-                            .and_then(|t| if t == head { Some(n.to_ref()) } else { None })
+                            .and_then(|t| if t == head { Some(n.as_ref()) } else { None })
                     }
                 })
             } else {
@@ -114,7 +117,7 @@ impl Group {
                         Node::Group(g) => g.name == head,
                         Node::Entry(e) => e.get_title().map(|t| t == head).unwrap_or(false),
                     })
-                    .map(|t| t.to_ref_mut())
+                    .map(|t| t.as_mut())
                     .next()
             } else {
                 let head = path[0];

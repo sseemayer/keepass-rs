@@ -1,6 +1,6 @@
 use crate::{
+    db::{Entry, Group, Node, Times},
     xml_db::parse::{FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
-    Entry, Group, Node, Times,
 };
 
 use super::IgnoreSubfield;
@@ -99,8 +99,8 @@ impl FromXml for Group {
 mod parse_group_test {
 
     use crate::{
+        db::Group,
         xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
-        Group,
     };
 
     #[test]

@@ -1,11 +1,18 @@
 mod entry_tests {
-    use keepass::*;
+    use keepass::{
+        db::{Database, NodeRef},
+        error::{DatabaseKeyError, DatabaseOpenError},
+        DatabaseKey,
+    };
     use std::{fs::File, path::Path};
 
     #[test]
     fn kdbx3_entry() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["Sample Entry"]) {
@@ -60,7 +67,10 @@ mod entry_tests {
     fn kdbx4_entry() -> Result<(), DatabaseOpenError> {
         // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
-        let db = Database::open(&mut File::open(path)?, Some("demopass"), None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
 
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["ASDF"]) {
@@ -87,8 +97,7 @@ mod entry_tests {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            Some("this password is not correct"),
-            None,
+            DatabaseKey::with_password("this password is not correct"),
         );
 
         assert!(db.is_err());

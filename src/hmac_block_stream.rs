@@ -1,20 +1,10 @@
 use byteorder::{ByteOrder, LittleEndian};
 use cipher::generic_array::{typenum::U64, GenericArray};
 use hex_literal::hex;
-use thiserror::Error;
 
-use crate::crypt::CryptographyError;
+use crate::error::{BlockStreamError, CryptographyError};
 
 pub const HMAC_KEY_END: [u8; 1] = hex!("01");
-
-#[derive(Debug, Error)]
-pub enum BlockStreamError {
-    #[error(transparent)]
-    Cryptography(#[from] CryptographyError),
-
-    #[error("Block hash mismatch for block {}", block_index)]
-    BlockHashMismatch { block_index: u64 },
-}
 
 const DEFAULT_BLOCK_SIZE: u32 = 1024 * 1024;
 

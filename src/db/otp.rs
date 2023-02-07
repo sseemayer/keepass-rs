@@ -7,6 +7,7 @@ use url::Url;
 const DEFAULT_PERIOD: u64 = 30;
 const DEFAULT_DIGITS: u32 = 8;
 
+/// Choices of hash algorithm for TOTP
 #[derive(Debug, PartialEq, Eq)]
 pub enum TOTPAlgorithm {
     Sha1,
@@ -27,6 +28,7 @@ impl std::str::FromStr for TOTPAlgorithm {
     }
 }
 
+/// Time-based one time password settings
 #[derive(Debug, PartialEq, Eq)]
 pub struct TOTP {
     label: String,
@@ -37,6 +39,7 @@ pub struct TOTP {
     algorithm: TOTPAlgorithm,
 }
 
+/// A generated one time password
 pub struct OTPCode {
     pub code: String,
     pub valid_for: Duration,
@@ -55,6 +58,7 @@ impl std::fmt::Display for OTPCode {
     }
 }
 
+/// Errors while processing a TOTP specification
 #[derive(Debug, Error)]
 pub enum TOTPError {
     #[error(transparent)]
@@ -162,15 +166,18 @@ impl TOTP {
 
 #[cfg(test)]
 mod kdbx4_otp_tests {
-    use super::{TOTPError, TOTP};
-    use crate::*;
+    use super::{TOTPAlgorithm, TOTPError, TOTP};
+    use crate::{
+        db::{Database, NodeRef},
+        key::DatabaseKey,
+    };
     use std::{fs::File, path::Path};
 
     #[test]
     fn kdbx4_entry() -> Result<(), Box<dyn std::error::Error>> {
         // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
         let path = Path::new("tests/resources/test_db_kdbx4_with_totp_entry.kdbx");
-        let db = Database::open(&mut File::open(path)?, Some("test"), None)?;
+        let db = Database::open(&mut File::open(path)?, DatabaseKey::with_password("test"))?;
 
         let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
@@ -195,7 +202,7 @@ mod kdbx4_otp_tests {
             issuer: "KeePassXC".to_string(),
             period: 30,
             digits: 6,
-            algorithm: otp::TOTPAlgorithm::Sha1,
+            algorithm: TOTPAlgorithm::Sha1,
         };
 
         assert_eq!(otp_str.parse::<TOTP>()?, expected);
@@ -213,7 +220,7 @@ mod kdbx4_otp_tests {
             issuer: "sha512 totp".to_string(),
             period: 30,
             digits: 6,
-            algorithm: otp::TOTPAlgorithm::Sha512,
+            algorithm: TOTPAlgorithm::Sha512,
         };
 
         assert_eq!(otp_str.parse::<TOTP>()?, expected);
@@ -229,7 +236,7 @@ mod kdbx4_otp_tests {
             issuer: "KeePassXC".to_string(),
             period: 30,
             digits: 6,
-            algorithm: otp::TOTPAlgorithm::Sha1,
+            algorithm: TOTPAlgorithm::Sha1,
         };
 
         assert_eq!(totp.value_at(1234).code, "806863")
