@@ -103,3 +103,56 @@ impl<'p, 'f> DatabaseKey<'p, 'f> {
         Ok(out)
     }
 }
+
+#[cfg(test)]
+mod key_tests {
+
+    use crate::error::DatabaseKeyError;
+
+    use super::DatabaseKey;
+
+    #[test]
+    fn test_key() -> Result<(), DatabaseKeyError> {
+        let ke = DatabaseKey::with_password("asdf").get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        let ke = DatabaseKey::with_keyfile(&mut "bare-key-file".as_bytes()).get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        let ke = DatabaseKey::with_keyfile(&mut "0123456789ABCDEF0123456789ABCDEF".as_bytes())
+            .get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        let ke = DatabaseKey::with_password_and_keyfile("asdf", &mut "bare-key-file".as_bytes())
+            .get_key_elements()?;
+        assert_eq!(ke.len(), 2);
+
+        let ke = DatabaseKey::with_keyfile(
+            &mut "<KeyFile><Key><Data>0!23456789ABCDEF0123456789ABCDEF</Data></Key></KeyFile>"
+                .as_bytes(),
+        )
+        .get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        let ke = DatabaseKey::with_keyfile(
+            &mut "<KeyFile><Key><Data>NXyYiJMHg3ls+eBmjbAjWec9lcOToJiofbhNiFMTJMw=</Data></Key></KeyFile>".as_bytes(),
+        )
+        .get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        // other XML files will just be hashed as a "bare" keyfile
+        let ke = DatabaseKey::with_keyfile(&mut "<Not><A><KeyFile></KeyFile></A></Not>".as_bytes())
+            .get_key_elements()?;
+
+        assert_eq!(ke.len(), 1);
+
+        assert!(DatabaseKey {
+            password: None,
+            keyfile: None
+        }
+        .get_key_elements()
+        .is_err());
+
+        Ok(())
+    }
+}

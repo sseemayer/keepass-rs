@@ -113,7 +113,7 @@ impl FromXml for Entry {
 }
 
 #[derive(Debug, Default)]
-struct StringField {
+pub(crate) struct StringField {
     key: String,
     value: Option<Value>,
 }
@@ -247,8 +247,13 @@ impl FromXml for Value {
                     Value::Unprotected(content)
                 };
 
-                // no need to check for the correct closing tag - checked by XmlReader
-                let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+                let close_value_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+                if !matches!(close_value_tag, SimpleXmlEvent::End(ref tag) if tag == "Value") {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "Close Value tag",
+                        event: close_value_tag,
+                    });
+                }
 
                 return Ok(value);
             }

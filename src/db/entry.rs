@@ -56,9 +56,7 @@ impl<'a> Entry {
     pub fn get_bytes(&'a self, key: &str) -> Option<&'a [u8]> {
         match self.fields.get(key) {
             Some(&Value::Bytes(ref b)) => Some(&b),
-            Some(&Value::Protected(_)) => None,
-            Some(&Value::Unprotected(_)) => None,
-            None => None,
+            _ => None,
         }
     }
 
@@ -141,7 +139,9 @@ impl serde::Serialize for Value {
         match self {
             Value::Bytes(b) => serializer.serialize_bytes(b),
             Value::Unprotected(u) => serializer.serialize_str(u),
-            Value::Protected(p) => serializer.serialize_bytes(p.unsecure()),
+            Value::Protected(p) => {
+                serializer.serialize_str(String::from_utf8_lossy(p.unsecure()).as_ref())
+            }
         }
     }
 }
@@ -168,4 +168,66 @@ pub struct AutoTypeAssociation {
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct History {
     pub entries: Vec<Entry>,
+}
+
+#[cfg(test)]
+mod entry_tests {
+    use secstr::SecStr;
+
+    use super::{Entry, Value};
+
+    #[test]
+    fn byte_values() {
+        let mut entry = Entry::new();
+        entry
+            .fields
+            .insert("a-bytes".to_string(), Value::Bytes(vec![1, 2, 3]));
+
+        entry.fields.insert(
+            "a-unprotected".to_string(),
+            Value::Unprotected("asdf".to_string()),
+        );
+
+        entry.fields.insert(
+            "a-protected".to_string(),
+            Value::Protected(SecStr::new("asdf".as_bytes().to_vec())),
+        );
+
+        assert_eq!(entry.get_bytes("a-bytes"), Some(&[1, 2, 3][..]));
+        assert_eq!(entry.get_bytes("a-unprotected"), None);
+        assert_eq!(entry.get_bytes("a-protected"), None);
+
+        assert_eq!(entry.get("a-bytes"), None);
+
+        assert_eq!(entry.fields["a-bytes"].is_empty(), false);
+    }
+
+    #[cfg(feature = "totp")]
+    #[test]
+    fn totp() {
+        let mut entry = Entry::new();
+        entry.fields.insert("otp".to_string(), Value::Unprotected("otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string()));
+
+        assert!(entry.get_otp().is_ok());
+    }
+
+    #[cfg(feature = "serialization")]
+    #[test]
+    fn serialization() {
+        assert_eq!(
+            serde_json::to_string(&Value::Bytes(vec![65, 66, 67])).unwrap(),
+            "[65,66,67]".to_string()
+        );
+
+        assert_eq!(
+            serde_json::to_string(&Value::Unprotected("ABC".to_string())).unwrap(),
+            "\"ABC\"".to_string()
+        );
+
+        assert_eq!(
+            serde_json::to_string(&Value::Protected(SecStr::new("ABC".as_bytes().to_vec())))
+                .unwrap(),
+            "\"ABC\"".to_string()
+        );
+    }
 }
