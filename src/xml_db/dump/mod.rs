@@ -12,7 +12,7 @@ use xml::{
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{CustomData, CustomDataItem, Database, Times},
+    db::{CustomData, CustomDataItem, Database, DeletedObject, DeletedObjects, Times},
     xml_db::get_epoch_baseline,
 };
 
@@ -143,6 +143,8 @@ impl DumpXml for Database {
 
         self.root.dump_xml(writer, inner_cipher)?;
 
+        self.deleted_objects.dump_xml(writer, inner_cipher)?;
+
         writer.write(WriterEvent::end_element())?; // Root
 
         writer.write(WriterEvent::end_element())?; // KeePassFile
@@ -206,6 +208,39 @@ impl DumpXml for CustomDataItem {
         if let Some(ref value) = self.last_modification_time {
             SimpleTag("LastModificationTime", value).dump_xml(writer, inner_cipher)?;
         }
+
+        writer.write(WriterEvent::end_element())?;
+        Ok(())
+    }
+}
+
+impl DumpXml for DeletedObjects {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("DeletedObjects"))?;
+
+        for object in &self.objects {
+            object.dump_xml(writer, inner_cipher)?;
+        }
+
+        writer.write(WriterEvent::end_element())?;
+        Ok(())
+    }
+}
+
+impl DumpXml for DeletedObject {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::start_element("DeletedObject"))?;
+
+        SimpleTag("UUID", &self.uuid).dump_xml(writer, inner_cipher)?;
+        SimpleTag("DeletionTime", &self.deletion_time).dump_xml(writer, inner_cipher)?;
 
         writer.write(WriterEvent::end_element())?;
         Ok(())

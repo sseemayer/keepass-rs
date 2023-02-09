@@ -10,7 +10,7 @@ use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{CustomData, CustomDataItem, Group, Meta, Times, Value},
+    db::{CustomData, CustomDataItem, DeletedObject, DeletedObjects, Group, Meta, Times, Value},
     error::XmlParseError,
     xml_db::get_epoch_baseline,
 };
@@ -374,11 +374,6 @@ impl FromXml for Root {
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct DeletedObjects {
-    objects: Vec<DeletedObject>,
-}
-
 impl FromXml for DeletedObjects {
     type Parses = Self;
 
@@ -425,12 +420,6 @@ impl FromXml for DeletedObjects {
 
         Ok(out)
     }
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct DeletedObject {
-    uuid: String,
-    deletion_time: NaiveDateTime,
 }
 
 impl FromXml for DeletedObject {

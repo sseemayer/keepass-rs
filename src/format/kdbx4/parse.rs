@@ -44,6 +44,7 @@ pub(crate) fn parse_kdbx4(
         config,
         header_attachments,
         root: database_content.root.group,
+        deleted_objects: database_content.root.deleted_objects,
         meta: database_content.meta,
     };
 

@@ -18,7 +18,7 @@ mod tests {
             entry::History,
             meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
             AutoType, AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database,
-            Entry, Group, Meta, Node, Value,
+            DeletedObject, Entry, Group, Meta, Node, Value,
         },
         format::kdbx4,
         key::DatabaseKey,
@@ -261,5 +261,28 @@ mod tests {
         let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
 
         assert_eq!(decrypted_db.meta, meta);
+    }
+
+    #[test]
+    fn test_deleted_objects() {
+        let mut db = Database::new(DatabaseConfig::default());
+        db.deleted_objects.objects = vec![
+            DeletedObject {
+                uuid: "asdf-ghjk".to_string(),
+                deletion_time: "2000-12-31T12:34:56".parse().unwrap(),
+            },
+            DeletedObject {
+                uuid: "wdawdadw".to_string(),
+                deletion_time: "2000-12-31T12:35:00".parse().unwrap(),
+            },
+        ];
+
+        let key_elements = make_key();
+
+        let mut encrypted_db = Vec::new();
+        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
+
+        assert_eq!(decrypted_db, db);
     }
 }
