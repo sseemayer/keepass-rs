@@ -632,11 +632,15 @@ mod parse_test {
     use crate::{
         config::InnerCipherConfig,
         crypt::ciphers::PlainCipher,
-        db::{CustomData, CustomDataItem, Times},
-        xml_db::parse::{DeletedObject, DeletedObjects, IgnoreSubfield, Root},
+        db::{
+            AutoType, AutoTypeAssociation, CustomData, CustomDataItem, Entry, History, Times, Value,
+        },
+        xml_db::parse::{entry::StringField, DeletedObject, DeletedObjects, IgnoreSubfield, Root},
     };
 
-    use super::{parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError};
+    use super::{
+        entry::BinaryField, parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError,
+    };
 
     pub(crate) fn parse_test_xml<P: FromXml>(
         xml: &str,
@@ -867,6 +871,175 @@ mod parse_test {
 
         let value = parse_test_xml::<IgnoreSubfield>("Not a tag");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_binary_field() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><Key>MyField</Key><Value Ref=\"asdf\"/></Binary>",
+        )?;
+
+        assert_eq!(value.key, "MyField");
+        assert_eq!(value.identifier, "asdf");
+
+        let value = parse_test_xml::<BinaryField>("<TestTag></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("<Binary></TestTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("<Binary></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><WrongTag/><Key>asdf</Key><Value Ref=\"asdf\"/></Binary>",
+        );
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><Key>asdf</Key><WrongTag/><Value Ref=\"asdf\"/></Binary>",
+        );
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>(
+            "<Binary><Key>mykey</Key><Value Ref=\"asdf\">Value data</Value></Binary>",
+        );
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<BinaryField>("<Binary><Key></Key><Value Ref=\"asdf\"/></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("<Binary><Key>mykey</Key><Value/></Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("</Binary>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<BinaryField>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_entry_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<Entry>("<Entry>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Entry>("<WrongTag></WrongTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_string_field_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<StringField>("<String>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<StringField>("<WrongTag></WrongTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<StringField>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<StringField>("<String><StrangeTag>Data</StrangeTag></String>");
+        assert!(matches!(value, Ok(_)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_value() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<Value>("<Value>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Value>("<Value></Value>");
+        assert!(matches!(value, Ok(Value::Unprotected(_))));
+
+        let value = parse_test_xml::<Value>("<WrongTag></WrongTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Value>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<Value>("<Value><StrangeTag>Data</StrangeTag></Value>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_autotype() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<AutoType>("<AutoType>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<AutoType>("<AutoType></AutoType>");
+        assert!(matches!(value, Ok(_)));
+
+        let value = parse_test_xml::<AutoType>("<AutoType><Enabled>True</Enabled><DefaultSequence>ASDF</DefaultSequence><DataTransferObfuscation>42</DataTransferObfuscation></AutoType>")?;
+        assert_eq!(value.enabled, true);
+        assert_eq!(value.sequence, Some("ASDF".to_string()));
+        assert_eq!(value.associations.len(), 0);
+
+        let value = parse_test_xml::<AutoType>("<WrongTag></WrongTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<AutoType>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value =
+            parse_test_xml::<AutoType>("<AutoType><StrangeTag>Data</StrangeTag></AutoType>");
+        assert!(matches!(value, Ok(_)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_autotype_association() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<AutoTypeAssociation>("<Association>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<AutoTypeAssociation>("<Association></Association>");
+        assert!(matches!(value, Ok(_)));
+
+        let value = parse_test_xml::<AutoTypeAssociation>("<Association><Window>MyApp</Window><KeystrokeSequence>ASDF</KeystrokeSequence></Association>")?;
+        assert_eq!(value.window, Some("MyApp".to_string()));
+        assert_eq!(value.sequence, Some("ASDF".to_string()));
+
+        let value = parse_test_xml::<AutoTypeAssociation>("<WrongTag></WrongTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<AutoTypeAssociation>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<AutoTypeAssociation>(
+            "<Association><StrangeTag>Data</StrangeTag></Association>",
+        );
+        assert!(matches!(value, Ok(_)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_history_failures() -> Result<(), XmlParseError> {
+        let value = parse_test_xml::<History>("<History>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<History>("<History></History>");
+        assert!(matches!(value, Ok(_)));
+
+        let value = parse_test_xml::<History>("<WrongTag></WrongTag>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<History>("Not a tag");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<History>("<History><StrangeTag>Data</StrangeTag></History>");
+        assert!(matches!(value, Ok(_)));
 
         Ok(())
     }

@@ -113,7 +113,7 @@ impl FromXml for Entry {
 }
 
 #[derive(Debug, Default)]
-struct StringField {
+pub(crate) struct StringField {
     key: String,
     value: Option<Value>,
 }
@@ -168,10 +168,11 @@ impl FromXml for StringField {
     }
 }
 
+#[derive(Debug)]
 #[allow(dead_code)]
-struct BinaryField {
-    key: String,
-    identifier: String,
+pub(crate) struct BinaryField {
+    pub key: String,
+    pub identifier: String,
 }
 
 impl FromXml for BinaryField {
@@ -192,27 +193,16 @@ impl FromXml for BinaryField {
         let key = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
 
         let value_event = iterator.next().ok_or(XmlParseError::Eof)?;
-        let identifier = if let SimpleXmlEvent::Start(ref name, ref attributes) = value_event {
-            if name != "Value" {
-                return Err(XmlParseError::BadEvent {
-                    expected: "Open Value tag",
-                    event: value_event,
-                });
+        let identifier = match value_event {
+            SimpleXmlEvent::Start(ref name, ref attributes) if name == "Value" => {
+                attributes.get("Ref").cloned()
             }
-
-            attributes
-                .get("Ref")
-                .ok_or_else(|| XmlParseError::BadEvent {
-                    expected: "Value tag with Ref attribute",
-                    event: value_event.clone(),
-                })?
-                .to_string()
-        } else {
-            return Err(XmlParseError::BadEvent {
-                expected: "Open Value tag",
-                event: value_event,
-            });
-        };
+            _ => None,
+        }
+        .ok_or_else(|| XmlParseError::BadEvent {
+            expected: "Open Value tag with \"Ref\" attribute",
+            event: value_event,
+        })?;
 
         let close_value_tag = iterator.next().ok_or(XmlParseError::Eof)?;
         if !matches!(close_value_tag, SimpleXmlEvent::End(ref tag) if tag == "Value") {
@@ -257,8 +247,13 @@ impl FromXml for Value {
                     Value::Unprotected(content)
                 };
 
-                // no need to check for the correct closing tag - checked by XmlReader
-                let _close_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+                let close_value_tag = iterator.next().ok_or(XmlParseError::Eof)?;
+                if !matches!(close_value_tag, SimpleXmlEvent::End(ref tag) if tag == "Value") {
+                    return Err(XmlParseError::BadEvent {
+                        expected: "Close Value tag",
+                        event: close_value_tag,
+                    });
+                }
 
                 return Ok(value);
             }

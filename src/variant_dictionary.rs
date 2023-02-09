@@ -36,7 +36,7 @@ impl VariantDictionary {
         let mut pos = 2;
         let mut data = HashMap::new();
 
-        while pos < buffer.len() - 9 {
+        while pos + 9 < buffer.len() {
             let value_type = buffer[pos];
             pos += 1;
 
@@ -70,7 +70,7 @@ impl VariantDictionary {
             data.insert(key, value);
         }
 
-        if buffer[pos] != VARIANT_DICTIONARY_END {
+        if pos == buffer.len() || buffer[pos] != VARIANT_DICTIONARY_END {
             // even though we can determine when to stop parsing a VariantDictionary by where we
             // are in the buffer, there should always be a value_type = 0 entry to denote that a
             // VariantDictionary is finished
@@ -275,7 +275,40 @@ impl<'a> Into<Option<&'a Vec<u8>>> for &'a VariantDictionaryValue {
 
 #[cfg(test)]
 mod variant_dictionary_tests {
+    use hex_literal::hex;
+
     use super::*;
+
+    #[test]
+    fn parsing_errors() -> Result<(), VariantDictionaryError> {
+        let res = VariantDictionary::parse("not-a-variant-dictionary".as_bytes());
+        assert!(matches!(
+            res,
+            Err(VariantDictionaryError::InvalidVersion { .. })
+        ));
+
+        let res = VariantDictionary::parse(&hex!("0001"));
+        assert!(matches!(res, Err(VariantDictionaryError::NotTerminated)));
+
+        let res = VariantDictionary::parse(&hex!("000100"));
+        assert!(matches!(res, Ok(_)));
+
+        //                                        ver t key_len key   val_len value   termination
+        //                                        |   | |       |     |       |       |
+        let res = VariantDictionary::parse(&hex!("000104030000004142430400000015CD5B0700"))?;
+        assert_eq!(res.get::<u32>("ABC")?, &123456789);
+
+        //                                        ver t key_len key val_len termination
+        //                                        |   | |       |   |       |
+        let res = VariantDictionary::parse(&hex!("0001AA0200000041420000000000"));
+        dbg!(&res);
+        assert!(matches!(
+            res,
+            Err(VariantDictionaryError::InvalidValueType { value_type: 0xAA })
+        ));
+
+        Ok(())
+    }
 
     #[test]
     fn variant_dictionary() {
@@ -290,7 +323,14 @@ mod variant_dictionary_tests {
         vd.set("a-bytes", "testing".as_bytes().to_vec());
 
         assert!(vd.get::<bool>("key-not-exist").is_err());
-        assert!(vd.get::<bool>("a-u32").is_err());
+
+        assert!(vd.get::<u32>("a-string").is_err());
+        assert!(vd.get::<u64>("a-string").is_err());
+        assert!(vd.get::<i32>("a-string").is_err());
+        assert!(vd.get::<i64>("a-string").is_err());
+        assert!(vd.get::<bool>("a-string").is_err());
+        assert!(vd.get::<String>("a-bytes").is_err());
+        assert!(vd.get::<Vec<u8>>("a-string").is_err());
 
         assert_eq!(vd.get::<u32>("a-u32").unwrap(), &42u32);
         assert_eq!(vd.get::<u64>("a-u64").unwrap(), &1337u64);
