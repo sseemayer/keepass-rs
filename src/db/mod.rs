@@ -47,6 +47,9 @@ pub struct Database {
     /// Root node of the KeePass database
     pub root: Group,
 
+    /// References to previously-deleted objects
+    pub deleted_objects: DeletedObjects,
+
     /// Metadata of the KeePass database
     pub meta: Meta,
 }
@@ -130,6 +133,7 @@ impl Database {
             config,
             header_attachments: Vec::new(),
             root: Group::new("Root"),
+            deleted_objects: Default::default(),
             meta: Default::default(),
         }
     }
@@ -180,6 +184,21 @@ pub struct CustomDataItem {
 pub struct HeaderAttachment {
     pub flags: u8,
     pub content: Vec<u8>,
+}
+
+/// Elements that have been previously deleted
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct DeletedObjects {
+    pub objects: Vec<DeletedObject>,
+}
+
+/// A reference to a deleted element
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct DeletedObject {
+    pub uuid: String,
+    pub deletion_time: NaiveDateTime,
 }
 
 #[cfg(test)]

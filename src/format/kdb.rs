@@ -360,6 +360,7 @@ pub(crate) fn parse_kdb(
         config,
         header_attachments: Default::default(),
         root: root_group,
+        deleted_objects: Default::default(),
         meta: Default::default(),
     })
 }

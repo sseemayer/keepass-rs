@@ -114,8 +114,6 @@ impl DumpXml for Meta {
 
         self.custom_data.dump_xml(writer, inner_cipher)?;
 
-        // TODO DeletedObjects?
-
         writer.write(WriterEvent::end_element())?;
 
         Ok(())

@@ -174,6 +174,7 @@ pub(crate) fn parse_kdbx3(
         config,
         header_attachments: Vec::new(),
         root: database_content.root.group,
+        deleted_objects: database_content.root.deleted_objects,
         meta: database_content.meta,
     };
 
