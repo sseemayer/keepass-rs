@@ -193,7 +193,7 @@ pub struct DeletedObjects {
     pub objects: Vec<DeletedObject>,
 }
 
-/// A refernece to a deleted element
+/// A reference to a deleted element
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct DeletedObject {
