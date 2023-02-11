@@ -298,6 +298,9 @@ pub enum XmlParseError {
     Uuid(#[from] uuid::Error),
 
     #[error(transparent)]
+    Color(#[from] ParseColorError),
+
+    #[error(transparent)]
     Cryptography(#[from] CryptographyError),
 
     #[error("Decompression error: {}", _0)]
@@ -315,6 +318,10 @@ pub enum XmlParseError {
     #[error("Unexpected end of XML document")]
     Eof,
 }
+
+#[derive(Debug, Error)]
+#[error("Cannot parse color: '{}'", _0)]
+pub struct ParseColorError(pub String);
 
 // move error type conversions to a module and exclude them from coverage counting.
 #[cfg(not(tarpaulin_include))]

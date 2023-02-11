@@ -8,7 +8,7 @@ pub(crate) mod node;
 #[cfg(feature = "totp")]
 pub(crate) mod otp;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use chrono::NaiveDateTime;
 use uuid::Uuid;
@@ -25,7 +25,7 @@ pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
 use crate::{
     config::DatabaseConfig,
-    error::{DatabaseIntegrityError, DatabaseOpenError},
+    error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
     format::{
         kdb::parse_kdb,
         kdbx3::{decrypt_kdbx3, parse_kdbx3},
@@ -200,6 +200,49 @@ pub struct DeletedObjects {
 pub struct DeletedObject {
     pub uuid: Uuid,
     pub deletion_time: NaiveDateTime,
+}
+
+/// A color value for the Database, or Entry
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+pub struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+#[cfg(feature = "serialization")]
+impl serde::Serialize for Color {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl FromStr for Color {
+    type Err = ParseColorError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.starts_with('#') || s.len() != 7 {
+            return Err(ParseColorError(s.to_string()));
+        }
+
+        let v = u64::from_str_radix(s.trim_start_matches('#'), 16)
+            .map_err(|_e| ParseColorError(s.to_string()))?;
+
+        let r = ((v >> 16) & 0xff) as u8;
+        let g = ((v >> 8) & 0xff) as u8;
+        let b = (v & 0xff) as u8;
+
+        Ok(Self { r, g, b })
+    }
+}
+
+impl Color {
+    pub fn to_string(&self) -> String {
+        format!("#{:0x}{:0x}{:0x}", self.r, self.g, self.b)
+    }
 }
 
 #[cfg(test)]
