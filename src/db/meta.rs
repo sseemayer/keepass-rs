@@ -1,4 +1,5 @@
 use chrono::NaiveDateTime;
+use uuid::Uuid;
 
 use crate::db::CustomData;
 
@@ -50,22 +51,22 @@ pub struct Meta {
     pub recyclebin_enabled: Option<bool>,
 
     /// A UUID for the recycle bin group
-    pub recyclebin_uuid: Option<String>,
+    pub recyclebin_uuid: Option<Uuid>,
 
     /// last time the recycle bin was changed
     pub recyclebin_changed: Option<NaiveDateTime>,
 
     /// UUID of the group containing entry templates
-    pub entry_templates_group: Option<String>,
+    pub entry_templates_group: Option<Uuid>,
 
     /// last time the group containing entry templates was changed
     pub entry_templates_group_changed: Option<NaiveDateTime>,
 
     /// UUID of the last selected group
-    pub last_selected_group: Option<String>,
+    pub last_selected_group: Option<Uuid>,
 
     /// UUID of the last top-visible group
-    pub last_top_visible_group: Option<String>,
+    pub last_top_visible_group: Option<Uuid>,
 
     /// Maximum number of items of history to keep
     pub history_max_items: Option<usize>,
@@ -127,7 +128,7 @@ pub struct CustomIcons {
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Icon {
     /// UUID, to reference the icon
-    pub uuid: String,
+    pub uuid: Uuid,
 
     /// Image data
     pub data: Vec<u8>,

@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
+use uuid::Uuid;
 
 use crate::{
     compression::{Compression, GZipCompression},
@@ -94,7 +95,7 @@ impl FromXml for Meta {
                     }
                     "RecycleBinUUID" => {
                         out.recyclebin_uuid =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "RecycleBinChanged" => {
                         out.recyclebin_changed =
@@ -103,7 +104,7 @@ impl FromXml for Meta {
                     }
                     "EntryTemplatesGroup" => {
                         out.entry_templates_group =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "EntryTemplatesGroupChanged" => {
                         out.entry_templates_group_changed =
@@ -112,11 +113,11 @@ impl FromXml for Meta {
                     }
                     "LastSelectedGroup" => {
                         out.last_selected_group =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "LastTopVisibleGroup" => {
                         out.last_top_visible_group =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "HistoryMaxItems" => {
                         out.history_max_items =
@@ -384,7 +385,7 @@ impl FromXml for Icon {
             match event {
                 SimpleXmlEvent::Start(name, _) => match &name[..] {
                     "UUID" => {
-                        out.uuid = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        out.uuid = SimpleTag::<Uuid>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Data" => {
                         let data = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
@@ -421,6 +422,8 @@ mod parse_meta_test {
         },
         xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
     };
+
+    use uuid::uuid;
 
     #[test]
     fn test_meta() -> Result<(), XmlParseError> {
@@ -528,12 +531,13 @@ mod parse_meta_test {
     #[test]
     fn test_custom_icon() -> Result<(), XmlParseError> {
         let value = parse_test_xml::<Icon>("<Icon></Icon>")?;
-        assert_eq!(value.uuid, "");
+        assert_eq!(value.uuid, Default::default());
         assert_eq!(value.data.len(), 0);
 
-        let value =
-            parse_test_xml::<Icon>("<Icon><UUID>asdf</UUID><Data>QmluYXJ5IERhdGE=</Data></Icon>")?;
-        assert_eq!(value.uuid, "asdf");
+        let value = parse_test_xml::<Icon>(
+            "<Icon><UUID>oaKjpLGywcLR0tPU1dbX2A==</UUID><Data>QmluYXJ5IERhdGE=</Data></Icon>",
+        )?;
+        assert_eq!(value.uuid, uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),);
         assert_eq!(value.data, r"Binary Data".as_bytes());
 
         let value = parse_test_xml::<Icon>("<TestTag>SomeData</TestTag>");

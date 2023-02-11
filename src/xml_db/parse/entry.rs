@@ -2,6 +2,7 @@ use std::iter::Peekable;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use secstr::SecStr;
+use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
@@ -32,7 +33,7 @@ impl FromXml for Entry {
             match event {
                 SimpleXmlEvent::Start(name, _) => match &name[..] {
                     "UUID" => {
-                        out.uuid = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        out.uuid = SimpleTag::<Uuid>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Tags" => {
                         if let Some(tags) =
@@ -70,7 +71,7 @@ impl FromXml for Entry {
                     }
                     "CustomIconUUID" => {
                         out.custom_icon_uuid =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "ForegroundColor" => {
                         out.foreground_color =

@@ -11,6 +11,7 @@ pub(crate) mod otp;
 use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
+use uuid::Uuid;
 
 pub use crate::db::{
     entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
@@ -197,7 +198,7 @@ pub struct DeletedObjects {
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct DeletedObject {
-    pub uuid: String,
+    pub uuid: Uuid,
     pub deletion_time: NaiveDateTime,
 }
 

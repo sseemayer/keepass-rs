@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::{
     db::{Entry, Group, Node, Times},
     xml_db::parse::{FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
@@ -26,7 +28,7 @@ impl FromXml for Group {
             match event {
                 SimpleXmlEvent::Start(name, _) => match &name[..] {
                     "UUID" => {
-                        out.uuid = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        out.uuid = SimpleTag::<Uuid>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Name" => {
                         out.name = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
@@ -41,7 +43,7 @@ impl FromXml for Group {
                     }
                     "CustomIconUUID" => {
                         out.custom_icon_uuid =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Times" => {
                         out.times = Times::from_xml(iterator, inner_cipher)?;
@@ -64,7 +66,7 @@ impl FromXml for Group {
                     }
                     "LastTopVisibleEntry" => {
                         out.last_top_visible_entry =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Entry" => {
                         let entry = Entry::from_xml(iterator, inner_cipher)?;
@@ -103,6 +105,8 @@ mod parse_group_test {
         xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
     };
 
+    use uuid::uuid;
+
     #[test]
     fn test_group() -> Result<(), XmlParseError> {
         let _value = parse_test_xml::<Group>("<Group></Group>")?;
@@ -110,9 +114,13 @@ mod parse_group_test {
         let value = parse_test_xml::<Group>("<Group><Notes>ASDF</Notes></Group>")?;
         assert_eq!(value.notes, Some("ASDF".to_string()));
 
-        let value =
-            parse_test_xml::<Group>("<Group><CustomIconUUID>ASDF</CustomIconUUID></Group>")?;
-        assert_eq!(value.custom_icon_uuid, Some("ASDF".to_string()));
+        let value = parse_test_xml::<Group>(
+            "<Group><CustomIconUUID>oaKjpLGywcLR0tPU1dbX2A==</CustomIconUUID></Group>",
+        )?;
+        assert_eq!(
+            value.custom_icon_uuid,
+            Some(uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"))
+        );
 
         let value = parse_test_xml::<Group>("");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
