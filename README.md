@@ -17,18 +17,19 @@ Rust KeePass database file parser for KDB, KDBX3 and KDBX4, with experimental su
 </summary>
 
 ```rust
-use anyhow::Result;
 use keepass::{
     db::NodeRef,
-    Database, DatabaseKey
+    Database,
+    DatabaseKey,
+    error::DatabaseOpenError
 };
 use std::fs::File;
 
-fn main() -> Result<()> {
+fn main() -> Result<(), DatabaseOpenError> {
     // Open KeePass database
     let path = std::path::Path::new("tests/resources/test_db_with_password.kdbx");
     let db = Database::open(
-        &mut File::open(path)?,         		// the database
+        &mut File::open(path)?,                 // the database
         DatabaseKey::with_password("demopass"), // password (keyfile is also supported)
     )?;
 
@@ -63,16 +64,15 @@ fn main() -> Result<()> {
 
 You can enable the experimental support for saving KDBX4 databases using the `save_kdbx4` feature.
 
-```rust ignore
-use anyhow::Result;
+```rust
 use keepass::{
     db::{Database, Entry, Group, Node, NodeRef, Value},
-    DatabaseKey
+    DatabaseKey,
 };
 use std::fs::File;
 
-fn main() -> Result<()> {
-    let mut db = Database::new(Default::default())?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut db = Database::new(Default::default());
 
     db.meta.database_name = Some("Demo database".to_string());
 
@@ -87,6 +87,7 @@ fn main() -> Result<()> {
 
     db.root.children.push(Node::Group(group));
 
+    #[cfg(feature = "save_kdbx4")]
     db.save(
         &mut File::create("demo.kdbx")?,
         DatabaseKey::with_password("demopass"),
