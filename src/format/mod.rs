@@ -79,7 +79,7 @@ impl DatabaseVersion {
         }
     }
 
-    pub fn get_version_header_size() -> usize {
+    pub(crate) fn get_version_header_size() -> usize {
         12
     }
 }
