@@ -16,7 +16,7 @@ use uuid::Uuid;
 pub use crate::db::{
     entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
     group::Group,
-    meta::{BinaryAttachment, BinaryAttachments, Meta},
+    meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     node::{Node, NodeIter, NodeRef, NodeRefMut},
 };
 
