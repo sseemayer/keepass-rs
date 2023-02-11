@@ -319,6 +319,7 @@ pub enum XmlParseError {
     Eof,
 }
 
+/// Error parsing a color code
 #[derive(Debug, Error)]
 #[error("Cannot parse color: '{}'", _0)]
 pub struct ParseColorError(pub String);

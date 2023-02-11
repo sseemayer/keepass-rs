@@ -3,6 +3,8 @@ use hex_literal::hex;
 
 use std::convert::TryFrom;
 
+pub use crate::format::DatabaseVersion;
+
 use crate::{
     compression,
     crypt::{
@@ -13,7 +15,7 @@ use crate::{
         CompressionConfigError, CryptographyError, InnerCipherConfigError, KdfConfigError,
         OuterCipherConfigError,
     },
-    format::{DatabaseVersion, KDBX4_CURRENT_MINOR_VERSION},
+    format::KDBX4_CURRENT_MINOR_VERSION,
     variant_dictionary::VariantDictionary,
 };
 
