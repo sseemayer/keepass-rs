@@ -4,7 +4,10 @@ use uuid::Uuid;
 
 use crate::{
     compression::{Compression, GZipCompression},
-    db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
+    db::{
+        meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
+        Color,
+    },
     xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
 };
 
@@ -67,7 +70,7 @@ impl FromXml for Meta {
                     }
                     "Color" => {
                         out.color =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Color>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "MasterKeyChanged" => {
                         out.master_key_changed =

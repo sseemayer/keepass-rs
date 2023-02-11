@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{AutoType, AutoTypeAssociation, Entry, History, Times, Value},
+    db::{AutoType, AutoTypeAssociation, Color, Entry, History, Times, Value},
     xml_db::parse::{CustomData, FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
 };
 
@@ -75,11 +75,11 @@ impl FromXml for Entry {
                     }
                     "ForegroundColor" => {
                         out.foreground_color =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Color>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "BackgroundColor" => {
                         out.background_color =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                            SimpleTag::<Option<Color>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "OverrideURL" => {
                         out.override_url =

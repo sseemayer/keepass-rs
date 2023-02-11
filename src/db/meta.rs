@@ -1,7 +1,7 @@
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::db::CustomData;
+use crate::db::{Color, CustomData};
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -32,7 +32,7 @@ pub struct Meta {
     pub maintenance_history_days: Option<usize>,
 
     /// color code for the database
-    pub color: Option<String>,
+    pub color: Option<Color>,
 
     /// time the master key was last changed
     pub master_key_changed: Option<NaiveDateTime>,

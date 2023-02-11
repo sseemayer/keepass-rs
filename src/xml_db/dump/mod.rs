@@ -13,7 +13,7 @@ use xml::{
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{CustomData, CustomDataItem, Database, DeletedObject, DeletedObjects, Times},
+    db::{Color, CustomData, CustomDataItem, Database, DeletedObject, DeletedObjects, Times},
     xml_db::get_epoch_baseline,
 };
 
@@ -122,6 +122,16 @@ impl DumpXml for &Uuid {
     ) -> Result<(), xml::writer::Error> {
         let b64 = base64_engine::STANDARD.encode(self.as_bytes());
         writer.write(WriterEvent::Characters(&b64))
+    }
+}
+
+impl DumpXml for &Color {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        _inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        writer.write(WriterEvent::Characters(&self.to_string()))
     }
 }
 

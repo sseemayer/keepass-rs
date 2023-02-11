@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use secstr::SecStr;
 use uuid::Uuid;
 
-use crate::db::{CustomData, Times};
+use crate::db::{Color, CustomData, Times};
 
 #[cfg(feature = "totp")]
 use crate::db::otp::{TOTPError, TOTP};
@@ -24,8 +24,8 @@ pub struct Entry {
     pub icon_id: Option<usize>,
     pub custom_icon_uuid: Option<Uuid>,
 
-    pub foreground_color: Option<String>,
-    pub background_color: Option<String>,
+    pub foreground_color: Option<Color>,
+    pub background_color: Option<Color>,
 
     pub override_url: Option<String>,
     pub quality_check: Option<bool>,

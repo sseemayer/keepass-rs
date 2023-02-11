@@ -88,8 +88,8 @@ mod tests {
         entry.icon_id = Some(123);
         entry.custom_icon_uuid = Some(uuid!("22222222222222222222222222222222"));
 
-        entry.foreground_color = Some("#C0FFEE".to_string());
-        entry.background_color = Some("#1C1357".to_string());
+        entry.foreground_color = Some("#C0FFEE".parse().unwrap());
+        entry.background_color = Some("#1C1357".parse().unwrap());
 
         entry.override_url = Some("https://docs.rs/keepass-rs/".to_string());
         entry.quality_check = Some(true);
@@ -186,7 +186,7 @@ mod tests {
             default_username: Some("test-default-username".to_string()),
             default_username_changed: Some("2000-12-31T12:34:58".parse().unwrap()),
             maintenance_history_days: Some(123),
-            color: Some("#C0FFEE".to_string()),
+            color: Some("#C0FFEE".parse().unwrap()),
             master_key_changed: Some("2000-12-31T12:34:59".parse().unwrap()),
             master_key_change_rec: Some(-1),
             master_key_change_force: Some(42),

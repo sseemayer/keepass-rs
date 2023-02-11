@@ -11,7 +11,9 @@ use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{CustomData, CustomDataItem, DeletedObject, DeletedObjects, Group, Meta, Times, Value},
+    db::{
+        Color, CustomData, CustomDataItem, DeletedObject, DeletedObjects, Group, Meta, Times, Value,
+    },
     error::XmlParseError,
     xml_db::get_epoch_baseline,
 };
@@ -182,6 +184,12 @@ impl FromXmlCharacters for Uuid {
         let v = base64_engine::STANDARD.decode(s)?;
         let uuid = Uuid::from_slice(&v)?;
         Ok(uuid)
+    }
+}
+
+impl FromXmlCharacters for Color {
+    fn from_xml_characters(s: &str) -> Result<Self, XmlParseError> {
+        Ok(s.parse()?)
     }
 }
 
