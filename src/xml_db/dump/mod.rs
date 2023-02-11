@@ -5,6 +5,7 @@ mod meta;
 use std::io::Write;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
+use uuid::Uuid;
 use xml::{
     writer::{EventWriter, XmlEvent as WriterEvent},
     EmitterConfig,
@@ -110,6 +111,17 @@ impl DumpXml for &String {
         _inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error> {
         writer.write(WriterEvent::characters(self))
+    }
+}
+
+impl DumpXml for &Uuid {
+    fn dump_xml<E: std::io::Write>(
+        &self,
+        writer: &mut EventWriter<E>,
+        _inner_cipher: &mut dyn Cipher,
+    ) -> Result<(), xml::writer::Error> {
+        let b64 = base64_engine::STANDARD.encode(self.as_bytes());
+        writer.write(WriterEvent::Characters(&b64))
     }
 }
 

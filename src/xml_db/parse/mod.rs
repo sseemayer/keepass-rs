@@ -6,6 +6,7 @@ use std::{collections::HashMap, iter::Peekable};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
+use uuid::Uuid;
 use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 
 use crate::{
@@ -173,6 +174,14 @@ impl FromXmlCharacters for String {
 impl FromXmlCharacters for NaiveDateTime {
     fn from_xml_characters(s: &str) -> Result<Self, XmlParseError> {
         parse_xml_timestamp(s)
+    }
+}
+
+impl FromXmlCharacters for Uuid {
+    fn from_xml_characters(s: &str) -> Result<Self, XmlParseError> {
+        let v = base64_engine::STANDARD.decode(s)?;
+        let uuid = Uuid::from_slice(&v)?;
+        Ok(uuid)
     }
 }
 
@@ -443,7 +452,7 @@ impl FromXml for DeletedObject {
             match event {
                 SimpleXmlEvent::Start(name, _) => match &name[..] {
                     "UUID" => {
-                        out.uuid = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        out.uuid = SimpleTag::<Uuid>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "DeletionTime" => {
                         out.deletion_time =

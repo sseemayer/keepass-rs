@@ -11,6 +11,7 @@ pub fn get_epoch_baseline() -> chrono::NaiveDateTime {
 mod tests {
     use chrono::NaiveDateTime;
     use secstr::SecStr;
+    use uuid::uuid;
 
     use crate::{
         config::DatabaseConfig,
@@ -85,7 +86,7 @@ mod tests {
         });
 
         entry.icon_id = Some(123);
-        entry.custom_icon_uuid = Some("custom-icon-uuid".to_string());
+        entry.custom_icon_uuid = Some(uuid!("22222222222222222222222222222222"));
 
         entry.foreground_color = Some("#C0FFEE".to_string());
         entry.background_color = Some("#1C1357".to_string());
@@ -133,7 +134,7 @@ mod tests {
         let mut subgroup = Group::new("Child group");
         subgroup.notes = Some("I am a subgroup".to_string());
         subgroup.icon_id = Some(42);
-        subgroup.custom_icon_uuid = Some("CUSTOM-ICON".to_string());
+        subgroup.custom_icon_uuid = Some(uuid!("11111111111111111111111111111111"));
         subgroup.times.expires = true;
         subgroup.times.usage_count = 100;
         subgroup
@@ -146,7 +147,7 @@ mod tests {
         subgroup.enable_autotype = Some("yes".to_string());
         subgroup.enable_searching = Some("sure".to_string());
 
-        subgroup.last_top_visible_entry = Some("an-entry".to_string());
+        subgroup.last_top_visible_entry = Some(uuid!("43210000000000000000000000000000"));
 
         root_group.children.push(Node::Group(subgroup));
 
@@ -167,7 +168,7 @@ mod tests {
         };
 
         assert_eq!(decrypted_entry.get_title(), Some("ASDF"));
-        assert_eq!(decrypted_entry.get_uuid(), new_entry_uuid);
+        assert_eq!(decrypted_entry.get_uuid(), &new_entry_uuid);
 
         assert_eq!(&decrypted_db.root, &root_group);
     }
@@ -198,17 +199,17 @@ mod tests {
             }),
             custom_icons: CustomIcons {
                 icons: vec![Icon {
-                    uuid: "a-fake-uuid".to_string(),
+                    uuid: uuid!("a1a2a3a4b1bffffffffffff4d5d6d7d8"),
                     data: b"fake-data".to_vec(),
                 }],
             },
             recyclebin_enabled: Some(true),
-            recyclebin_uuid: Some("another-fake-uuid".to_string()),
+            recyclebin_uuid: Some(uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8")),
             recyclebin_changed: Some("2000-12-31T12:35:00".parse().unwrap()),
-            entry_templates_group: Some("even-more-fake-uuid".to_string()),
+            entry_templates_group: Some(uuid!("123456789abcdef0d1d2d3d4d5d6d7d8")),
             entry_templates_group_changed: Some("2000-12-31T12:35:01".parse().unwrap()),
-            last_selected_group: Some("so-many-fake-uuids".to_string()),
-            last_top_visible_group: Some("hey-another-fake-uuid".to_string()),
+            last_selected_group: Some(uuid!("fffffffffffff1c2d1d2d3d4d5d6d7d8")),
+            last_top_visible_group: Some(uuid!("a1a2a3a4b1b2c1c2d1d2d3ffffffffff")),
             history_max_items: Some(456),
             history_max_size: Some(789),
             settings_changed: Some("2000-12-31T12:35:02".parse().unwrap()),
@@ -268,11 +269,11 @@ mod tests {
         let mut db = Database::new(DatabaseConfig::default());
         db.deleted_objects.objects = vec![
             DeletedObject {
-                uuid: "asdf-ghjk".to_string(),
+                uuid: uuid!("123e4567-e89b-12d3-a456-426655440000"),
                 deletion_time: "2000-12-31T12:34:56".parse().unwrap(),
             },
             DeletedObject {
-                uuid: "wdawdadw".to_string(),
+                uuid: uuid!("00112233-4455-6677-8899-aabbccddeeff"),
                 deletion_time: "2000-12-31T12:35:00".parse().unwrap(),
             },
         ];

@@ -12,7 +12,7 @@ use crate::db::otp::{TOTPError, TOTP};
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Entry {
-    pub uuid: String,
+    pub uuid: Uuid,
     pub fields: HashMap<String, Value>,
     pub autotype: Option<AutoType>,
     pub tags: Vec<String>,
@@ -22,7 +22,7 @@ pub struct Entry {
     pub custom_data: CustomData,
 
     pub icon_id: Option<usize>,
-    pub custom_icon_uuid: Option<String>,
+    pub custom_icon_uuid: Option<Uuid>,
 
     pub foreground_color: Option<String>,
     pub background_color: Option<String>,
@@ -35,7 +35,7 @@ pub struct Entry {
 impl Entry {
     pub fn new() -> Entry {
         Entry {
-            uuid: Uuid::new_v4().to_string(),
+            uuid: Uuid::new_v4(),
             ..Default::default()
         }
     }
@@ -60,7 +60,7 @@ impl<'a> Entry {
         }
     }
 
-    pub fn get_uuid(&'a self) -> &'a str {
+    pub fn get_uuid(&'a self) -> &'a Uuid {
         &self.uuid
     }
 

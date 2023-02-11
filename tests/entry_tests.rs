@@ -5,6 +5,7 @@ mod entry_tests {
         DatabaseKey,
     };
     use std::{fs::File, path::Path};
+    use uuid::uuid;
 
     #[test]
     fn kdbx3_entry() -> Result<(), DatabaseOpenError> {
@@ -16,7 +17,7 @@ mod entry_tests {
 
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["Sample Entry"]) {
-            assert_eq!(e.get_uuid(), "Dr7dsu1OUUS8NBowkmalEw==");
+            assert_eq!(e.get_uuid(), &uuid!("0ebeddb2-ed4e-5144-bc34-1a309266a513"));
             assert_eq!(e.get_title(), Some("Sample Entry"));
             assert_eq!(e.get_username(), Some("User Name"));
             assert_eq!(e.get_password(), Some("Password"));
@@ -45,7 +46,7 @@ mod entry_tests {
         }
 
         if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Subgroup", "test entry"]) {
-            assert_eq!(e.get_uuid(), "XkyK0ZzVOUyQORF43BQLSg==");
+            assert_eq!(e.get_uuid(), &uuid!("5e4c8ad1-9cd5-394c-9039-1178dc140b4a"));
             assert_eq!(e.get_title(), Some("test entry"));
             assert_eq!(e.get_username(), Some("jdoe"));
             assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
@@ -74,7 +75,7 @@ mod entry_tests {
 
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["ASDF"]) {
-            assert_eq!(e.get_uuid(), "TzgWvYMwSGWHn6EIoS8oXA==");
+            assert_eq!(e.get_uuid(), &uuid!("4f3816bd83304865879fa108a12f285c"));
             assert_eq!(e.get_title(), Some("ASDF"));
             assert_eq!(e.get_username(), Some("ghj"));
             assert_eq!(e.get_password(), Some("klmno"));

@@ -4,6 +4,8 @@ mod file_read_tests {
         error::{DatabaseIntegrityError, DatabaseOpenError},
         DatabaseKey,
     };
+    use uuid::uuid;
+
     use std::{fs::File, path::Path};
 
     #[test]
@@ -314,7 +316,7 @@ mod file_read_tests {
         assert_eq!(db.root.name, "Root");
         assert_eq!(
             db.meta.recyclebin_uuid,
-            Some("VjFx/mWYQtyAA/mN3jLocg==".to_string())
+            Some(uuid!("563171fe-6598-42dc-8003-f98dde32e872"))
         );
 
         let recycle_group: Vec<NodeRef> = db

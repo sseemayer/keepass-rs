@@ -12,7 +12,7 @@ use crate::db::{
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Group {
     /// The unique identifier of the group
-    pub uuid: String,
+    pub uuid: Uuid,
 
     /// The name of the group
     pub name: String,
@@ -24,7 +24,7 @@ pub struct Group {
     pub icon_id: Option<usize>,
 
     /// UUID for a custom group icon
-    pub custom_icon_uuid: Option<String>,
+    pub custom_icon_uuid: Option<Uuid>,
 
     /// The list of child nodes (Groups or Entries)
     pub children: Vec<Node>,
@@ -49,14 +49,14 @@ pub struct Group {
     /// UUID for the last top visible entry
     // TODO figure out what that is supposed to mean. According to the KeePass sourcecode, it has
     // something to do with restoring selected items when re-opening a database.
-    pub last_top_visible_entry: Option<String>,
+    pub last_top_visible_entry: Option<Uuid>,
 }
 
 impl Group {
     pub fn new(name: &str) -> Group {
         Group {
             name: name.to_string(),
-            uuid: Uuid::new_v4().to_string(),
+            uuid: Uuid::new_v4(),
             ..Default::default()
         }
     }

@@ -295,6 +295,9 @@ pub enum XmlParseError {
     BoolFormat(#[from] std::str::ParseBoolError),
 
     #[error(transparent)]
+    Uuid(#[from] uuid::Error),
+
+    #[error(transparent)]
     Cryptography(#[from] CryptographyError),
 
     #[error("Decompression error: {}", _0)]
