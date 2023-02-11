@@ -87,6 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     db.root.children.push(Node::Group(group));
 
+    #[cfg(feature = "save_kdbx4")]
     db.save(
         &mut File::create("demo.kdbx")?,
         DatabaseKey::with_password("demopass"),

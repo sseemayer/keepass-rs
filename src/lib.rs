@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "save_kdbx4", doc = include_str!("../README.md"))]
+#![doc = include_str!("../README.md")]
 #![recursion_limit = "1024"]
 
 mod compression;
