@@ -116,8 +116,6 @@ fn main() -> Result<()> {
 
 ```
 
-## [Documentation](https://docs.rs/keepass)
-
 ## Developer Tools
 This crate also contains several command line tools that can be enabled with feature flags. See the `[[bin]]` sections in [Cargo.toml](Cargo.toml) for a complete list.
 
