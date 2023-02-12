@@ -1,11 +1,25 @@
+---
+name: Merge on Master
+
 on:
   push:
     branches:
       - master
 
-name: Merge on Master
-
 jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: run cargo test
+        run: cargo test --all-features
+
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
