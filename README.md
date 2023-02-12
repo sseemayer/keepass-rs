@@ -111,7 +111,7 @@ See the `[[bin]]` sections in [Cargo.toml](Cargo.toml) for a complete list.
 
 An example command line for running the `kp-dump-xml` command would be:
 
-```ignore
+```bash
 cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database.kdbx
 ```
 
