@@ -19,7 +19,7 @@ mod tests {
             entry::History,
             meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
             AutoType, AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database,
-            DeletedObject, Entry, Group, Meta, Node, Value,
+            DeletedObject, Entry, Group, Meta, Node, Times, Value,
         },
         format::kdbx4,
         key::DatabaseKey,
@@ -60,10 +60,12 @@ mod tests {
         entry.tags.push("keepass-rs".to_string());
         entry.times.expires = true;
         entry.times.usage_count = 42;
-        entry
-            .times
-            .times
-            .insert("Created".to_string(), NaiveDateTime::default());
+        entry.times.set_creation(NaiveDateTime::default());
+        entry.times.set_expiry(NaiveDateTime::default());
+        entry.times.set_last_access(NaiveDateTime::default());
+        entry.times.set_location_changed(Times::now());
+        entry.times.set_last_modification(Times::now());
+
         entry.autotype = Some(AutoType {
             enabled: true,
             sequence: Some("Autotype-sequence".to_string()),
@@ -137,10 +139,11 @@ mod tests {
         subgroup.custom_icon_uuid = Some(uuid!("11111111111111111111111111111111"));
         subgroup.times.expires = true;
         subgroup.times.usage_count = 100;
-        subgroup
-            .times
-            .times
-            .insert("Created".to_string(), NaiveDateTime::default());
+        subgroup.times.set_creation(NaiveDateTime::default());
+        subgroup.times.set_expiry(NaiveDateTime::default());
+        subgroup.times.set_last_access(NaiveDateTime::default());
+        subgroup.times.set_location_changed(Times::now());
+        subgroup.times.set_last_modification(Times::now());
         subgroup.is_expanded = true;
         subgroup.default_autotype_sequence =
             Some("{UP}{UP}{DOWN}{DOWN}{LEFT}{RIGHT}{LEFT}{RIGHT}BA".to_string());

@@ -74,10 +74,10 @@ impl<'a> Entry {
         self.times.get(key)
     }
 
-    /// Convenience method for getting the value of the 'ExpiryTime' timestamp
+    /// Convenience method for getting the time that the entry expires.
     /// This value is usually only meaningful/useful when expires == true
     pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
-        self.get_time("ExpiryTime")
+        self.times.get_expiry()
     }
 
     /// Convenience method for getting a TOTP from this entry
