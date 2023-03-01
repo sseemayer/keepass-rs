@@ -227,7 +227,7 @@ pub struct AutoTypeAssociation {
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct History {
-    pub entries: Vec<Entry>,
+    pub(crate) entries: Vec<Entry>,
 }
 impl History {
     pub fn add_entry(&mut self, mut entry: Entry) {
@@ -237,6 +237,10 @@ impl History {
             entry.history.take().unwrap();
         }
         self.entries.insert(0, entry);
+    }
+
+    pub fn get_entries(&self) -> &Vec<Entry> {
+        &self.entries
     }
 }
 
