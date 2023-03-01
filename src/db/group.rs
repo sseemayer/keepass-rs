@@ -54,8 +54,13 @@ pub struct Group {
 
 impl Group {
     pub fn new(name: &str) -> Group {
+        let mut times = Times::default();
+        let now = Times::now();
+        times.set_creation(now);
+        times.set_last_modification(now);
         Group {
             name: name.to_string(),
+            times,
             uuid: Uuid::new_v4(),
             ..Default::default()
         }
