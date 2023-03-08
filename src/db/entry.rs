@@ -139,8 +139,7 @@ impl<'a> Entry {
         // TODO should we validate the maximum size of the history?
         self.history.as_mut().unwrap().add_entry(new_history_entry);
 
-        self.times
-            .set_last_modification(chrono::Utc::now().naive_utc());
+        self.times.set_last_modification(Times::now());
         true
     }
 
@@ -246,6 +245,8 @@ impl History {
 
 #[cfg(test)]
 mod entry_tests {
+    use std::{thread, time};
+
     use secstr::SecStr;
 
     use super::{Entry, Value};
@@ -285,6 +286,9 @@ mod entry_tests {
             "Username".to_string(),
             Value::Unprotected("user".to_string()),
         );
+        // Making sure to wait 1 sec before update the history, to make
+        // sure that we get a different modification timestamp.
+        thread::sleep(time::Duration::from_secs(1));
 
         assert!(entry.update_history());
         assert!(entry.history.is_some());
@@ -294,6 +298,7 @@ mod entry_tests {
             &last_modification_time
         );
         last_modification_time = entry.times.get_last_modification().unwrap().clone();
+        thread::sleep(time::Duration::from_secs(1));
 
         // Updating the history without making any changes
         // should not do anything.
@@ -318,6 +323,7 @@ mod entry_tests {
             &last_modification_time
         );
         last_modification_time = entry.times.get_last_modification().unwrap().clone();
+        thread::sleep(time::Duration::from_secs(1));
 
         assert!(!entry.update_history());
         assert!(entry.history.is_some());
@@ -340,6 +346,7 @@ mod entry_tests {
             &last_modification_time
         );
         last_modification_time = entry.times.get_last_modification().unwrap().clone();
+        thread::sleep(time::Duration::from_secs(1));
 
         assert!(!entry.update_history());
         assert!(entry.history.is_some());
