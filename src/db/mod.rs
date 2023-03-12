@@ -217,6 +217,18 @@ impl Times {
         let now = chrono::Utc::now().naive_utc().timestamp();
         chrono::NaiveDateTime::from_timestamp_opt(now, 0).unwrap()
     }
+
+    pub fn new() -> Times {
+        let mut response = Times::default();
+        let now = Times::now();
+        response.set_creation(now);
+        response.set_last_modification(now);
+        response.set_last_access(now);
+        response.set_location_changed(now);
+        response.set_expiry(now);
+        response.expires = false;
+        response
+    }
 }
 
 /// Collection of custom data fields for an entry or metadata

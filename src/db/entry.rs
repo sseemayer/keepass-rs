@@ -35,13 +35,9 @@ pub struct Entry {
 }
 impl Entry {
     pub fn new() -> Entry {
-        let mut times = Times::default();
-        let now = Times::now();
-        times.set_creation(now);
-        times.set_last_modification(now);
         Entry {
             uuid: Uuid::new_v4(),
-            times,
+            times: Times::new(),
             ..Default::default()
         }
     }
