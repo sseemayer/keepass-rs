@@ -3,9 +3,18 @@ use std::collections::VecDeque;
 use uuid::Uuid;
 
 use crate::db::{
+    entry::{Entry, Value},
     node::{Node, NodeIter, NodeRef, NodeRefMut},
     CustomData, Times,
 };
+
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
+pub(crate) struct GroupRef {
+    pub uuid: Uuid,
+    pub name: String,
+}
+
+pub(crate) type NodeLocation = Vec<GroupRef>;
 
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -151,6 +160,136 @@ impl Group {
     pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
         self.times.get_expiry()
     }
+
+    pub fn entries(&self) -> Vec<&Entry> {
+        let mut response: Vec<&Entry> = vec![];
+        for node in &self.children {
+            if let Node::Entry(e) = node {
+                response.push(e)
+            }
+        }
+        response
+    }
+
+    pub fn entries_mut(&mut self) -> Vec<&mut Entry> {
+        let mut response: Vec<&mut Entry> = vec![];
+        for node in &mut self.children {
+            if let Node::Entry(e) = node {
+                response.push(e)
+            }
+        }
+        response
+    }
+
+    pub fn groups_mut(&mut self) -> Vec<&mut Group> {
+        let mut response: Vec<&mut Group> = vec![];
+        for node in &mut self.children {
+            if let Node::Group(g) = node {
+                response.push(g);
+            }
+        }
+        response
+    }
+
+    pub fn find_entry_by_uuid(&self, id: Uuid) -> Option<&Entry> {
+        for node in &self.children {
+            match node {
+                Node::Group(g) => {
+                    if let Some(e) = g.find_entry_by_uuid(id) {
+                        return Some(e);
+                    }
+                }
+                Node::Entry(e) => {
+                    if e.uuid == id {
+                        return Some(e);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub(crate) fn add_entry(&mut self, entry: Entry, location: &NodeLocation) {
+        if location.len() == 0 {
+            panic!("TODO handle this with a Response.");
+        }
+
+        let mut remaining_location = location.clone();
+        remaining_location.remove(0);
+
+        if remaining_location.len() == 0 {
+            self.children.push(Node::Entry(entry.clone()));
+            return;
+        }
+
+        let next_location = &remaining_location[0];
+
+        println!(
+            "Searching for group {} {:?}",
+            next_location.name, next_location.uuid
+        );
+        for node in &mut self.children {
+            if let Node::Group(g) = node {
+                if g.uuid != next_location.uuid {
+                    continue;
+                }
+                g.add_entry(entry, &remaining_location);
+                return;
+            }
+        }
+
+        // The group was not found, so we create it.
+        let mut new_group = Group {
+            name: next_location.name.clone(),
+            uuid: next_location.uuid.clone(),
+            ..Default::default()
+        };
+        new_group.add_entry(entry, &remaining_location);
+        self.children.push(Node::Group(new_group));
+    }
+
+    /// Merge this group with another group
+    pub fn merge(&mut self, other: &Group) {
+        for (entry, entry_location) in other.get_all_entries(&vec![]) {
+            if let Some(existing_entry) = self.find_entry_by_uuid(entry.uuid) {
+                // TODO relocate the existing entry if necessary
+                // TODO merge the existing entries
+            } else {
+                println!("Adding entry {} at {:?}", entry.uuid, &entry_location);
+                self.add_entry(entry.clone(), &entry_location);
+                // TODO should we update the time info for the entry?
+            }
+        }
+        // TODO merge options
+        // TODO merge strategy
+    }
+
+    // Recursively get all the entries in the group, along with their
+    // location.
+    pub(crate) fn get_all_entries(
+        &self,
+        current_location: &NodeLocation,
+    ) -> Vec<(&Entry, NodeLocation)> {
+        let mut response: Vec<(&Entry, NodeLocation)> = vec![];
+        let mut new_location = current_location.clone();
+        new_location.push(GroupRef {
+            uuid: self.uuid.clone(),
+            name: self.name.clone(),
+        });
+
+        for node in &self.children {
+            match node {
+                Node::Entry(e) => {
+                    response.push((&e, new_location.clone()));
+                }
+                Node::Group(g) => {
+                    let mut new_entries = g.get_all_entries(&new_location);
+                    response.append(&mut new_entries);
+                }
+            }
+        }
+        response
+    }
 }
 
 impl<'a> Group {
@@ -168,5 +307,141 @@ impl<'a> IntoIterator for &'a Group {
         queue.push_back(NodeRef::Group(self));
 
         NodeIter::new(queue)
+    }
+}
+
+#[cfg(test)]
+mod group_tests {
+    use std::{thread, time};
+
+    use super::{Entry, Group, Node, Value};
+
+    #[test]
+    fn test_merge_add_new_entry() {
+        let mut destination_group = Group::new("group1");
+        let mut source_group = Group::new("group1");
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1".to_string()),
+        );
+        source_group.children.push(Node::Entry(entry));
+
+        destination_group.merge(&source_group);
+        assert_eq!(destination_group.children.len(), 1);
+        let new_entry = destination_group.find_entry_by_uuid(entry_uuid);
+        assert!(new_entry.is_some());
+        assert_eq!(
+            new_entry.unwrap().get_title().unwrap(),
+            "entry1".to_string()
+        );
+
+        // Merging the same group again should not create a duplicate entry.
+        destination_group.merge(&source_group);
+        assert_eq!(destination_group.children.len(), 1);
+    }
+
+    #[test]
+    fn test_merge_add_new_non_root_entry() {
+        let mut destination_group = Group::new("group1");
+        let mut destination_sub_group = Group::new("subgroup1");
+        destination_group
+            .children
+            .push(Node::Group(destination_sub_group));
+        let mut source_group = destination_group.clone();
+        let mut source_sub_group = &mut source_group.groups_mut()[0];
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1".to_string()),
+        );
+        source_sub_group.children.push(Node::Entry(entry));
+
+        destination_group.merge(&source_group);
+        let destination_entries = destination_group.get_all_entries(&vec![]);
+        assert_eq!(destination_entries.len(), 1);
+        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+        println!("{:?}", created_entry_location);
+        assert_eq!(created_entry_location.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_add_new_entry_new_group() {
+        let mut destination_group = Group::new("group1");
+        let mut destination_sub_group = Group::new("subgroup1");
+        let mut source_group = Group::new("group1");
+        let mut source_sub_group = Group::new("subgroup1");
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1".to_string()),
+        );
+        source_sub_group.children.push(Node::Entry(entry));
+        source_group.children.push(Node::Group(source_sub_group));
+
+        destination_group.merge(&source_group);
+        let destination_entries = destination_group.get_all_entries(&vec![]);
+        assert_eq!(destination_entries.len(), 1);
+        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+        assert_eq!(created_entry_location.len(), 2);
+    }
+
+    #[test]
+    fn test_update_in_destination_no_conflict() {
+        let mut destination_group = Group::new("group1");
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1".to_string()),
+        );
+        destination_group.children.push(Node::Entry(entry));
+
+        let mut source_group = destination_group.clone();
+
+        let mut entry = &mut destination_group.entries_mut()[0];
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1_updated".to_string()),
+        );
+
+        destination_group.merge(&source_group);
+
+        let entry = destination_group.entries()[0];
+        assert_eq!(entry.get_title(), Some("entry1_updated"));
+    }
+
+    #[ignore]
+    #[test]
+    fn test_update_in_source_no_conflict() {
+        let mut destination_group = Group::new("group1");
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1".to_string()),
+        );
+        destination_group.children.push(Node::Entry(entry));
+
+        let mut source_group = destination_group.clone();
+
+        let mut entry = &mut source_group.entries_mut()[0];
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1_updated".to_string()),
+        );
+
+        destination_group.merge(&source_group);
+
+        let entry = destination_group.entries()[0];
+        assert_eq!(entry.get_title(), Some("entry1_updated"));
     }
 }

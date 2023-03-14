@@ -41,6 +41,63 @@ impl Entry {
             ..Default::default()
         }
     }
+
+    pub(crate) fn merge(&mut self, other: &Entry) {
+        if self.times.get_last_modification().unwrap()
+            < other.times.get_last_modification().unwrap()
+        {
+        } else {
+        }
+    }
+
+    // Merge the history entries from the other entry into this
+    // entry's history.
+    pub(crate) fn merge_history_entries(&mut self, other: &Entry) {
+        let mut new_history_entries: HashMap<NaiveDateTime, Entry> = HashMap::new();
+
+        let current_history_entries: Vec<Entry> = match &self.history {
+            Some(h) => h.entries.clone(),
+            None => vec![],
+        };
+        for history_entry in current_history_entries {
+            let modification_time = history_entry.times.get_last_modification().unwrap();
+            if new_history_entries.contains_key(modification_time) {
+                // TODO this should never happen!!!!
+            }
+            new_history_entries.insert(modification_time.clone(), history_entry);
+        }
+
+        let source_history_entries: Vec<Entry> = match &other.history {
+            Some(h) => h.entries.clone(),
+            None => vec![],
+        };
+        for history_entry in source_history_entries {
+            let modification_time = history_entry.times.get_last_modification().unwrap();
+            let existing_history_entry = new_history_entries.get(modification_time);
+            if let Some(existing_history_entry) = existing_history_entry {
+                if !existing_history_entry.eq(&history_entry) {
+                    // TODO two history entries with the same modification time should
+                    // be exactly the same!! This should never happen
+                }
+            } else {
+                new_history_entries.insert(modification_time.clone(), history_entry);
+            }
+        }
+
+        let current_modification_time = self.times.get_last_modification().unwrap();
+        let source_modification_time = other.times.get_last_modification().unwrap();
+        if current_modification_time == source_modification_time && !self.eq(&other) {
+            // TODO this should never happen!!!
+            // This means that an entry was updated without updating the last modification
+            // timestamp.
+        }
+
+        if current_modification_time < source_modification_time {
+            new_history_entries.insert(current_modification_time.clone(), self.clone());
+            // TODO replace the target entry with the source entry.
+        } else if source_modification_time > current_modification_time {
+        }
+    }
 }
 
 impl<'a> Entry {
