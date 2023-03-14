@@ -25,6 +25,7 @@ serialization = ["serde", "serde_json", "chrono/serde"]
 totp = ["totp-lite", "url", "base32"]
 save_kdbx4 = []
 challenge_response = ["sha1", "hex"]
+merge = []
 
 default = []
 
