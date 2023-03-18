@@ -43,60 +43,23 @@ impl Entry {
     }
 
     pub(crate) fn merge(&mut self, other: &Entry) {
-        if self.times.get_last_modification().unwrap()
-            < other.times.get_last_modification().unwrap()
-        {
-        } else {
-        }
-    }
-
-    // Merge the history entries from the other entry into this
-    // entry's history.
-    pub(crate) fn merge_history_entries(&mut self, other: &Entry) {
-        let mut new_history_entries: HashMap<NaiveDateTime, Entry> = HashMap::new();
-
-        let current_history_entries: Vec<Entry> = match &self.history {
-            Some(h) => h.entries.clone(),
-            None => vec![],
-        };
-        for history_entry in current_history_entries {
-            let modification_time = history_entry.times.get_last_modification().unwrap();
-            if new_history_entries.contains_key(modification_time) {
-                // TODO this should never happen!!!!
-            }
-            new_history_entries.insert(modification_time.clone(), history_entry);
-        }
-
-        let source_history_entries: Vec<Entry> = match &other.history {
-            Some(h) => h.entries.clone(),
-            None => vec![],
-        };
-        for history_entry in source_history_entries {
-            let modification_time = history_entry.times.get_last_modification().unwrap();
-            let existing_history_entry = new_history_entries.get(modification_time);
-            if let Some(existing_history_entry) = existing_history_entry {
-                if !existing_history_entry.eq(&history_entry) {
-                    // TODO two history entries with the same modification time should
-                    // be exactly the same!! This should never happen
-                }
-            } else {
-                new_history_entries.insert(modification_time.clone(), history_entry);
-            }
-        }
-
-        let current_modification_time = self.times.get_last_modification().unwrap();
+        let destination_modification_time = self.times.get_last_modification().unwrap();
         let source_modification_time = other.times.get_last_modification().unwrap();
-        if current_modification_time == source_modification_time && !self.eq(&other) {
+        if destination_modification_time == source_modification_time && !self.eq(&other) {
             // TODO this should never happen!!!
             // This means that an entry was updated without updating the last modification
             // timestamp.
         }
 
-        if current_modification_time < source_modification_time {
-            new_history_entries.insert(current_modification_time.clone(), self.clone());
-            // TODO replace the target entry with the source entry.
-        } else if source_modification_time > current_modification_time {
+        if destination_modification_time > source_modification_time {
+        } else {
         }
+    }
+
+    pub(crate) fn merge_into(&mut self, other: Entry) {
+        // TODO we could just return if the other entry doesn't have a history.
+        let mut source_history = other.history.clone().unwrap();
+        source_history.add_entry(other);
     }
 }
 
@@ -283,6 +246,8 @@ pub struct History {
 }
 impl History {
     pub fn add_entry(&mut self, mut entry: Entry) {
+        // DISCUSS: should we make sure that the last modification time is not the same
+        // or older than the entry at the top of the history?
         if entry.history.is_some() {
             // Remove the history from the new history entry to avoid having
             // an exponential number of history entries.
@@ -293,6 +258,65 @@ impl History {
 
     pub fn get_entries(&self) -> &Vec<Entry> {
         &self.entries
+    }
+
+    // Determines if the entries of the history are
+    // ordered by last modification time.
+    pub(crate) fn is_ordered(&self) -> bool {
+        let mut last_modification_time: Option<&NaiveDateTime> = None;
+        for entry in &self.entries {
+            if last_modification_time.is_none() {
+                last_modification_time = entry.times.get_last_modification();
+            }
+
+            let entry_modification_time = entry.times.get_last_modification().unwrap();
+            // FIXME should we also handle equal modification times??
+            if last_modification_time.unwrap() < entry_modification_time {
+                return false;
+            }
+            last_modification_time = Some(entry_modification_time);
+        }
+        true
+    }
+
+    // Merge both histories together.
+    pub(crate) fn merge_with(&mut self, other: &History) {
+        let mut new_history_entries: HashMap<NaiveDateTime, Entry> = HashMap::new();
+
+        for history_entry in &self.entries {
+            let modification_time = history_entry.times.get_last_modification().unwrap();
+            if new_history_entries.contains_key(modification_time) {
+                // DISCUSS we should handle that differently
+                panic!("This should never happen.");
+            }
+            new_history_entries.insert(modification_time.clone(), history_entry.clone());
+        }
+
+        for history_entry in &other.entries {
+            let modification_time = history_entry.times.get_last_modification().unwrap();
+            let existing_history_entry = new_history_entries.get(modification_time);
+            if let Some(existing_history_entry) = existing_history_entry {
+                if !existing_history_entry.eq(&history_entry) {
+                    // TODO two history entries with the same modification time should
+                    // be exactly the same!! This should never happen
+                }
+            } else {
+                new_history_entries.insert(modification_time.clone(), history_entry.clone());
+            }
+        }
+
+        let mut all_modification_times: Vec<&NaiveDateTime> = new_history_entries.keys().collect();
+        all_modification_times.sort();
+        all_modification_times.reverse();
+        let mut new_entries: Vec<Entry> = vec![];
+        for modification_time in &all_modification_times {
+            new_entries.push(new_history_entries.get(&modification_time).unwrap().clone());
+        }
+
+        self.entries = new_entries;
+        if !self.is_ordered() {
+            panic!("FIXME this should go into the unit tests.")
+        }
     }
 }
 
