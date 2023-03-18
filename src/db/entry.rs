@@ -42,18 +42,36 @@ impl Entry {
         }
     }
 
-    pub(crate) fn merge(&mut self, other: &Entry) {
+    pub(crate) fn merge(&self, other: &Entry) -> Entry {
+        let mut response: Entry = Entry::default();
+
         let destination_modification_time = self.times.get_last_modification().unwrap();
         let source_modification_time = other.times.get_last_modification().unwrap();
         if destination_modification_time == source_modification_time && !self.eq(&other) {
             // TODO this should never happen!!!
             // This means that an entry was updated without updating the last modification
             // timestamp.
+            panic!("Entries have the same modification time but are not the same!")
         }
 
         if destination_modification_time > source_modification_time {
+            response = self.clone();
+            // TODO we could just return if the other entry doesn't have a history.
+            let mut source_history = other.history.clone().unwrap();
+            source_history.add_entry(other.clone());
+            let mut new_history = self.history.clone().unwrap().clone();
+            new_history.merge_with(&source_history);
+            response.history = Some(new_history);
         } else {
+            response = other.clone();
+
+            let mut destination_history = self.history.clone().unwrap();
+            destination_history.add_entry(self.clone());
+            let mut new_history = other.history.clone().unwrap().clone();
+            new_history.merge_with(&destination_history);
+            response.history = Some(new_history);
         }
+        response
     }
 
     pub(crate) fn merge_into(&mut self, other: Entry) {

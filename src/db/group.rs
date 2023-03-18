@@ -191,6 +191,21 @@ impl Group {
         response
     }
 
+    fn replace_entry(&mut self, entry: &Entry) {
+        for node in &mut self.children {
+            match node {
+                Node::Group(g) => {
+                    g.replace_entry(entry);
+                }
+                Node::Entry(e) => {
+                    if e.uuid == entry.uuid {
+                        *e = entry.clone();
+                    }
+                }
+            }
+        }
+    }
+
     pub fn find_entry_by_uuid(&self, id: Uuid) -> Option<&Entry> {
         for node in &self.children {
             match node {
@@ -252,16 +267,21 @@ impl Group {
     pub fn merge(&mut self, other: &Group) {
         for (entry, entry_location) in other.get_all_entries(&vec![]) {
             if let Some(existing_entry) = self.find_entry_by_uuid(entry.uuid) {
+                if existing_entry == entry {
+                    continue;
+                }
                 // TODO relocate the existing entry if necessary
-                // TODO merge the existing entries
+                let merged_entry = existing_entry.merge(entry);
+                self.replace_entry(&merged_entry);
             } else {
                 println!("Adding entry {} at {:?}", entry.uuid, &entry_location);
                 self.add_entry(entry.clone(), &entry_location);
                 // TODO should we update the time info for the entry?
             }
         }
-        // TODO merge options
-        // TODO merge strategy
+
+        // TODO update locations
+        // TODO handle deleted objects
     }
 
     // Recursively get all the entries in the group, along with their
@@ -402,6 +422,8 @@ mod group_tests {
             "Title".to_string(),
             Value::Unprotected("entry1".to_string()),
         );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
         destination_group.children.push(Node::Entry(entry));
 
         let mut source_group = destination_group.clone();
@@ -411,6 +433,8 @@ mod group_tests {
             "Title".to_string(),
             Value::Unprotected("entry1_updated".to_string()),
         );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
 
         destination_group.merge(&source_group);
 
@@ -418,7 +442,6 @@ mod group_tests {
         assert_eq!(entry.get_title(), Some("entry1_updated"));
     }
 
-    #[ignore]
     #[test]
     fn test_update_in_source_no_conflict() {
         let mut destination_group = Group::new("group1");
@@ -429,6 +452,8 @@ mod group_tests {
             "Title".to_string(),
             Value::Unprotected("entry1".to_string()),
         );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
         destination_group.children.push(Node::Entry(entry));
 
         let mut source_group = destination_group.clone();
@@ -438,6 +463,8 @@ mod group_tests {
             "Title".to_string(),
             Value::Unprotected("entry1_updated".to_string()),
         );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
 
         destination_group.merge(&source_group);
 
