@@ -1,5 +1,5 @@
 ---
-name: CI
+name: CI on Pull Requests
 
 on:
   pull_request:
