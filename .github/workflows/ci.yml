@@ -18,6 +18,21 @@ jobs:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v5
 
+  doc:
+    name: Build Doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - name: run cargo doc
+        run: cargo doc
+
   check:
     name: Check
     runs-on: ubuntu-latest
