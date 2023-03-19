@@ -57,17 +57,17 @@ impl Entry {
         if destination_modification_time > source_modification_time {
             response = self.clone();
             // TODO we could just return if the other entry doesn't have a history.
-            let mut source_history = other.history.clone().unwrap();
+            let mut source_history = other.history.clone().unwrap_or(History::default());
             source_history.add_entry(other.clone());
-            let mut new_history = self.history.clone().unwrap().clone();
+            let mut new_history = self.history.clone().unwrap_or(History::default()).clone();
             new_history.merge_with(&source_history);
             response.history = Some(new_history);
         } else {
             response = other.clone();
 
-            let mut destination_history = self.history.clone().unwrap();
+            let mut destination_history = self.history.clone().unwrap_or(History::default());
             destination_history.add_entry(self.clone());
-            let mut new_history = other.history.clone().unwrap().clone();
+            let mut new_history = other.history.clone().unwrap_or(History::default()).clone();
             new_history.merge_with(&destination_history);
             response.history = Some(new_history);
         }

@@ -337,6 +337,42 @@ mod group_tests {
     use super::{Entry, Group, Node, Value};
 
     #[test]
+    fn test_merge_idempotence() {
+        let mut destination_group = Group::new("group1");
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1".to_string()),
+        );
+        destination_group.children.push(Node::Entry(entry));
+        let mut source_group = destination_group.clone();
+
+        destination_group.merge(&source_group);
+        assert_eq!(destination_group.children.len(), 1);
+        // The 2 groups should be exactly the same after merging, since
+        // nothing was performed during the merge.
+        assert_eq!(destination_group, source_group);
+
+        let mut entry = &mut destination_group.entries_mut()[0];
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1_updated".to_string()),
+        );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
+
+        destination_group.merge(&source_group);
+
+        let destination_group_just_after_merge = destination_group.clone();
+        destination_group.merge(&source_group);
+        // Merging twice in a row, even if the first merge updated the destination group,
+        // should not create more changes.
+        assert_eq!(destination_group_just_after_merge, destination_group);
+    }
+
+    #[test]
     fn test_merge_add_new_entry() {
         let mut destination_group = Group::new("group1");
         let mut source_group = Group::new("group1");
