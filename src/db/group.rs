@@ -507,4 +507,51 @@ mod group_tests {
         let entry = destination_group.entries()[0];
         assert_eq!(entry.get_title(), Some("entry1_updated"));
     }
+
+    #[test]
+    fn test_update_with_conflicts() {
+        let mut destination_group = Group::new("group1");
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1".to_string()),
+        );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
+        destination_group.children.push(Node::Entry(entry));
+
+        let mut source_group = destination_group.clone();
+
+        let mut entry = &mut destination_group.entries_mut()[0];
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1_updated_from_destination".to_string()),
+        );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
+
+        let mut entry = &mut source_group.entries_mut()[0];
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::Unprotected("entry1_updated_from_source".to_string()),
+        );
+        thread::sleep(time::Duration::from_secs(1));
+        entry.update_history();
+
+        destination_group.merge(&source_group);
+
+        let entry = destination_group.entries()[0];
+        assert_eq!(entry.get_title(), Some("entry1_updated_from_source"));
+
+        let merged_history = entry.history.clone().unwrap();
+        assert!(merged_history.is_ordered());
+        assert_eq!(merged_history.entries.len(), 3);
+        let merged_entry = &merged_history.entries[0];
+        assert_eq!(
+            merged_entry.get_title(),
+            Some("entry1_updated_from_destination")
+        );
+    }
 }
