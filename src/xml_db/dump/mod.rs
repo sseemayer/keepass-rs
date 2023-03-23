@@ -203,8 +203,13 @@ impl DumpXml for CustomData {
     ) -> Result<(), xml::writer::Error> {
         writer.write(WriterEvent::start_element("CustomData"))?;
 
-        for item in &self.items {
+        for (key, item) in &self.items {
+            writer.write(WriterEvent::start_element("Item"))?;
+
+            SimpleTag("Key", key).dump_xml(writer, inner_cipher)?;
             item.dump_xml(writer, inner_cipher)?;
+
+            writer.write(WriterEvent::end_element())?;
         }
 
         writer.write(WriterEvent::end_element())?;
@@ -219,10 +224,6 @@ impl DumpXml for CustomDataItem {
         writer: &mut EventWriter<E>,
         inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error> {
-        writer.write(WriterEvent::start_element("Item"))?;
-
-        SimpleTag("Key", &self.key).dump_xml(writer, inner_cipher)?;
-
         if let Some(ref value) = self.value {
             value.dump_xml(writer, inner_cipher)?;
         }
@@ -231,7 +232,6 @@ impl DumpXml for CustomDataItem {
             SimpleTag("LastModificationTime", value).dump_xml(writer, inner_cipher)?;
         }
 
-        writer.write(WriterEvent::end_element())?;
         Ok(())
     }
 }
