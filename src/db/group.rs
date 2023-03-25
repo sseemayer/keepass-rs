@@ -434,10 +434,7 @@ mod group_tests {
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1".to_string()),
-        );
+        entry.set_field_and_commit("Title", "entry1");
         source_sub_group.children.push(Node::Entry(entry));
         source_group.children.push(Node::Group(source_sub_group));
 
@@ -454,23 +451,14 @@ mod group_tests {
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1".to_string()),
-        );
-        thread::sleep(time::Duration::from_secs(1));
-        entry.update_history();
+        entry.set_field_and_commit("Title", "entry1");
+
         destination_group.children.push(Node::Entry(entry));
 
         let mut source_group = destination_group.clone();
 
         let mut entry = &mut destination_group.entries_mut()[0];
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1_updated".to_string()),
-        );
-        thread::sleep(time::Duration::from_secs(1));
-        entry.update_history();
+        entry.set_field_and_commit("Title", "entry1_updated");
 
         destination_group.merge(&source_group);
 
@@ -484,23 +472,13 @@ mod group_tests {
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1".to_string()),
-        );
-        thread::sleep(time::Duration::from_secs(1));
-        entry.update_history();
+        entry.set_field_and_commit("Title", "entry1");
         destination_group.children.push(Node::Entry(entry));
 
         let mut source_group = destination_group.clone();
 
         let mut entry = &mut source_group.entries_mut()[0];
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1_updated".to_string()),
-        );
-        thread::sleep(time::Duration::from_secs(1));
-        entry.update_history();
+        entry.set_field_and_commit("Title", "entry1_updated");
 
         destination_group.merge(&source_group);
 
@@ -514,31 +492,16 @@ mod group_tests {
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1".to_string()),
-        );
-        thread::sleep(time::Duration::from_secs(1));
-        entry.update_history();
+        entry.set_field_and_commit("Title", "entry1");
         destination_group.children.push(Node::Entry(entry));
 
         let mut source_group = destination_group.clone();
 
         let mut entry = &mut destination_group.entries_mut()[0];
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1_updated_from_destination".to_string()),
-        );
-        thread::sleep(time::Duration::from_secs(1));
-        entry.update_history();
+        entry.set_field_and_commit("Title", "entry1_updated_from_destination");
 
         let mut entry = &mut source_group.entries_mut()[0];
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1_updated_from_source".to_string()),
-        );
-        thread::sleep(time::Duration::from_secs(1));
-        entry.update_history();
+        entry.set_field_and_commit("Title", "entry1_updated_from_source");
 
         destination_group.merge(&source_group);
 

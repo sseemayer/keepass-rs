@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::{thread, time};
 
 use chrono::NaiveDateTime;
 use secstr::SecStr;
@@ -78,6 +79,20 @@ impl Entry {
         // TODO we could just return if the other entry doesn't have a history.
         let mut source_history = other.history.clone().unwrap();
         source_history.add_entry(other);
+    }
+
+    // Convenience function used in unit tests, to make sure that:
+    // 1. The history gets updated after changing a field
+    // 2. We wait a second before commiting the changes so that the timestamp is not the same
+    //    as it previously was. This is necessary since the timestamps in the KDBX format
+    //    do not preserve the msecs.
+    pub(crate) fn set_field_and_commit(&mut self, field_name: &str, field_value: &str) {
+        self.fields.insert(
+            field_name.to_string(),
+            Value::Unprotected(field_value.to_string()),
+        );
+        thread::sleep(time::Duration::from_secs(1));
+        self.update_history();
     }
 }
 
