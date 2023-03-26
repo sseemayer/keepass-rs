@@ -406,10 +406,7 @@ mod group_tests {
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1".to_string()),
-        );
+        entry.set_field_and_commit("Title", "entry1");
         source_group.children.push(Node::Entry(entry));
 
         destination_group.merge(&source_group);
@@ -438,10 +435,7 @@ mod group_tests {
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("entry1".to_string()),
-        );
+        entry.set_field_and_commit("Title", "entry1");
         source_sub_group.children.push(Node::Entry(entry));
 
         destination_group.merge(&source_group);
