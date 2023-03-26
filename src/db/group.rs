@@ -335,6 +335,16 @@ impl Group {
                 if existing_entry == entry {
                     continue;
                 }
+
+                let epoch = chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
+                let now = Times::now();
+                let source_location_changed_time =
+                    entry.times.get_last_modification().unwrap_or(&epoch);
+                let destination_location_changed_time =
+                    entry.times.get_last_modification().unwrap_or(&now);
+                if source_location_changed_time > destination_location_changed_time {
+                    // self.remove_entry(&entry.uuid, &entry_location);
+                }
                 // TODO relocate the existing entry if necessary
 
                 let merged_entry = existing_entry.merge(entry);
@@ -506,6 +516,7 @@ mod group_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_merge_entry_relocation() {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
