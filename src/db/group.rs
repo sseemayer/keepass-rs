@@ -230,6 +230,45 @@ impl Group {
         }
     }
 
+    pub(crate) fn remove_entry(&mut self, uuid: &Uuid, location: &NodeLocation) {
+        if location.len() == 0 {
+            panic!("TODO handle this with a Response.");
+        }
+
+        let mut remaining_location = location.clone();
+        remaining_location.remove(0);
+
+        if remaining_location.len() == 0 {
+            // FIXME we should verify that we removed the entry!
+            self.children.iter_mut().filter(|n| {
+                if let Node::Entry(e) = n {
+                    return e.uuid == *uuid;
+                }
+                return false;
+            });
+            return;
+        }
+
+        let next_location = &remaining_location[0];
+
+        println!(
+            "Searching for group {} {:?}",
+            next_location.name, next_location.uuid
+        );
+        for node in &mut self.children {
+            if let Node::Group(g) = node {
+                if g.uuid != next_location.uuid {
+                    continue;
+                }
+                g.remove_entry(uuid, &remaining_location);
+                return;
+            }
+        }
+
+        // The group was not found, so we create it.
+        panic!("TODO handle this with a Response.");
+    }
+
     pub fn find_entry_by_uuid(&self, id: Uuid) -> Option<&Entry> {
         for node in &self.children {
             match node {
@@ -370,7 +409,7 @@ impl<'a> IntoIterator for &'a Group {
 mod group_tests {
     use std::{thread, time};
 
-    use super::{Entry, Group, Node, Value};
+    use super::{Entry, Group, Node, Times, Value};
 
     #[test]
     fn test_merge_idempotence() {
@@ -464,6 +503,40 @@ mod group_tests {
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_entry_relocation() {
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.set_field_and_commit("Title", "entry1");
+        let mut destination_group = Group::new("group1");
+        let mut destination_sub_group = Group::new("subgroup1");
+        destination_sub_group
+            .children
+            .push(Node::Entry(entry.clone()));
+        destination_group
+            .children
+            .push(Node::Group(destination_sub_group));
+
+        let mut source_group = destination_group.clone();
+        let mut source_sub_group = Group::new("subgroup2");
+        thread::sleep(time::Duration::from_secs(1));
+        entry.times.set_location_changed(Times::now());
+        // FIXME we should not have to update the history here. We should
+        // have a better compare function in the merge function instead.
+        entry.update_history();
+        source_sub_group.children.push(Node::Entry(entry.clone()));
+        source_group.children = vec![];
+        source_group.children.push(Node::Group(source_sub_group));
+
+        destination_group.merge(&source_group);
+        let destination_entries = destination_group.get_all_entries(&vec![]);
+        assert_eq!(destination_entries.len(), 1);
+        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+        assert_eq!(created_entry_location.len(), 2);
+        assert_eq!(created_entry_location[0].name, "group1".to_string());
+        assert_eq!(created_entry_location[1].name, "subgroup2".to_string());
     }
 
     #[test]
