@@ -8,6 +8,30 @@ use crate::db::{
     CustomData, Times,
 };
 
+#[derive(Debug, Clone)]
+pub enum MergeEventType {
+    EntryCreated,
+    EntryLocationUpdated,
+
+    EntryUpdated,
+    GroupCreated,
+}
+
+#[derive(Debug, Clone)]
+pub struct MergeEvent {
+    /// The uuid of the node (entry or group) affected by
+    /// the merge event.
+    pub node_uuid: Uuid,
+
+    pub event_type: MergeEventType,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MergeLog {
+    pub warnings: Vec<String>,
+    pub events: Vec<MergeEvent>,
+}
+
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 pub(crate) struct GroupRef {
     pub uuid: Uuid,
@@ -264,24 +288,36 @@ impl Group {
     }
 
     /// Merge this group with another group
-    pub fn merge(&mut self, other: &Group) {
+    pub fn merge(&mut self, other: &Group) -> MergeLog {
+        let mut log = MergeLog::default();
+
         for (entry, entry_location) in other.get_all_entries(&vec![]) {
             if let Some(existing_entry) = self.find_entry_by_uuid(entry.uuid) {
                 if existing_entry == entry {
                     continue;
                 }
                 // TODO relocate the existing entry if necessary
+
                 let merged_entry = existing_entry.merge(entry);
                 self.replace_entry(&merged_entry);
+                log.events.push(MergeEvent {
+                    event_type: MergeEventType::EntryUpdated,
+                    node_uuid: merged_entry.uuid,
+                });
             } else {
                 println!("Adding entry {} at {:?}", entry.uuid, &entry_location);
                 self.add_entry(entry.clone(), &entry_location);
                 // TODO should we update the time info for the entry?
+                log.events.push(MergeEvent {
+                    event_type: MergeEventType::EntryCreated,
+                    node_uuid: entry.uuid,
+                });
             }
         }
 
         // TODO update locations
         // TODO handle deleted objects
+        log
     }
 
     // Recursively get all the entries in the group, along with their
