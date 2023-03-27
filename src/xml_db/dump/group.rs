@@ -30,6 +30,7 @@ impl DumpXml for Group {
         }
 
         self.times.dump_xml(writer, inner_cipher)?;
+        self.custom_data.dump_xml(writer, inner_cipher)?;
 
         SimpleTag("IsExpanded", self.is_expanded).dump_xml(writer, inner_cipher)?;
 

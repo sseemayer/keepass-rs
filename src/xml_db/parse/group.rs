@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    db::{Entry, Group, Node, Times},
+    db::{CustomData, Entry, Group, Node, Times},
     xml_db::parse::{FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
 };
 
@@ -75,6 +75,9 @@ impl FromXml for Group {
                     "Group" => {
                         let group = Group::from_xml(iterator, inner_cipher)?;
                         out.children.push(Node::Group(group));
+                    }
+                    "CustomData" => {
+                        out.custom_data = CustomData::from_xml(iterator, inner_cipher)?;
                     }
                     _ => {
                         IgnoreSubfield::from_xml(iterator, inner_cipher)?;
