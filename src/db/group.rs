@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::db::{
     node::{Node, NodeIter, NodeRef, NodeRefMut},
-    Times,
+    CustomData, Times,
 };
 
 /// A database group with child groups and entries
@@ -31,6 +31,9 @@ pub struct Group {
 
     /// The list of time fields for this group
     pub times: Times,
+
+    // Custom Data
+    pub custom_data: CustomData,
 
     /// Whether the group is expanded in the user interface
     pub is_expanded: bool,

@@ -152,6 +152,12 @@ mod tests {
 
         subgroup.last_top_visible_entry = Some(uuid!("43210000000000000000000000000000"));
 
+        subgroup.custom_data.items.push(CustomDataItem {
+            key: "CustomOption".to_string(),
+            value: Some(Value::Unprotected("CustomOption-Value".to_string())),
+            last_modification_time: Some(NaiveDateTime::default()),
+        });
+
         root_group.children.push(Node::Group(subgroup));
 
         let mut db = Database::new(DatabaseConfig::default());
