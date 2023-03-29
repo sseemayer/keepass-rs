@@ -12,7 +12,8 @@ use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 use crate::{
     crypt::ciphers::Cipher,
     db::{
-        Color, CustomData, CustomDataItem, DeletedObject, DeletedObjects, Group, Meta, Times, Value,
+        Color, CustomData, CustomDataItem, CustomDataItemDenormalized, DeletedObject,
+        DeletedObjects, Group, Meta, Times, Value,
     },
     error::XmlParseError,
     xml_db::get_epoch_baseline,
@@ -511,8 +512,16 @@ impl FromXml for CustomData {
             match event {
                 SimpleXmlEvent::Start(name, _) => match &name[..] {
                     "Item" => {
-                        let item = CustomDataItem::from_xml(iterator, inner_cipher)?;
-                        out.items.push(item);
+                        let item = CustomDataItemDenormalized::from_xml(iterator, inner_cipher)?;
+                        out.items.insert(
+                            item.key.to_string(),
+                            CustomDataItem {
+                                value: item.custom_data_item.value,
+                                last_modification_time: item
+                                    .custom_data_item
+                                    .last_modification_time,
+                            },
+                        );
                     }
                     _ => {
                         return Err(XmlParseError::BadEvent {
@@ -538,7 +547,7 @@ impl FromXml for CustomData {
     }
 }
 
-impl FromXml for CustomDataItem {
+impl FromXml for CustomDataItemDenormalized {
     type Parses = Self;
 
     fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
@@ -562,10 +571,10 @@ impl FromXml for CustomDataItem {
                         out.key = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Value" => {
-                        out.value = Some(Value::from_xml(iterator, inner_cipher)?);
+                        out.custom_data_item.value = Some(Value::from_xml(iterator, inner_cipher)?);
                     }
                     "LastModificationTime" => {
-                        out.last_modification_time =
+                        out.custom_data_item.last_modification_time =
                             SimpleTag::<Option<NaiveDateTime>>::from_xml(iterator, inner_cipher)?
                                 .value;
                     }
@@ -639,7 +648,8 @@ mod parse_test {
         config::InnerCipherConfig,
         crypt::ciphers::PlainCipher,
         db::{
-            AutoType, AutoTypeAssociation, CustomData, CustomDataItem, Entry, History, Times, Value,
+            AutoType, AutoTypeAssociation, CustomData, CustomDataItem, CustomDataItemDenormalized,
+            Entry, History, Times, Value,
         },
         xml_db::parse::{entry::StringField, DeletedObject, DeletedObjects, IgnoreSubfield, Root},
     };
@@ -847,16 +857,20 @@ mod parse_test {
 
     #[test]
     fn test_custom_data_item_failures() -> Result<(), XmlParseError> {
-        let value = parse_test_xml::<CustomDataItem>("<TestTag>SomeData</TestTag>");
+        let value = parse_test_xml::<CustomDataItemDenormalized>("<TestTag>SomeData</TestTag>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
-        let value = parse_test_xml::<CustomDataItem>("<Item></TestTag>");
+        let value = parse_test_xml::<CustomDataItemDenormalized>("<Item></TestTag>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
-        let value = parse_test_xml::<CustomDataItem>("<Item>No-Characters-Allowed</Item>");
+        let value =
+            parse_test_xml::<CustomDataItemDenormalized>("<Item>No-Characters-Allowed</Item>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
-        let value = parse_test_xml::<CustomDataItem>("<Item><UnkownChildTag/></Item>");
+        let value = parse_test_xml::<CustomDataItemDenormalized>("<Item><UnkownChildTag/></Item>");
+        assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
+
+        let value = parse_test_xml::<CustomDataItemDenormalized>("<Item><Key></Key><Value>EmptyKey</Value><LastModificationTime>1234</LastModificationTime></Item>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         Ok(())

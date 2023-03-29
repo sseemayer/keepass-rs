@@ -11,6 +11,7 @@ pub fn get_epoch_baseline() -> chrono::NaiveDateTime {
 mod tests {
     use chrono::NaiveDateTime;
     use secstr::SecStr;
+    use std::collections::HashMap;
     use uuid::uuid;
 
     use crate::{
@@ -81,11 +82,13 @@ mod tests {
             ],
         });
 
-        entry.custom_data.items.push(CustomDataItem {
-            key: "CDI-key".to_string(),
-            value: Some(Value::Unprotected("CDI-Value".to_string())),
-            last_modification_time: Some(NaiveDateTime::default()),
-        });
+        entry.custom_data.items.insert(
+            "CDI-key".to_string(),
+            CustomDataItem {
+                value: Some(Value::Unprotected("CDI-Value".to_string())),
+                last_modification_time: Some(NaiveDateTime::default()),
+            },
+        );
 
         entry.icon_id = Some(123);
         entry.custom_icon_uuid = Some(uuid!("22222222222222222222222222222222"));
@@ -152,11 +155,13 @@ mod tests {
 
         subgroup.last_top_visible_entry = Some(uuid!("43210000000000000000000000000000"));
 
-        subgroup.custom_data.items.push(CustomDataItem {
-            key: "CustomOption".to_string(),
-            value: Some(Value::Unprotected("CustomOption-Value".to_string())),
-            last_modification_time: Some(NaiveDateTime::default()),
-        });
+        subgroup.custom_data.items.insert(
+            "CustomOption".to_string(),
+            CustomDataItem {
+                value: Some(Value::Unprotected("CustomOption-Value".to_string())),
+                last_modification_time: Some(NaiveDateTime::default()),
+            },
+        );
 
         root_group.children.push(Node::Group(subgroup));
 
@@ -242,23 +247,31 @@ mod tests {
                 ],
             },
             custom_data: CustomData {
-                items: vec![
-                    CustomDataItem {
-                        key: "custom-data-key".to_string(),
-                        value: Some(Value::Unprotected("custom-data-value".to_string())),
-                        last_modification_time: Some("2000-12-31T12:35:03".parse().unwrap()),
-                    },
-                    CustomDataItem {
-                        key: "custom-data-key-without-value".to_string(),
-                        value: None,
-                        last_modification_time: None,
-                    },
-                    CustomDataItem {
-                        key: "custom-data-protected-key".to_string(),
-                        value: Some(Value::Protected(SecStr::new(b"custom-data-value".to_vec()))),
-                        last_modification_time: Some("2000-12-31T12:35:03".parse().unwrap()),
-                    },
-                ],
+                items: HashMap::from([
+                    (
+                        "custom-data-key".to_string(),
+                        CustomDataItem {
+                            value: Some(Value::Unprotected("custom-data-value".to_string())),
+                            last_modification_time: Some("2000-12-31T12:35:03".parse().unwrap()),
+                        },
+                    ),
+                    (
+                        "custom-data-key-without-value".to_string(),
+                        CustomDataItem {
+                            value: None,
+                            last_modification_time: None,
+                        },
+                    ),
+                    (
+                        "custom-data-protected-key".to_string(),
+                        CustomDataItem {
+                            value: Some(Value::Protected(SecStr::new(
+                                b"custom-data-value".to_vec(),
+                            ))),
+                            last_modification_time: Some("2000-12-31T12:35:03".parse().unwrap()),
+                        },
+                    ),
+                ]),
             },
         };
 
