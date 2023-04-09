@@ -47,6 +47,7 @@ pub struct Argon2Kdf {
     pub iterations: u64,
     pub parallelism: u32,
     pub version: argon2::Version,
+    pub variant: argon2::Variant,
 }
 
 impl Kdf for Argon2Kdf {
@@ -62,7 +63,7 @@ impl Kdf for Argon2Kdf {
             secret: &[],
             thread_mode: argon2::ThreadMode::default(),
             time_cost: self.iterations as u32,
-            variant: argon2::Variant::Argon2d,
+            variant: self.variant,
             version: self.version,
         };
 

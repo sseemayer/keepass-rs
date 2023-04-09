@@ -192,8 +192,20 @@ const KDF_ROUNDS: &str = "R";
 pub enum KdfConfig {
     /// Derive keys with repeated AES encryption
     Aes { rounds: u64 },
-    /// Derive keys with Argon2
+    /// Derive keys with Argon2d
     Argon2 {
+        iterations: u64,
+        memory: u64,
+        parallelism: u32,
+
+        #[cfg_attr(
+            feature = "serialization",
+            serde(serialize_with = "serialize_argon2_version")
+        )]
+        version: argon2::Version,
+    },
+    /// Derive keys with Argon2id
+    Argon2id {
         iterations: u64,
         memory: u64,
         parallelism: u32,
@@ -219,6 +231,7 @@ impl KdfConfig {
         match self {
             KdfConfig::Aes { .. } => 32,
             KdfConfig::Argon2 { .. } => 32,
+            KdfConfig::Argon2id { .. } => 32,
         }
     }
 
@@ -253,6 +266,20 @@ impl KdfConfig {
                 iterations: *iterations,
                 parallelism: *parallelism,
                 version: *version,
+                variant: argon2::Variant::Argon2d,
+            }),
+            KdfConfig::Argon2id {
+                memory,
+                iterations,
+                parallelism,
+                version,
+            } => Box::new(kdf::Argon2Kdf {
+                memory: *memory,
+                salt: seed.to_vec(),
+                iterations: *iterations,
+                parallelism: *parallelism,
+                version: *version,
+                variant: argon2::Variant::Argon2id,
             }),
         }
     }
@@ -279,6 +306,19 @@ impl KdfConfig {
                 vd.set(KDF_PARALLELISM, *parallelism);
                 vd.set(KDF_VERSION, version.as_u32());
             }
+            KdfConfig::Argon2id {
+                memory,
+                iterations,
+                parallelism,
+                version,
+            } => {
+                vd.set(KDF_ID, KDF_ARGON2ID.to_vec());
+                vd.set(KDF_MEMORY, *memory);
+                vd.set(KDF_SALT, seed.to_vec());
+                vd.set(KDF_ITERATIONS, *iterations);
+                vd.set(KDF_PARALLELISM, *parallelism);
+                vd.set(KDF_VERSION, version.as_u32());
+            }
         }
 
         vd
@@ -288,6 +328,7 @@ impl KdfConfig {
 const KDF_AES_KDBX3: [u8; 16] = hex!("c9d9f39a628a4460bf740d08c18a4fea");
 const KDF_AES_KDBX4: [u8; 16] = hex!("7c02bb8279a74ac0927d114a00648238");
 const KDF_ARGON2: [u8; 16] = hex!("ef636ddf8c29444b91f7a9a403e30a0c");
+const KDF_ARGON2ID: [u8; 16] = hex!("9e298b1956db4773b23dfc3ec6f0a1e6");
 
 impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
     type Error = KdfConfigError;
@@ -295,7 +336,29 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
     fn try_from(vd: VariantDictionary) -> Result<(KdfConfig, Vec<u8>), Self::Error> {
         let uuid = vd.get::<Vec<u8>>(KDF_ID)?;
 
-        if uuid == &KDF_ARGON2 {
+        if uuid == &KDF_ARGON2ID {
+            let memory: u64 = *vd.get(KDF_MEMORY)?;
+            let salt: Vec<u8> = vd.get::<Vec<u8>>(KDF_SALT)?.clone();
+            let iterations: u64 = *vd.get(KDF_ITERATIONS)?;
+            let parallelism: u32 = *vd.get(KDF_PARALLELISM)?;
+            let version: u32 = *vd.get(KDF_VERSION)?;
+
+            let version = match version {
+                0x10 => argon2::Version::Version10,
+                0x13 => argon2::Version::Version13,
+                _ => return Err(KdfConfigError::InvalidKDFVersion { version }),
+            };
+
+            Ok((
+                KdfConfig::Argon2id {
+                    memory,
+                    iterations,
+                    parallelism,
+                    version,
+                },
+                salt,
+            ))
+        } else if uuid == &KDF_ARGON2 {
             let memory: u64 = *vd.get(KDF_MEMORY)?;
             let salt: Vec<u8> = vd.get::<Vec<u8>>(KDF_SALT)?.clone();
             let iterations: u64 = *vd.get(KDF_ITERATIONS)?;
