@@ -117,6 +117,12 @@ mod kdbx4_tests {
                 parallelism: 2,
                 version: argon2::Version::Version13,
             },
+            KdfConfig::Argon2id {
+                iterations: 10,
+                memory: 65536,
+                parallelism: 2,
+                version: argon2::Version::Version13,
+            },
         ];
 
         for outer_cipher_config in &outer_cipher_configs {
