@@ -648,8 +648,8 @@ mod parse_test {
         config::InnerCipherConfig,
         crypt::ciphers::PlainCipher,
         db::{
-            AutoType, AutoTypeAssociation, CustomData, CustomDataItem, CustomDataItemDenormalized,
-            Entry, History, Times, Value,
+            AutoType, AutoTypeAssociation, CustomData, CustomDataItemDenormalized, Entry, History,
+            Times, Value,
         },
         xml_db::parse::{entry::StringField, DeletedObject, DeletedObjects, IgnoreSubfield, Root},
     };
