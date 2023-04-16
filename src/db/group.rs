@@ -341,37 +341,44 @@ impl Group {
     pub fn merge(&mut self, other: &Group) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
+        // Handle entry relocation.
+        for (entry, entry_location) in other.get_all_entries(&vec![]) {
+            let existing_entry = match self.find_entry_by_uuid(entry.uuid) {
+                Some(e) => e,
+                None => continue,
+            };
+
+            let source_location_changed_time = match entry.times.get_location_changed() {
+                Some(t) => *t,
+                None => {
+                    log.warnings.push(format!(
+                        "Entry {} did not have a location updated timestamp",
+                        entry.uuid
+                    ));
+                    Times::epoch()
+                }
+            };
+            let destination_location_changed = match existing_entry.times.get_location_changed() {
+                Some(t) => *t,
+                None => {
+                    log.warnings.push(format!(
+                        "Entry {} did not have a location updated timestamp",
+                        entry.uuid
+                    ));
+                    Times::now()
+                }
+            };
+            if source_location_changed_time > destination_location_changed {
+                // self.remove_entry(&entry.uuid, &entry_location);
+            }
+            // TODO relocate the existing entry if necessary
+        }
+
         for (entry, entry_location) in other.get_all_entries(&vec![]) {
             if let Some(existing_entry) = self.find_entry_by_uuid(entry.uuid) {
                 if existing_entry == entry {
                     continue;
                 }
-
-                let source_location_changed_time = match entry.times.get_location_changed() {
-                    Some(t) => *t,
-                    None => {
-                        log.warnings.push(format!(
-                            "Entry {} did not have a location updated timestamp",
-                            entry.uuid
-                        ));
-                        Times::epoch()
-                    }
-                };
-                let destination_location_changed = match existing_entry.times.get_location_changed()
-                {
-                    Some(t) => *t,
-                    None => {
-                        log.warnings.push(format!(
-                            "Entry {} did not have a location updated timestamp",
-                            entry.uuid
-                        ));
-                        Times::now()
-                    }
-                };
-                if source_location_changed_time > destination_location_changed {
-                    // self.remove_entry(&entry.uuid, &entry_location);
-                }
-                // TODO relocate the existing entry if necessary
 
                 let (merged_entry, entry_merge_log) = existing_entry.merge(entry)?;
                 self.replace_entry(&merged_entry);
