@@ -32,6 +32,17 @@ pub struct MergeLog {
     pub events: Vec<MergeEvent>,
 }
 
+impl MergeLog {
+    pub fn merge_with(&self, other: &MergeLog) -> MergeLog {
+        let mut response = MergeLog::default();
+        response.warnings.append(self.warnings.clone().as_mut());
+        response.warnings.append(other.warnings.clone().as_mut());
+        response.events.append(self.events.clone().as_mut());
+        response.events.append(other.events.clone().as_mut());
+        response
+    }
+}
+
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 pub(crate) struct GroupRef {
     pub uuid: Uuid,
@@ -347,12 +358,13 @@ impl Group {
                 }
                 // TODO relocate the existing entry if necessary
 
-                let merged_entry = existing_entry.merge(entry)?;
+                let (merged_entry, entry_merge_log) = existing_entry.merge(entry)?;
                 self.replace_entry(&merged_entry);
                 log.events.push(MergeEvent {
                     event_type: MergeEventType::EntryUpdated,
                     node_uuid: merged_entry.uuid,
                 });
+                log = log.merge_with(&entry_merge_log);
             } else {
                 self.add_entry(entry.clone(), &entry_location);
                 // TODO should we update the time info for the entry?

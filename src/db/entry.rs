@@ -5,6 +5,7 @@ use chrono::NaiveDateTime;
 use secstr::SecStr;
 use uuid::Uuid;
 
+use crate::db::group::MergeLog;
 use crate::db::{Color, CustomData, Times};
 
 #[cfg(feature = "totp")]
@@ -43,8 +44,9 @@ impl Entry {
         }
     }
 
-    pub(crate) fn merge(&self, other: &Entry) -> Result<Entry, String> {
+    pub(crate) fn merge(&self, other: &Entry) -> Result<(Entry, MergeLog), String> {
         let mut response: Entry = Entry::default();
+        let mut log = MergeLog::default();
 
         let destination_modification_time = self.times.get_last_modification().unwrap();
         let source_modification_time = other.times.get_last_modification().unwrap();
@@ -60,19 +62,21 @@ impl Entry {
         // TODO we could add to the warnings that those entries had no history.
         let mut source_history = other.history.clone().unwrap_or(History::default());
         let mut destination_history = self.history.clone().unwrap_or(History::default());
+        let mut history_merge_log: MergeLog = MergeLog::default();
 
         if destination_modification_time > source_modification_time {
             response = self.clone();
             source_history.add_entry(other.clone());
-            destination_history.merge_with(&source_history);
+            history_merge_log = destination_history.merge_with(&source_history).unwrap();
             response.history = Some(destination_history);
         } else {
             response = other.clone();
             destination_history.add_entry(self.clone());
-            source_history.merge_with(&destination_history);
+            history_merge_log = source_history.merge_with(&destination_history).unwrap();
             response.history = Some(source_history);
         }
-        Ok(response)
+
+        Ok((response, log.merge_with(&history_merge_log)))
     }
 
     // Convenience function used in unit tests, to make sure that:
@@ -307,14 +311,14 @@ impl History {
     }
 
     // Merge both histories together.
-    pub(crate) fn merge_with(&mut self, other: &History) {
+    pub(crate) fn merge_with(&mut self, other: &History) -> Result<MergeLog, String> {
+        let mut log = MergeLog::default();
         let mut new_history_entries: HashMap<NaiveDateTime, Entry> = HashMap::new();
 
         for history_entry in &self.entries {
             let modification_time = history_entry.times.get_last_modification().unwrap();
             if new_history_entries.contains_key(modification_time) {
-                // DISCUSS we should handle that differently
-                panic!("This should never happen.");
+                return Err("This should never happen.".to_string());
             }
             new_history_entries.insert(modification_time.clone(), history_entry.clone());
         }
@@ -324,8 +328,8 @@ impl History {
             let existing_history_entry = new_history_entries.get(modification_time);
             if let Some(existing_history_entry) = existing_history_entry {
                 if !existing_history_entry.eq(&history_entry) {
-                    // TODO two history entries with the same modification time should
-                    // be exactly the same!! This should never happen
+                    // FIXME this will make the unit tests fail.
+                    // return Err("History entries have the same modification timestamp but were not the same.".to_string());
                 }
             } else {
                 new_history_entries.insert(modification_time.clone(), history_entry.clone());
@@ -342,8 +346,11 @@ impl History {
 
         self.entries = new_entries;
         if !self.is_ordered() {
-            panic!("FIXME this should go into the unit tests.")
+            // TODO this should be unit tested.
+            return Err("The resulting history is not ordered.".to_string());
         }
+
+        Ok(log)
     }
 }
 
