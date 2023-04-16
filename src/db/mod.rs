@@ -218,6 +218,10 @@ impl Times {
         chrono::NaiveDateTime::from_timestamp_opt(now, 0).unwrap()
     }
 
+    pub fn epoch() -> NaiveDateTime {
+        chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap()
+    }
+
     pub fn new() -> Times {
         let mut response = Times::default();
         let now = Times::now();

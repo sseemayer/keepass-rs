@@ -347,13 +347,28 @@ impl Group {
                     continue;
                 }
 
-                let epoch = chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
-                let now = Times::now();
-                let source_location_changed_time =
-                    entry.times.get_location_changed().unwrap_or(&epoch);
-                let destination_location_changed_time =
-                    existing_entry.times.get_location_changed().unwrap_or(&now);
-                if source_location_changed_time > destination_location_changed_time {
+                let source_location_changed_time = match entry.times.get_location_changed() {
+                    Some(t) => *t,
+                    None => {
+                        log.warnings.push(format!(
+                            "Entry {} did not have a location updated timestamp",
+                            entry.uuid
+                        ));
+                        Times::epoch()
+                    }
+                };
+                let destination_location_changed = match existing_entry.times.get_location_changed()
+                {
+                    Some(t) => *t,
+                    None => {
+                        log.warnings.push(format!(
+                            "Entry {} did not have a location updated timestamp",
+                            entry.uuid
+                        ));
+                        Times::now()
+                    }
+                };
+                if source_location_changed_time > destination_location_changed {
                     // self.remove_entry(&entry.uuid, &entry_location);
                 }
                 // TODO relocate the existing entry if necessary
