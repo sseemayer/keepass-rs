@@ -43,7 +43,7 @@ impl Entry {
         }
     }
 
-    pub(crate) fn merge(&self, other: &Entry) -> Entry {
+    pub(crate) fn merge(&self, other: &Entry) -> Result<Entry, String> {
         let mut response: Entry = Entry::default();
 
         let destination_modification_time = self.times.get_last_modification().unwrap();
@@ -55,30 +55,21 @@ impl Entry {
             panic!("Entries have the same modification time but are not the same!")
         }
 
+        let mut source_history = other.history.clone().unwrap_or(History::default());
+        let mut destination_history = self.history.clone().unwrap_or(History::default());
+
         if destination_modification_time > source_modification_time {
             response = self.clone();
-            // TODO we could just return if the other entry doesn't have a history.
-            let mut source_history = other.history.clone().unwrap_or(History::default());
             source_history.add_entry(other.clone());
-            let mut new_history = self.history.clone().unwrap_or(History::default()).clone();
-            new_history.merge_with(&source_history);
-            response.history = Some(new_history);
+            destination_history.merge_with(&source_history);
+            response.history = Some(destination_history);
         } else {
             response = other.clone();
-
-            let mut destination_history = self.history.clone().unwrap_or(History::default());
             destination_history.add_entry(self.clone());
-            let mut new_history = other.history.clone().unwrap_or(History::default()).clone();
-            new_history.merge_with(&destination_history);
-            response.history = Some(new_history);
+            source_history.merge_with(&destination_history);
+            response.history = Some(source_history);
         }
-        response
-    }
-
-    pub(crate) fn merge_into(&mut self, other: Entry) {
-        // TODO we could just return if the other entry doesn't have a history.
-        let mut source_history = other.history.clone().unwrap();
-        source_history.add_entry(other);
+        Ok(response)
     }
 
     // Convenience function used in unit tests, to make sure that:

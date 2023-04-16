@@ -327,7 +327,7 @@ impl Group {
     }
 
     /// Merge this group with another group
-    pub fn merge(&mut self, other: &Group) -> MergeLog {
+    pub fn merge(&mut self, other: &Group) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
         for (entry, entry_location) in other.get_all_entries(&vec![]) {
@@ -339,22 +339,21 @@ impl Group {
                 let epoch = chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
                 let now = Times::now();
                 let source_location_changed_time =
-                    entry.times.get_last_modification().unwrap_or(&epoch);
+                    entry.times.get_location_changed().unwrap_or(&epoch);
                 let destination_location_changed_time =
-                    entry.times.get_last_modification().unwrap_or(&now);
+                    existing_entry.times.get_location_changed().unwrap_or(&now);
                 if source_location_changed_time > destination_location_changed_time {
                     // self.remove_entry(&entry.uuid, &entry_location);
                 }
                 // TODO relocate the existing entry if necessary
 
-                let merged_entry = existing_entry.merge(entry);
+                let merged_entry = existing_entry.merge(entry)?;
                 self.replace_entry(&merged_entry);
                 log.events.push(MergeEvent {
                     event_type: MergeEventType::EntryUpdated,
                     node_uuid: merged_entry.uuid,
                 });
             } else {
-                println!("Adding entry {} at {:?}", entry.uuid, &entry_location);
                 self.add_entry(entry.clone(), &entry_location);
                 // TODO should we update the time info for the entry?
                 log.events.push(MergeEvent {
@@ -366,7 +365,7 @@ impl Group {
 
         // TODO update locations
         // TODO handle deleted objects
-        log
+        Ok(log)
     }
 
     // Recursively get all the entries in the group, along with their
