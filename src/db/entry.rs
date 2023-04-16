@@ -59,20 +59,33 @@ impl Entry {
             );
         }
 
-        // TODO we could add to the warnings that those entries had no history.
-        let mut source_history = other.history.clone().unwrap_or(History::default());
-        let mut destination_history = self.history.clone().unwrap_or(History::default());
+        let mut source_history = match &other.history {
+            Some(h) => h.clone(),
+            None => {
+                log.warnings
+                    .push(format!("Entry {} had no history.", self.uuid));
+                History::default()
+            }
+        };
+        let mut destination_history = match &self.history {
+            Some(h) => h.clone(),
+            None => {
+                log.warnings
+                    .push(format!("Entry {} had no history.", self.uuid));
+                History::default()
+            }
+        };
         let mut history_merge_log: MergeLog = MergeLog::default();
 
         if destination_modification_time > source_modification_time {
             response = self.clone();
             source_history.add_entry(other.clone());
-            history_merge_log = destination_history.merge_with(&source_history).unwrap();
+            history_merge_log = destination_history.merge_with(&source_history)?;
             response.history = Some(destination_history);
         } else {
             response = other.clone();
             destination_history.add_entry(self.clone());
-            history_merge_log = source_history.merge_with(&destination_history).unwrap();
+            history_merge_log = source_history.merge_with(&destination_history)?;
             response.history = Some(source_history);
         }
 
