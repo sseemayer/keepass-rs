@@ -49,12 +49,15 @@ impl Entry {
         let destination_modification_time = self.times.get_last_modification().unwrap();
         let source_modification_time = other.times.get_last_modification().unwrap();
         if destination_modification_time == source_modification_time && !self.eq(&other) {
-            // TODO this should never happen!!!
+            // This should never happen.
             // This means that an entry was updated without updating the last modification
             // timestamp.
-            panic!("Entries have the same modification time but are not the same!")
+            return Err(
+                "Entries have the same modification time but are not the same!".to_string(),
+            );
         }
 
+        // TODO we could add to the warnings that those entries had no history.
         let mut source_history = other.history.clone().unwrap_or(History::default());
         let mut destination_history = self.history.clone().unwrap_or(History::default());
 
