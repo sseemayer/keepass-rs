@@ -142,6 +142,23 @@ mod file_read_tests {
     }
 
     #[test]
+    fn open_kdbx4_with_password_kdf_argon2id_cipher_aes() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2id.kdbx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.children.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
     fn open_kdbx4_with_password_kdf_aes_cipher_aes() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(
@@ -177,6 +194,40 @@ mod file_read_tests {
     #[test]
     fn open_kdbx4_with_password_kdf_argon2_cipher_chacha20() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2_chacha20.kdbx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.children.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn open_kdbx4_with_password_kdf_argon2id_cipher_twofish() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2id_twofish.kdbx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::with_password("demopass"),
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.children.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn open_kdbx4_with_password_kdf_argon2id_cipher_chacha20() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_password_argon2id_chacha20.kdbx");
 
         let db = Database::open(
             &mut File::open(path)?,
