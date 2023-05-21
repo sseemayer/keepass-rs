@@ -241,43 +241,126 @@ impl Group {
         }
     }
 
-    pub(crate) fn remove_entry(&mut self, uuid: &Uuid, location: &NodeLocation) {
+    pub(crate) fn get_group_mut(&mut self, location: &NodeLocation) -> Result<&mut Group, String> {
         if location.len() == 0 {
-            panic!("TODO handle this with a Response.");
+            return Err("Empty location.".to_string());
         }
 
         let mut remaining_location = location.clone();
         remaining_location.remove(0);
 
         if remaining_location.len() == 0 {
-            // FIXME we should verify that we removed the entry!
-            self.children.iter_mut().filter(|n| {
-                if let Node::Entry(e) = n {
-                    return e.uuid == *uuid;
+            return Ok(self);
+        }
+
+        let next_location = &remaining_location[0];
+
+        for node in &mut self.children {
+            if let Node::Group(g) = node {
+                if g.uuid != next_location.uuid {
+                    continue;
                 }
-                return false;
-            });
-            return;
+                return g.get_group_mut(&remaining_location);
+            }
+        }
+
+        return Err("The group was not found.".to_string());
+    }
+
+    pub(crate) fn insert_entry(
+        &mut self,
+        entry: Entry,
+        location: &NodeLocation,
+    ) -> Result<(), String> {
+        let mut group: &mut Group = self.get_group_mut(&location)?;
+        group.children.push(Node::Entry(entry));
+        Ok(())
+    }
+
+    pub(crate) fn remove_entry(
+        &mut self,
+        uuid: &Uuid,
+        location: &NodeLocation,
+    ) -> Result<Entry, String> {
+        // FIXME this should use get_group_mut instead of re-implementing the group
+        // searching algorithm.
+        if location.len() == 0 {
+            return Err("Empty location.".to_string());
+        }
+
+        let mut remaining_location = location.clone();
+        remaining_location.remove(0);
+
+        if remaining_location.len() == 0 {
+            let mut removed_entry: Option<Entry> = None;
+            let mut new_nodes: Vec<Node> = vec![];
+            println!("Searching for entry {} in {}", uuid, self.name);
+            for node in &self.children {
+                match node {
+                    Node::Entry(e) => {
+                        println!("Saw entry {}", &e.uuid);
+                        if &e.uuid != uuid {
+                            new_nodes.push(node.clone());
+                            continue;
+                        }
+                        removed_entry = Some(e.clone());
+                    }
+                    Node::Group(_) => {
+                        new_nodes.push(node.clone());
+                    }
+                }
+            }
+
+            if let Some(entry) = removed_entry {
+                self.children = new_nodes;
+                return Ok(entry);
+            } else {
+                return Err(format!(
+                    "Could not find entry {} in group {}.",
+                    uuid, self.name
+                ));
+            }
         }
 
         let next_location = &remaining_location[0];
 
         println!(
-            "Searching for group {} {:?}",
-            next_location.name, next_location.uuid
+            "Searching for group {} {:?} in {}",
+            next_location.name, next_location.uuid, self.name
         );
         for node in &mut self.children {
             if let Node::Group(g) = node {
                 if g.uuid != next_location.uuid {
                     continue;
                 }
-                g.remove_entry(uuid, &remaining_location);
-                return;
+                return g.remove_entry(uuid, &remaining_location);
             }
         }
 
-        // The group was not found, so we create it.
-        panic!("TODO handle this with a Response.");
+        return Err("The group was not found.".to_string());
+    }
+
+    pub(crate) fn find_entry_location(&self, id: Uuid) -> Option<NodeLocation> {
+        let mut current_location = vec![GroupRef {
+            uuid: self.uuid.clone(),
+            name: self.name.clone(),
+        }];
+        for node in &self.children {
+            match node {
+                Node::Entry(e) => {
+                    if e.uuid == id {
+                        return Some(current_location);
+                    }
+                }
+                Node::Group(g) => {
+                    if let Some(mut location) = g.find_entry_location(id) {
+                        current_location.append(&mut location);
+                        return Some(current_location);
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn find_entry_by_uuid(&self, id: Uuid) -> Option<&Entry> {
@@ -347,6 +430,10 @@ impl Group {
                 Some(e) => e,
                 None => continue,
             };
+            let existing_entry_location = match self.find_entry_location(entry.uuid) {
+                Some(l) => l,
+                None => continue,
+            };
 
             let source_location_changed_time = match entry.times.get_location_changed() {
                 Some(t) => *t,
@@ -369,9 +456,13 @@ impl Group {
                 }
             };
             if source_location_changed_time > destination_location_changed {
-                // self.remove_entry(&entry.uuid, &entry_location);
+                log.events.push(MergeEvent {
+                    event_type: MergeEventType::EntryLocationUpdated,
+                    node_uuid: entry.uuid,
+                });
+                let removed_entry = self.remove_entry(&entry.uuid, &existing_entry_location)?;
+                self.insert_entry(entry.clone(), &entry_location);
             }
-            // TODO relocate the existing entry if necessary
         }
 
         for (entry, entry_location) in other.get_all_entries(&vec![]) {
@@ -397,7 +488,6 @@ impl Group {
             }
         }
 
-        // TODO update locations
         // TODO handle deleted objects
         Ok(log)
     }
@@ -452,7 +542,7 @@ impl<'a> IntoIterator for &'a Group {
 mod group_tests {
     use std::{thread, time};
 
-    use super::{Entry, Group, Node, Times, Value};
+    use super::{Entry, Group, GroupRef, Node, Times, Value};
 
     #[test]
     fn test_merge_idempotence() {
@@ -549,8 +639,75 @@ mod group_tests {
     }
 
     #[test]
+    fn test_merge_entry_relocation_existing_group() {
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.set_field_and_commit("Title", "entry1");
+        let mut destination_group = Group::new("group1");
+        let mut destination_sub_group1 = Group::new("subgroup1");
+        let mut destination_sub_group2 = Group::new("subgroup2");
+        destination_sub_group1
+            .children
+            .push(Node::Entry(entry.clone()));
+        destination_group
+            .children
+            .push(Node::Group(destination_sub_group1.clone()));
+        destination_group
+            .children
+            .push(Node::Group(destination_sub_group2.clone()));
+
+        let mut source_group = destination_group.clone();
+        assert!(source_group.get_all_entries(&vec![]).len() == 1);
+
+        let mut removed_entry = source_group
+            .remove_entry(
+                &entry_uuid,
+                &vec![
+                    GroupRef {
+                        uuid: destination_group.uuid.clone(),
+                        name: "".to_string(),
+                    },
+                    GroupRef {
+                        uuid: destination_sub_group1.uuid.clone(),
+                        name: "".to_string(),
+                    },
+                ],
+            )
+            .unwrap();
+        removed_entry.times.set_location_changed(Times::now());
+        assert!(source_group.get_all_entries(&vec![]).len() == 0);
+        // FIXME we should not have to update the history here. We should
+        // have a better compare function in the merge function instead.
+        removed_entry.update_history();
+        source_group
+            .insert_entry(
+                removed_entry,
+                &vec![
+                    GroupRef {
+                        uuid: destination_group.uuid.clone(),
+                        name: "".to_string(),
+                    },
+                    GroupRef {
+                        uuid: destination_sub_group2.uuid.clone(),
+                        name: "".to_string(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        destination_group.merge(&source_group);
+
+        let destination_entries = destination_group.get_all_entries(&vec![]);
+        assert_eq!(destination_entries.len(), 1);
+        let (moved_entry, moved_entry_location) = destination_entries.get(0).unwrap();
+        assert_eq!(moved_entry_location.len(), 2);
+        assert_eq!(moved_entry_location[0].name, "group1".to_string());
+        assert_eq!(moved_entry_location[1].name, "subgroup2".to_string());
+    }
+
+    #[test]
     #[ignore]
-    fn test_merge_entry_relocation() {
+    fn test_merge_entry_relocation_new_group() {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
