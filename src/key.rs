@@ -42,10 +42,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>, DatabaseKeyError> {
     Err(DatabaseKeyError::InvalidKeyFile)
 }
 
-fn parse_keyfile(source: &mut dyn std::io::Read) -> Result<Vec<u8>, DatabaseKeyError> {
-    let mut buffer = Vec::new();
-    source.read_to_end(&mut buffer)?;
-
+fn parse_keyfile(buffer: &[u8]) -> Result<Vec<u8>, DatabaseKeyError> {
     // try to parse the buffer as XML, if successful, use that data instead of full file
     if let Ok(v) = parse_xml_keyfile(&buffer) {
         Ok(v)
@@ -58,31 +55,34 @@ fn parse_keyfile(source: &mut dyn std::io::Read) -> Result<Vec<u8>, DatabaseKeyE
 }
 
 /// A KeePass key, which might consist of a password and/or a keyfile
-pub struct DatabaseKey<'p, 'f> {
-    pub password: Option<&'p str>,
-    pub keyfile: Option<&'f mut dyn Read>,
+#[derive(Debug, Clone, Default)]
+pub struct DatabaseKey {
+    pub password: Option<String>,
+    pub keyfile: Option<Vec<u8>>,
 }
 
-impl<'p, 'f> DatabaseKey<'p, 'f> {
-    pub fn with_password(password: &'p str) -> Self {
-        Self {
-            password: Some(password),
-            keyfile: None,
-        }
+impl DatabaseKey {
+    pub fn with_password(password: &str) -> Self {
+        Self::new(Some(password), None)
     }
 
-    pub fn with_keyfile(keyfile: &'f mut dyn Read) -> Self {
-        Self {
-            password: None,
-            keyfile: Some(keyfile),
-        }
+    pub fn with_keyfile(keyfile: &mut dyn Read) -> Self {
+        Self::new(None, Some(keyfile))
     }
 
-    pub fn with_password_and_keyfile(password: &'p str, keyfile: &'f mut dyn Read) -> Self {
-        Self {
-            password: Some(password),
-            keyfile: Some(keyfile),
-        }
+    pub fn with_password_and_keyfile(password: &str, keyfile: &mut dyn Read) -> Self {
+        Self::new(Some(password), Some(keyfile))
+    }
+
+    pub fn new(password: Option<&str>, mut keyfile: Option<&mut dyn Read>) -> Self {
+        let password = password.map(|p| p.to_string());
+
+        let keyfile = keyfile.as_mut().and_then(|kf| {
+            let mut buffer = Vec::new();
+            kf.read_to_end(&mut buffer).ok().map(|_| buffer)
+        });
+
+        Self { password, keyfile }
     }
 
     pub(crate) fn get_key_elements(self) -> Result<Vec<Vec<u8>>, DatabaseKeyError> {
@@ -92,7 +92,7 @@ impl<'p, 'f> DatabaseKey<'p, 'f> {
             out.push(calculate_sha256(&[p.as_bytes()])?.to_vec());
         }
 
-        if let Some(f) = self.keyfile {
+        if let Some(ref f) = self.keyfile {
             out.push(parse_keyfile(f)?);
         }
 

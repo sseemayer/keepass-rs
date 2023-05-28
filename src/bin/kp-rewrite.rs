@@ -44,21 +44,12 @@ pub fn main() -> Result<()> {
         None
     };
 
-    let db = Database::open(
-        &mut source,
-        DatabaseKey {
-            password,
-            keyfile: keyfile.as_mut().map(|kf| kf as &mut dyn Read),
-        },
-    )?;
+    let kf = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
+    let db = Database::open(&mut source, DatabaseKey::new(password, kf))?;
 
-    db.save(
-        &mut File::create(args.out_kdbx)?,
-        DatabaseKey {
-            password,
-            keyfile: keyfile.as_mut().map(|kf| kf as &mut dyn Read),
-        },
-    )?;
+    let mut out_file = File::create(args.out_kdbx)?;
+    let kf = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
+    db.save(&mut out_file, DatabaseKey::new(password, kf))?;
 
     Ok(())
 }

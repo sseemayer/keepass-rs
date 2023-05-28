@@ -38,7 +38,7 @@ pub fn main() -> Result<()> {
 
     let keyfile = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
 
-    let db = Database::open(&mut source, DatabaseKey { password, keyfile })?;
+    let db = Database::open(&mut source, DatabaseKey::new(password, keyfile))?;
 
     if let Some(NodeRef::Entry(e)) = db.root.get(&[&args.entry]) {
         let totp = e.get_otp().unwrap();

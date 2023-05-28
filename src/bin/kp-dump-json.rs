@@ -34,7 +34,7 @@ pub fn main() -> Result<()> {
 
     let keyfile = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
 
-    let db = Database::open(&mut source, DatabaseKey { password, keyfile })?;
+    let db = Database::open(&mut source, DatabaseKey::new(password, keyfile))?;
 
     let stdout = std::io::stdout().lock();
     serde_json::ser::to_writer(stdout, &db)?;
