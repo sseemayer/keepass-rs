@@ -57,8 +57,8 @@ fn parse_keyfile(buffer: &[u8]) -> Result<Vec<u8>, DatabaseKeyError> {
 /// A KeePass key, which might consist of a password and/or a keyfile
 #[derive(Debug, Clone, Default)]
 pub struct DatabaseKey {
-    pub password: Option<String>,
-    pub keyfile: Option<Vec<u8>>,
+    password: Option<String>,
+    keyfile: Option<Vec<u8>>,
 }
 
 impl DatabaseKey {
