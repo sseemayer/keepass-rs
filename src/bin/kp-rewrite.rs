@@ -1,6 +1,5 @@
 /// utility to parse a KeePass database, and then write it out again, to see if anything is lost.
 use std::fs::File;
-use std::io::{Cursor, Read};
 
 use anyhow::Result;
 use clap::Parser;
@@ -25,31 +24,23 @@ pub fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;
+    let mut key = DatabaseKey::new();
 
-    let password = rpassword::prompt_password("Password (or blank for none): ")
-        .expect("Could not read password from TTY");
+    if let Some(f) = args.keyfile {
+        key = key.with_keyfile(&mut File::open(f)?)?;
+    }
 
-    let password = if password.is_empty() {
-        None
-    } else {
-        Some(&password[..])
+    let password =
+        rpassword::prompt_password("Password (or blank for none): ").expect("Read password");
+
+    if !password.is_empty() {
+        key = key.with_password(&password);
     };
 
-    let mut keyfile: Option<Cursor<_>> = if let Some(kf) = args.keyfile {
-        let mut f = File::open(kf)?;
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf)?;
-        Some(Cursor::new(buf))
-    } else {
-        None
-    };
-
-    let kf = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
-    let db = Database::open(&mut source, DatabaseKey::new(password, kf))?;
+    let db = Database::open(&mut source, key.clone())?;
 
     let mut out_file = File::create(args.out_kdbx)?;
-    let kf = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
-    db.save(&mut out_file, DatabaseKey::new(password, kf))?;
+    db.save(&mut out_file, key)?;
 
     Ok(())
 }

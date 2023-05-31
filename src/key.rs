@@ -62,27 +62,22 @@ pub struct DatabaseKey {
 }
 
 impl DatabaseKey {
-    pub fn with_password(password: &str) -> Self {
-        Self::new(Some(password), None)
+    pub fn with_password(mut self, password: &str) -> Self {
+        self.password = Some(password.to_string());
+        self
     }
 
-    pub fn with_keyfile(keyfile: &mut dyn Read) -> Self {
-        Self::new(None, Some(keyfile))
+    pub fn with_keyfile(mut self, keyfile: &mut dyn Read) -> Result<Self, std::io::Error> {
+        let mut buf = Vec::new();
+        keyfile.read_to_end(&mut buf)?;
+
+        self.keyfile = Some(buf);
+
+        Ok(self)
     }
 
-    pub fn with_password_and_keyfile(password: &str, keyfile: &mut dyn Read) -> Self {
-        Self::new(Some(password), Some(keyfile))
-    }
-
-    pub fn new(password: Option<&str>, mut keyfile: Option<&mut dyn Read>) -> Self {
-        let password = password.map(|p| p.to_string());
-
-        let keyfile = keyfile.as_mut().and_then(|kf| {
-            let mut buffer = Vec::new();
-            kf.read_to_end(&mut buffer).ok().map(|_| buffer)
-        });
-
-        Self { password, keyfile }
+    pub fn new() -> Self {
+        Default::default()
     }
 
     pub(crate) fn get_key_elements(self) -> Result<Vec<Vec<u8>>, DatabaseKeyError> {
@@ -113,35 +108,44 @@ mod key_tests {
 
     #[test]
     fn test_key() -> Result<(), DatabaseKeyError> {
-        let ke = DatabaseKey::with_password("asdf").get_key_elements()?;
-        assert_eq!(ke.len(), 1);
-
-        let ke = DatabaseKey::with_keyfile(&mut "bare-key-file".as_bytes()).get_key_elements()?;
-        assert_eq!(ke.len(), 1);
-
-        let ke = DatabaseKey::with_keyfile(&mut "0123456789ABCDEF0123456789ABCDEF".as_bytes())
+        let ke = DatabaseKey::new()
+            .with_password("asdf")
             .get_key_elements()?;
         assert_eq!(ke.len(), 1);
 
-        let ke = DatabaseKey::with_password_and_keyfile("asdf", &mut "bare-key-file".as_bytes())
+        let ke = DatabaseKey::new()
+            .with_keyfile(&mut "bare-key-file".as_bytes())?
+            .get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        let ke = DatabaseKey::new()
+            .with_keyfile(&mut "0123456789ABCDEF0123456789ABCDEF".as_bytes())?
+            .get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        let ke = DatabaseKey::new()
+            .with_password("asdf")
+            .with_keyfile(&mut "bare-key-file".as_bytes())?
             .get_key_elements()?;
         assert_eq!(ke.len(), 2);
 
-        let ke = DatabaseKey::with_keyfile(
-            &mut "<KeyFile><Key><Data>0!23456789ABCDEF0123456789ABCDEF</Data></Key></KeyFile>"
-                .as_bytes(),
-        )
-        .get_key_elements()?;
+        let ke = DatabaseKey::new()
+            .with_keyfile(
+                &mut "<KeyFile><Key><Data>0!23456789ABCDEF0123456789ABCDEF</Data></Key></KeyFile>"
+                    .as_bytes(),
+            )?
+            .get_key_elements()?;
         assert_eq!(ke.len(), 1);
 
-        let ke = DatabaseKey::with_keyfile(
+        let ke = DatabaseKey::new().with_keyfile(
             &mut "<KeyFile><Key><Data>NXyYiJMHg3ls+eBmjbAjWec9lcOToJiofbhNiFMTJMw=</Data></Key></KeyFile>".as_bytes(),
-        )
+        )?
         .get_key_elements()?;
         assert_eq!(ke.len(), 1);
 
         // other XML files will just be hashed as a "bare" keyfile
-        let ke = DatabaseKey::with_keyfile(&mut "<Not><A><KeyFile></KeyFile></A></Not>".as_bytes())
+        let ke = DatabaseKey::new()
+            .with_keyfile(&mut "<Not><A><KeyFile></KeyFile></A></Not>".as_bytes())?
             .get_key_elements()?;
 
         assert_eq!(ke.len(), 1);

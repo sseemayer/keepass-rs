@@ -177,7 +177,10 @@ mod kdbx4_otp_tests {
     fn kdbx4_entry() -> Result<(), Box<dyn std::error::Error>> {
         // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
         let path = Path::new("tests/resources/test_db_kdbx4_with_totp_entry.kdbx");
-        let db = Database::open(&mut File::open(path)?, DatabaseKey::with_password("test"))?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("test"),
+        )?;
 
         let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 

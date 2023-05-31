@@ -68,12 +68,12 @@ impl Group {
     /// Recursively get a Group or Entry reference by specifying a path relative to the current Group
     /// ```
     /// use keepass::{Database, DatabaseKey, db::NodeRef};
-    /// use std::{fs::File, path::Path};
+    /// use std::fs::File;
     ///
-    /// let path = Path::new("tests/resources/test_db_with_password.kdbx");
+    /// let mut file = File::open("tests/resources/test_db_with_password.kdbx").unwrap();
     /// let db = Database::open(
-    ///     &mut File::open(path).unwrap(),
-    ///     DatabaseKey::with_password("demopass")
+    ///     &mut file,
+    ///     DatabaseKey::new().with_password("demopass")
     /// ).unwrap();
     ///
     /// if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Sample Entry #2"]) {
