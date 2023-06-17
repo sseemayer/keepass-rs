@@ -267,6 +267,13 @@ impl Group {
         return Err("The group was not found.".to_string());
     }
 
+    pub fn add_node<T>(&mut self, n: T)
+    where
+        T: Into<Node>,
+    {
+        self.children.push(n.into())
+    }
+
     pub(crate) fn insert_entry(
         &mut self,
         entry: Entry,
@@ -550,7 +557,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        destination_group.children.push(Node::Entry(entry));
+        destination_group.add_node(entry);
 
         let mut source_group = destination_group.clone();
 
@@ -579,7 +586,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_group.children.push(Node::Entry(entry));
+        source_group.add_node(entry);
 
         destination_group.merge(&source_group);
         assert_eq!(destination_group.children.len(), 1);
@@ -599,16 +606,15 @@ mod group_tests {
     fn test_merge_add_new_non_root_entry() {
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group = Group::new("subgroup1");
-        destination_group
-            .children
-            .push(Node::Group(destination_sub_group));
+        destination_group.add_node(destination_sub_group);
+
         let mut source_group = destination_group.clone();
         let mut source_sub_group = &mut source_group.groups_mut()[0];
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_sub_group.children.push(Node::Entry(entry));
+        source_sub_group.add_node(entry);
 
         destination_group.merge(&source_group);
         let destination_entries = destination_group.get_all_entries(&vec![]);
@@ -628,8 +634,8 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_sub_group.children.push(Node::Entry(entry));
-        source_group.children.push(Node::Group(source_sub_group));
+        source_sub_group.add_node(entry);
+        source_group.add_node(source_sub_group);
 
         destination_group.merge(&source_group);
         let destination_entries = destination_group.get_all_entries(&vec![]);
@@ -646,15 +652,9 @@ mod group_tests {
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group1 = Group::new("subgroup1");
         let mut destination_sub_group2 = Group::new("subgroup2");
-        destination_sub_group1
-            .children
-            .push(Node::Entry(entry.clone()));
-        destination_group
-            .children
-            .push(Node::Group(destination_sub_group1.clone()));
-        destination_group
-            .children
-            .push(Node::Group(destination_sub_group2.clone()));
+        destination_sub_group1.add_node(entry.clone());
+        destination_group.add_node(destination_sub_group1.clone());
+        destination_group.add_node(destination_sub_group2.clone());
 
         let mut source_group = destination_group.clone();
         assert!(source_group.get_all_entries(&vec![]).len() == 1);
@@ -713,12 +713,8 @@ mod group_tests {
         entry.set_field_and_commit("Title", "entry1");
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group = Group::new("subgroup1");
-        destination_sub_group
-            .children
-            .push(Node::Entry(entry.clone()));
-        destination_group
-            .children
-            .push(Node::Group(destination_sub_group));
+        destination_sub_group.add_node(entry.clone());
+        destination_group.add_node(destination_sub_group);
 
         let mut source_group = destination_group.clone();
         let mut source_sub_group = Group::new("subgroup2");
@@ -727,9 +723,9 @@ mod group_tests {
         // FIXME we should not have to update the history here. We should
         // have a better compare function in the merge function instead.
         entry.update_history();
-        source_sub_group.children.push(Node::Entry(entry.clone()));
+        source_sub_group.add_node(entry.clone());
         source_group.children = vec![];
-        source_group.children.push(Node::Group(source_sub_group));
+        source_group.add_node(source_sub_group);
 
         destination_group.merge(&source_group);
         let destination_entries = destination_group.get_all_entries(&vec![]);
@@ -748,7 +744,7 @@ mod group_tests {
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        destination_group.children.push(Node::Entry(entry));
+        destination_group.add_node(entry);
 
         let mut source_group = destination_group.clone();
 
@@ -768,7 +764,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        destination_group.children.push(Node::Entry(entry));
+        destination_group.add_node(entry);
 
         let mut source_group = destination_group.clone();
 
@@ -788,7 +784,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        destination_group.children.push(Node::Entry(entry));
+        destination_group.add_node(entry);
 
         let mut source_group = destination_group.clone();
 

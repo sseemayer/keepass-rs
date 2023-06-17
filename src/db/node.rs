@@ -36,6 +36,18 @@ impl<'a> std::convert::From<&'a Node> for NodeRef<'a> {
     }
 }
 
+impl From<Entry> for Node {
+    fn from(entry: Entry) -> Self {
+        Node::Entry(entry)
+    }
+}
+
+impl From<Group> for Node {
+    fn from(group: Group) -> Self {
+        Node::Group(group)
+    }
+}
+
 /// An exclusive mutable reference to a node in the database tree structure which can either point to an Entry or a Group
 #[derive(Debug, Eq, PartialEq)]
 pub enum NodeRefMut<'a> {
