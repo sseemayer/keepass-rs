@@ -1,7 +1,7 @@
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::calculate_sha256,
-    db::{Database, Entry, Group, Node, NodeRefMut, Value},
+    db::{Database, Entry, Group, NodeRefMut, Value},
     error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
     format::DatabaseVersion,
 };
@@ -89,7 +89,7 @@ fn collapse_tail_groups(branch: &mut Vec<Group>, level: usize, root: &mut Group)
             Some(parent) => parent,
             None => root,
         };
-        parent.children.push(Node::Group(leaf));
+        parent.add_child(leaf);
     }
 }
 
@@ -261,7 +261,7 @@ fn parse_entries(
                     panic!("Follow group_path")
                 };
 
-                group.children.push(Node::Entry(entry));
+                group.add_child(entry);
                 entry = Default::default();
                 gid = None;
                 num_entries += 1;

@@ -59,7 +59,7 @@ mod kdbx4_tests {
         config::{
             CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig,
         },
-        db::{Database, Entry, Group, HeaderAttachment, Node, Value},
+        db::{Database, Entry, Group, HeaderAttachment, Value},
         format::{kdbx4::dump::dump_kdbx4, KDBX4_CURRENT_MINOR_VERSION},
         key::DatabaseKey,
     };
@@ -68,9 +68,9 @@ mod kdbx4_tests {
         let mut db = Database::new(config);
 
         let mut root_group = Group::new("Root");
-        root_group.children.push(Node::Entry(Entry::new()));
-        root_group.children.push(Node::Entry(Entry::new()));
-        root_group.children.push(Node::Entry(Entry::new()));
+        root_group.add_child(Entry::new());
+        root_group.add_child(Entry::new());
+        root_group.add_child(Entry::new());
         db.root = root_group;
 
         let mut password_bytes: Vec<u8> = vec![];
@@ -150,7 +150,7 @@ mod kdbx4_tests {
     #[test]
     pub fn header_attachments() {
         let mut root_group = Group::new("Root");
-        root_group.children.push(Node::Entry(Entry::new()));
+        root_group.add_child(Entry::new());
 
         let mut db = Database::new(DatabaseConfig::default());
 
@@ -171,7 +171,7 @@ mod kdbx4_tests {
             Value::Unprotected("Demo entry".to_string()),
         );
 
-        db.root.children.push(Node::Entry(entry));
+        db.root.add_child(entry);
 
         let key_elements = DatabaseKey::new()
             .with_password("test")

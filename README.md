@@ -81,9 +81,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     entry.fields.insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
     entry.fields.insert("Password".to_string(), Value::Protected("hunter2".as_bytes().into()));
 
-    group.children.push(Node::Entry(entry));
+    group.add_child(entry);
 
-    db.root.children.push(Node::Group(group));
+    db.root.add_child(group);
 
     #[cfg(feature = "save_kdbx4")]
     db.save(
