@@ -13,7 +13,7 @@ mod file_read_tests {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -52,7 +52,7 @@ mod file_read_tests {
         let kf_path = Path::new("tests/resources/test_key.key");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_keyfile(&mut File::open(kf_path)?),
+            DatabaseKey::new().with_keyfile(&mut File::open(kf_path)?)?,
         )?;
 
         println!("{:?} DB Opened", db);
@@ -91,7 +91,7 @@ mod file_read_tests {
         let kf_path = Path::new("tests/resources/test_key_xml.key");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_keyfile(&mut File::open(kf_path)?),
+            DatabaseKey::new().with_keyfile(&mut File::open(kf_path)?)?,
         )?;
 
         println!("{:?} DB Opened", db);
@@ -130,7 +130,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -147,7 +147,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -163,7 +163,7 @@ mod file_read_tests {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -180,7 +180,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -197,7 +197,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -214,7 +214,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -231,7 +231,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -249,7 +249,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_keyfile(&mut File::open(kf_path)?),
+            DatabaseKey::new().with_keyfile(&mut File::open(kf_path)?)?,
         )?;
 
         println!("{:?} DB Opened", db);
@@ -266,7 +266,7 @@ mod file_read_tests {
         let path = Path::new("tests/resources/broken_random_data.kdbx");
         Database::open(
             &mut File::open(path).unwrap(),
-            DatabaseKey::with_password(""),
+            DatabaseKey::new().with_password(""),
         )
         .unwrap();
     }
@@ -277,7 +277,7 @@ mod file_read_tests {
         let path = Path::new("tests/resources/broken_kdbx_version.kdbx");
         Database::open(
             &mut File::open(path).unwrap(),
-            DatabaseKey::with_password(""),
+            DatabaseKey::new().with_password(""),
         )
         .unwrap();
     }
@@ -285,7 +285,10 @@ mod file_read_tests {
     #[test]
     fn open_kdb_with_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdb_with_password.kdb");
-        let db = Database::open(&mut File::open(path)?, DatabaseKey::with_password("foobar"))?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("foobar"),
+        )?;
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "Root");
@@ -322,7 +325,7 @@ mod file_read_tests {
         let path = Path::new("tests/resources/test_db_kdb3_with_file_larger_1mb.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("samplepassword"),
+            DatabaseKey::new().with_password("samplepassword"),
         )?;
 
         println!("{:?} DB Opened", db);
@@ -359,7 +362,7 @@ mod file_read_tests {
 
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);

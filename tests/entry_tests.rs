@@ -12,7 +12,7 @@ mod entry_tests {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         // get an entry on the root node
@@ -70,7 +70,7 @@ mod entry_tests {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         // get an entry on the root node
@@ -98,7 +98,7 @@ mod entry_tests {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::with_password("this password is not correct"),
+            DatabaseKey::new().with_password("this password is not correct"),
         );
 
         assert!(db.is_err());

@@ -26,12 +26,10 @@ use keepass::{
 use std::fs::File;
 
 fn main() -> Result<(), DatabaseOpenError> {
-    // Open KeePass database
-    let path = std::path::Path::new("tests/resources/test_db_with_password.kdbx");
-    let db = Database::open(
-        &mut File::open(path)?,                 // the database
-        DatabaseKey::with_password("demopass"), // password (keyfile is also supported)
-    )?;
+    // Open KeePass database using a password (keyfile is also supported)
+    let mut file = File::open("tests/resources/test_db_with_password.kdbx")?;
+    let key = DatabaseKey::new().with_password("demopass");
+    let db = Database::open(&mut file, key)?;
 
     // Iterate over all `Group`s and `Entry`s
     for node in &db.root {
@@ -90,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "save_kdbx4")]
     db.save(
         &mut File::create("demo.kdbx")?,
-        DatabaseKey::with_password("demopass"),
+        DatabaseKey::new().with_password("demopass"),
     )?;
 
     Ok(())

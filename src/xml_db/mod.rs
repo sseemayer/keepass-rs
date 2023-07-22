@@ -35,7 +35,8 @@ mod tests {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
 
-        let key_elements = DatabaseKey::with_password(&password)
+        let key_elements = DatabaseKey::new()
+            .with_password(&password)
             .get_key_elements()
             .unwrap();
         key_elements

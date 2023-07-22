@@ -330,7 +330,7 @@ mod database_tests {
     fn test_xml() -> Result<(), DatabaseOpenError> {
         let xml = Database::get_xml(
             &mut File::open("tests/resources/test_db_with_password.kdbx")?,
-            DatabaseKey::with_password("demopass"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         assert!(xml.len() > 100);
@@ -350,12 +350,12 @@ mod database_tests {
 
         let mut buffer = Vec::new();
 
-        db.save(&mut buffer, DatabaseKey::with_password("testing"))
+        db.save(&mut buffer, DatabaseKey::new().with_password("testing"))
             .unwrap();
 
         let db_loaded = Database::open(
             &mut buffer.as_slice(),
-            DatabaseKey::with_password("testing"),
+            DatabaseKey::new().with_password("testing"),
         )
         .unwrap();
 

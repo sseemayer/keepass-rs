@@ -1,6 +1,5 @@
 /// utility to dump keepass database internal XML data.
 use std::fs::File;
-use std::io::Read;
 
 use anyhow::Result;
 use clap::Parser;
@@ -24,21 +23,20 @@ pub fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;
+    let mut key = DatabaseKey::new();
 
-    let mut keyfile: Option<File> = args.keyfile.and_then(|f| File::open(f).ok());
+    if let Some(f) = args.keyfile {
+        key = key.with_keyfile(&mut File::open(f)?)?;
+    }
 
     let password =
         rpassword::prompt_password("Password (or blank for none): ").expect("Read password");
 
-    let password = if password.is_empty() {
-        None
-    } else {
-        Some(&password[..])
+    if !password.is_empty() {
+        key = key.with_password(&password);
     };
 
-    let keyfile = keyfile.as_mut().map(|kf| kf as &mut dyn Read);
-
-    let db = Database::open(&mut source, DatabaseKey { password, keyfile })?;
+    let db = Database::open(&mut source, key)?;
 
     if let Some(NodeRef::Entry(e)) = db.root.get(&[&args.entry]) {
         let totp = e.get_otp().unwrap();
