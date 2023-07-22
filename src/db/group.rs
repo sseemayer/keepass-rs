@@ -87,7 +87,13 @@ impl Group {
             if path.len() == 1 {
                 let head = path[0];
                 self.children.iter().find_map(|n| match n {
-                    Node::Group(_) => None,
+                    Node::Group(g) => {
+                        if g.name == head {
+                            Some(n.as_ref())
+                        } else {
+                            None
+                        }
+                    }
                     Node::Entry(e) => {
                         e.get_title()
                             .and_then(|t| if t == head { Some(n.as_ref()) } else { None })
