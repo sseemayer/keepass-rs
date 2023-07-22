@@ -116,7 +116,7 @@ impl<'a> Entry {
     /// Adds the current version of the entry to the entry's history
     /// and updates the last modification timestamp.
     /// The history will only be updated if the entry has
-    /// uncommited changes.
+    /// uncommitted changes.
     ///
     /// Returns whether or not a new history entry was added.
     pub fn update_history(&mut self) -> bool {
@@ -124,9 +124,11 @@ impl<'a> Entry {
             self.history = Some(History::default());
         }
 
-        if !self.has_uncommited_changes() {
+        if !self.has_uncommitted_changes() {
             return false;
         }
+
+        self.times.set_last_modification(Times::now());
 
         let mut new_history_entry = self.clone();
         new_history_entry.history.take().unwrap();
@@ -135,13 +137,12 @@ impl<'a> Entry {
         // TODO should we validate the maximum size of the history?
         self.history.as_mut().unwrap().add_entry(new_history_entry);
 
-        self.times.set_last_modification(Times::now());
         true
     }
 
     /// Determines if the entry was modified since the last
     /// history update.
-    fn has_uncommited_changes(&self) -> bool {
+    fn has_uncommitted_changes(&self) -> bool {
         if let Some(history) = self.history.as_ref() {
             if history.entries.len() == 0 {
                 return true;
