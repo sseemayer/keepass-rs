@@ -79,6 +79,10 @@ impl Group {
     /// if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Sample Entry #2"]) {
     ///     println!("User: {}", e.get_username().unwrap());
     /// }
+    ///
+    /// if let Some(NodeRef::Group(e)) = db.root.get(&["General"]) {
+    ///    println!("Group: {}", e.name);
+    /// }
     /// ```
     pub fn get<'a>(&'a self, path: &[&str]) -> Option<NodeRef<'a>> {
         if path.is_empty() {
@@ -174,5 +178,30 @@ impl<'a> IntoIterator for &'a Group {
         queue.push_back(NodeRef::Group(self));
 
         NodeIter::new(queue)
+    }
+}
+
+#[cfg(test)]
+mod group_tests {
+    use super::Group;
+    use crate::db::{Entry, Node, NodeRef};
+    use crate::{Database, DatabaseKey};
+    use std::{fs::File, path::Path};
+
+    #[test]
+    fn get() {
+        let mut db = Database::new(Default::default());
+
+        let mut general_group = Group::new("General");
+        let mut sample_entry = Entry::new();
+        sample_entry.fields.insert(
+            "Title".to_string(),
+            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
+        );
+        general_group.children.push(Node::Entry(sample_entry));
+        db.root.children.push(Node::Group(general_group));
+
+        assert!(db.root.get(&["General", "Sample Entry #2"]).is_some());
+        assert!(db.root.get(&["General"]).is_some());
     }
 }
