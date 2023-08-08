@@ -13,6 +13,12 @@ license = "MIT"
 
 readme = "README.md"
 
+include = [
+  "src/",
+  "README.md",
+  "LICENSE",
+]
+
 [features]
 utilities = ["anyhow", "clap", "rpassword", "serialization", "totp"]
 serialization = ["serde", "serde_json", "chrono/serde"]
