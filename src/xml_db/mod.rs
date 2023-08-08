@@ -105,7 +105,7 @@ mod tests {
 
         entry.history = Some(history);
 
-        root_group.children.push(Node::Entry(entry.clone()));
+        root_group.add_child(entry.clone());
 
         let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group;
@@ -135,7 +135,7 @@ mod tests {
             .fields
             .insert("Title".to_string(), Value::Unprotected("ASDF".to_string()));
 
-        root_group.children.push(Node::Entry(entry));
+        root_group.add_child(entry);
 
         let mut subgroup = Group::new("Child group");
         subgroup.notes = Some("I am a subgroup".to_string());
@@ -164,7 +164,7 @@ mod tests {
             },
         );
 
-        root_group.children.push(Node::Group(subgroup));
+        root_group.add_child(subgroup);
 
         let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group.clone();

@@ -65,6 +65,11 @@ impl Group {
         }
     }
 
+    /// Add a child node (an entry or a group) to this group.
+    pub fn add_child(&mut self, node: impl Into<Node>) {
+        self.children.push(node.into());
+    }
+
     /// Recursively get a Group or Entry reference by specifying a path relative to the current Group
     /// ```
     /// use keepass::{Database, DatabaseKey, db::NodeRef};
@@ -184,9 +189,8 @@ impl<'a> IntoIterator for &'a Group {
 #[cfg(test)]
 mod group_tests {
     use super::Group;
-    use crate::db::{Entry, Node, NodeRef};
-    use crate::{Database, DatabaseKey};
-    use std::{fs::File, path::Path};
+    use crate::db::Entry;
+    use crate::Database;
 
     #[test]
     fn get() {
@@ -198,8 +202,8 @@ mod group_tests {
             "Title".to_string(),
             crate::db::Value::Unprotected("Sample Entry #2".to_string()),
         );
-        general_group.children.push(Node::Entry(sample_entry));
-        db.root.children.push(Node::Group(general_group));
+        general_group.add_child(sample_entry);
+        db.root.add_child(general_group);
 
         assert!(db.root.get(&["General", "Sample Entry #2"]).is_some());
         assert!(db.root.get(&["General"]).is_some());

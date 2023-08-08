@@ -341,12 +341,12 @@ mod database_tests {
     #[cfg(feature = "save_kdbx4")]
     #[test]
     fn test_save() {
-        use crate::db::{Entry, Node};
+        use crate::db::Entry;
         let mut db = Database::new(Default::default());
 
-        db.root.children.push(Node::Entry(Entry::new()));
-        db.root.children.push(Node::Entry(Entry::new()));
-        db.root.children.push(Node::Entry(Entry::new()));
+        db.root.add_child(Entry::new());
+        db.root.add_child(Entry::new());
+        db.root.add_child(Entry::new());
 
         let mut buffer = Vec::new();
 
