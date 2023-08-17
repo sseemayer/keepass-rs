@@ -61,7 +61,6 @@ impl Kdf for Argon2Kdf {
             lanes: self.parallelism,
             mem_cost: (self.memory / 1024) as u32,
             secret: &[],
-            thread_mode: argon2::ThreadMode::default(),
             time_cost: self.iterations as u32,
             variant: self.variant,
             version: self.version,
