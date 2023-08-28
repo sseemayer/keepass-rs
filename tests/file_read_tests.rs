@@ -428,6 +428,22 @@ mod file_read_tests {
     }
 
     #[test]
+    fn open_kdbx4_with_empty_root_group_name() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_empty_root_group_name.kdbx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("demopass"),
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "");
+
+        Ok(())
+    }
+
+    #[test]
     #[ignore]
     #[cfg(feature = "challenge_response")]
     fn open_kdbx4_with_yubikey_challenge_response_key() -> Result<(), DatabaseOpenError> {
@@ -445,6 +461,23 @@ mod file_read_tests {
 
         assert_eq!(db.root.name, "Root");
         assert_eq!(db.root.children.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn open_kdbx4_with_empty_group_names() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_empty_group_names.kdbx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("demopass"),
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.children.len(), 2);
+
         Ok(())
     }
 
