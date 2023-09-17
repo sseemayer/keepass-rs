@@ -114,6 +114,10 @@ mod parse_group_test {
     fn test_group() -> Result<(), XmlParseError> {
         let _value = parse_test_xml::<Group>("<Group></Group>")?;
 
+        let value = parse_test_xml::<Group>("<Group><Name></Name></Group>")?;
+        // TODO replace with `Some("")` once name is an `Option<String>`
+        assert_eq!(value.name, "".to_string());
+
         let value = parse_test_xml::<Group>("<Group><Notes>ASDF</Notes></Group>")?;
         assert_eq!(value.notes, Some("ASDF".to_string()));
 
