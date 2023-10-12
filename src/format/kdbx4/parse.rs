@@ -68,6 +68,9 @@ pub(crate) fn decrypt_kdbx4(
     // parse header
     let (outer_header, inner_header_start) = parse_outer_header(data)?;
 
+    #[cfg(feature = "challenge_response")]
+    let db_key = db_key.clone().perform_challenge(&outer_header.kdf_seed)?;
+
     // split file into segments:
     //      header_data         - The outer header data
     //      header_sha256       - A Sha256 hash of header_data (for verification of header integrity)

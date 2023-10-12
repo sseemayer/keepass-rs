@@ -14,4 +14,6 @@ pub(crate) mod variant_dictionary;
 pub(crate) mod xml_db;
 
 pub use self::db::Database;
+#[cfg(feature = "challenge_response")]
+pub use self::key::ChallengeResponseKey;
 pub use self::key::DatabaseKey;

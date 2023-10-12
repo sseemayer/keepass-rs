@@ -58,11 +58,39 @@ fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     }
 }
 
+#[cfg(feature = "challenge_response")]
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
+pub enum ChallengeResponseKey {
+    LocalChallenge(String),
+    // YubikeyChallenge(String),
+}
+
+#[cfg(feature = "challenge_response")]
+impl ChallengeResponseKey {
+    fn perform_challenge(self: &Self, challenge: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
+        match self {
+            ChallengeResponseKey::LocalChallenge(secret) => {
+                let secret_bytes = hex::decode(&secret).map_err(|e| {
+                    return DatabaseKeyError::ChallengeResponseKeyError(e.to_string());
+                })?;
+
+                let response =
+                    crate::crypt::calculate_hmac_sha1(&[&challenge], &secret_bytes)?.to_vec();
+                Ok(response)
+            }
+        }
+    }
+}
+
 /// A KeePass key, which might consist of a password and/or a keyfile
 #[derive(Debug, Clone, Default, Zeroize, ZeroizeOnDrop)]
 pub struct DatabaseKey {
     password: Option<String>,
     keyfile: Option<Vec<u8>>,
+    #[cfg(feature = "challenge_response")]
+    challenge_response_key: Option<ChallengeResponseKey>,
+    #[cfg(feature = "challenge_response")]
+    challenge_response_result: Option<KeyElement>,
 }
 
 impl DatabaseKey {
@@ -93,6 +121,25 @@ impl DatabaseKey {
         Ok(self)
     }
 
+    #[cfg(feature = "challenge_response")]
+    pub fn with_challenge_response_key(
+        mut self,
+        challenge_response_key: ChallengeResponseKey,
+    ) -> Self {
+        self.challenge_response_key = Some(challenge_response_key);
+        self
+    }
+
+    #[cfg(feature = "challenge_response")]
+    pub fn perform_challenge(mut self, kdf_seed: &[u8]) -> Result<Self, DatabaseKeyError> {
+        if let Some(challenge_response_key) = &self.challenge_response_key {
+            let response = challenge_response_key.perform_challenge(kdf_seed)?;
+            self.challenge_response_result = Some(response);
+        }
+
+        Ok(self)
+    }
+
     pub fn new() -> Self {
         Default::default()
     }
@@ -110,6 +157,15 @@ impl DatabaseKey {
 
         if out.is_empty() {
             return Err(DatabaseKeyError::IncorrectKey);
+        }
+
+        #[cfg(feature = "challenge_response")]
+        if let Some(result) = &self.challenge_response_result {
+            out.push(calculate_sha256(&[result])?.as_slice().to_vec());
+        } else if self.challenge_response_key.is_some() {
+            return Err(DatabaseKeyError::ChallengeResponseKeyError(
+                "Challenge-response was not performed".to_string(),
+            ));
         }
 
         Ok(out)
@@ -169,7 +225,11 @@ mod key_tests {
 
         assert!(DatabaseKey {
             password: None,
-            keyfile: None
+            keyfile: None,
+            #[cfg(feature = "challenge_response")]
+            challenge_response_key: None,
+            #[cfg(feature = "challenge_response")]
+            challenge_response_result: None,
         }
         .get_key_elements()
         .is_err());

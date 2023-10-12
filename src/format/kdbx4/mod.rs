@@ -64,6 +64,39 @@ mod kdbx4_tests {
         key::DatabaseKey,
     };
 
+    #[cfg(feature = "challenge_response")]
+    #[test]
+    fn test_with_challenge_response() {
+        let mut db = Database::new(DatabaseConfig::default());
+
+        let mut root_group = Group::new("Root");
+        root_group.add_child(Entry::new());
+        root_group.add_child(Entry::new());
+        root_group.add_child(Entry::new());
+        db.root = root_group;
+
+        let mut password_bytes: Vec<u8> = vec![];
+        let mut password: String = "".to_string();
+        password_bytes.resize(40, 0);
+        getrandom::getrandom(&mut password_bytes).unwrap();
+        for random_char in password_bytes {
+            password += &std::char::from_u32(random_char as u32).unwrap().to_string();
+        }
+
+        let db_key = DatabaseKey::new()
+            .with_password(&password)
+            .with_challenge_response_key(crate::key::ChallengeResponseKey::LocalChallenge(
+                "0102030405060708090a0b0c0d0e0f1011121314".to_string(),
+            ));
+
+        let mut encrypted_db = Vec::new();
+        dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
+
+        let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
+
+        assert_eq!(decrypted_db.root.children.len(), 3);
+    }
+
     fn test_with_config(config: DatabaseConfig) {
         let mut db = Database::new(config);
 
