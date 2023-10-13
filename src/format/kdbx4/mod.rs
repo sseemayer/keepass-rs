@@ -81,15 +81,12 @@ mod kdbx4_tests {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
 
-        let key_elements = DatabaseKey::new()
-            .with_password(&password)
-            .get_key_elements()
-            .unwrap();
+        let db_key = DatabaseKey::new().with_password(&password);
 
         let mut encrypted_db = Vec::new();
-        dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
+        dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
 
-        let decrypted_db = parse_kdbx4(&encrypted_db, &key_elements).unwrap();
+        let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 3);
     }
@@ -173,15 +170,12 @@ mod kdbx4_tests {
 
         db.root.add_child(entry);
 
-        let key_elements = DatabaseKey::new()
-            .with_password("test")
-            .get_key_elements()
-            .unwrap();
+        let db_key = DatabaseKey::new().with_password("test");
 
         let mut encrypted_db = Vec::new();
-        dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
+        dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
 
-        let decrypted_db = parse_kdbx4(&encrypted_db, &key_elements).unwrap();
+        let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 1);
 

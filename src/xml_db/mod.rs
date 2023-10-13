@@ -26,7 +26,7 @@ mod tests {
         key::DatabaseKey,
     };
 
-    fn make_key() -> Vec<Vec<u8>> {
+    fn make_key() -> DatabaseKey {
         let mut password_bytes: Vec<u8> = vec![];
         let mut password: String = "".to_string();
         password_bytes.resize(40, 0);
@@ -35,11 +35,7 @@ mod tests {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
 
-        let key_elements = DatabaseKey::new()
-            .with_password(&password)
-            .get_key_elements()
-            .unwrap();
-        key_elements
+        DatabaseKey::new().with_password(&password)
     }
 
     #[test]
@@ -110,11 +106,11 @@ mod tests {
         let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group;
 
-        let key_elements = make_key();
+        let db_key = make_key();
 
         let mut encrypted_db = Vec::new();
-        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
-        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
+        kdbx4::dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 1);
 
@@ -169,11 +165,11 @@ mod tests {
         let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group.clone();
 
-        let key_elements = make_key();
+        let db_key = make_key();
 
         let mut encrypted_db = Vec::new();
-        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
-        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
+        kdbx4::dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 2);
 
@@ -278,11 +274,11 @@ mod tests {
 
         db.meta = meta.clone();
 
-        let key_elements = make_key();
+        let db_key = make_key();
 
         let mut encrypted_db = Vec::new();
-        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
-        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
+        kdbx4::dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db.meta, meta);
     }
@@ -301,11 +297,11 @@ mod tests {
             },
         ];
 
-        let key_elements = make_key();
+        let db_key = make_key();
 
         let mut encrypted_db = Vec::new();
-        kdbx4::dump_kdbx4(&db, &key_elements, &mut encrypted_db).unwrap();
-        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &key_elements).unwrap();
+        kdbx4::dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
+        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db, db);
     }
