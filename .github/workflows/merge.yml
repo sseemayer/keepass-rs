@@ -35,3 +35,74 @@ jobs:
         with:
           fail_ci_if_error: true
           verbose: true
+
+  get-next-version:
+    name: Get the next version
+    runs-on: ubuntu-latest
+    outputs:
+      version : ${{ steps.semantic-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: paulhatch/semantic-version@976ff820fcdca81ffc95e385a07b7eff05ddccc3
+        id: semantic-version
+        with:
+          tag_prefix: "v"
+          major_pattern: "/^breaking change:/"
+          major_regexp_flags: "ig"
+          minor_pattern: "/^feat:/"
+          minor_regexp_flags: "ig"
+          version_format: "${major}.${minor}.${patch}"
+          bump_each_commit: false
+          search_commit_body: true
+          enable_prerelease_mode: true
+
+  release:
+    name: Publish a new release
+    needs:
+      - get-next-version
+      - test
+      - coverage
+    permissions:
+      # This permission is required in order to push the new
+      # tag to the repository.
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      next-version: ${{ needs.get-next-version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Print the next version
+        run: |
+          echo "The next version is ${{ env.next-version }}"
+
+      - name: Patch the Cargo version
+        run: |
+          sed -i 's/0.0.0-placeholder-version/${{ env.next-version }}/' Cargo.toml
+          git diff
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Publish new Cargo version
+        env:
+          # This token needs to be created with the publish-update scope.
+          # The other scopes are not necessary.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cargo publish --allow-dirty
+
+      - name: Tag the next version
+        run: |
+          new_tag_name="v${{ env.next-version }}"
+          git tag "$new_tag_name" "${{ github.sha }}"
+          git push origin "$new_tag_name"
