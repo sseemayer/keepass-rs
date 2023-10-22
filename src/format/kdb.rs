@@ -4,6 +4,7 @@ use crate::{
     db::{Database, Entry, Group, NodeRefMut, Value},
     error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
     format::DatabaseVersion,
+    key::DatabaseKey,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -295,10 +296,7 @@ fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group, DatabaseIntegrityE
     Ok(root)
 }
 
-pub(crate) fn parse_kdb(
-    data: &[u8],
-    key_elements: &[Vec<u8>],
-) -> Result<Database, DatabaseOpenError> {
+pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, DatabaseOpenError> {
     let header = parse_header(data)?;
     let version = DatabaseVersion::KDB(header.subversion as u16);
 
@@ -306,6 +304,7 @@ pub(crate) fn parse_kdb(
     let payload_encrypted = &data[HEADER_SIZE..];
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
+    let key_elements = db_key.get_key_elements()?;
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = if key_elements.len() == 1 {
         let key_element: [u8; 32] = key_elements[0].try_into().unwrap();

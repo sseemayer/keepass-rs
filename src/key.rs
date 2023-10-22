@@ -6,7 +6,10 @@ use xml::reader::{EventReader, XmlEvent};
 
 use crate::{crypt::calculate_sha256, error::DatabaseKeyError};
 
-fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>, DatabaseKeyError> {
+pub type KeyElement = Vec<u8>;
+pub type KeyElements = Vec<KeyElement>;
+
+fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     let parser = EventReader::new(xml);
 
     let mut tag_stack = Vec::new();
@@ -42,7 +45,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<Vec<u8>, DatabaseKeyError> {
     Err(DatabaseKeyError::InvalidKeyFile)
 }
 
-fn parse_keyfile(buffer: &[u8]) -> Result<Vec<u8>, DatabaseKeyError> {
+fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     // try to parse the buffer as XML, if successful, use that data instead of full file
     if let Ok(v) = parse_xml_keyfile(&buffer) {
         Ok(v)
@@ -80,10 +83,10 @@ impl DatabaseKey {
         Default::default()
     }
 
-    pub(crate) fn get_key_elements(self) -> Result<Vec<Vec<u8>>, DatabaseKeyError> {
+    pub(crate) fn get_key_elements(&self) -> Result<KeyElements, DatabaseKeyError> {
         let mut out = Vec::new();
 
-        if let Some(p) = self.password {
+        if let Some(p) = &self.password {
             out.push(calculate_sha256(&[p.as_bytes()])?.to_vec());
         }
 

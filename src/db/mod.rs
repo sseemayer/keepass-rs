@@ -61,18 +61,16 @@ impl Database {
         source: &mut dyn std::io::Read,
         key: DatabaseKey,
     ) -> Result<Database, DatabaseOpenError> {
-        let key_elements = key.get_key_elements()?;
-
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
         let database_version = DatabaseVersion::parse(data.as_ref())?;
 
         match database_version {
-            DatabaseVersion::KDB(_) => parse_kdb(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB(_) => parse_kdb(data.as_ref(), &key),
             DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB3(_) => parse_kdbx3(data.as_ref(), &key_elements),
-            DatabaseVersion::KDB4(_) => parse_kdbx4(data.as_ref(), &key_elements),
+            DatabaseVersion::KDB3(_) => parse_kdbx3(data.as_ref(), &key),
+            DatabaseVersion::KDB4(_) => parse_kdbx4(data.as_ref(), &key),
         }
     }
 
@@ -86,13 +84,11 @@ impl Database {
         use crate::error::DatabaseSaveError;
         use crate::format::kdbx4::dump_kdbx4;
 
-        let key_elements = key.get_key_elements()?;
-
         match self.config.version {
             DatabaseVersion::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
             DatabaseVersion::KDB2(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
             DatabaseVersion::KDB3(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB4(_) => dump_kdbx4(self, &key_elements, destination),
+            DatabaseVersion::KDB4(_) => dump_kdbx4(self, &key, destination),
         }
     }
 
@@ -101,8 +97,6 @@ impl Database {
         source: &mut dyn std::io::Read,
         key: DatabaseKey,
     ) -> Result<Vec<u8>, DatabaseOpenError> {
-        let key_elements = key.get_key_elements()?;
-
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
@@ -111,8 +105,8 @@ impl Database {
         let data = match database_version {
             DatabaseVersion::KDB(_) => return Err(DatabaseOpenError::UnsupportedVersion),
             DatabaseVersion::KDB2(_) => return Err(DatabaseOpenError::UnsupportedVersion),
-            DatabaseVersion::KDB3(_) => decrypt_kdbx3(data.as_ref(), &key_elements)?.2,
-            DatabaseVersion::KDB4(_) => decrypt_kdbx4(data.as_ref(), &key_elements)?.3,
+            DatabaseVersion::KDB3(_) => decrypt_kdbx3(data.as_ref(), &key)?.2,
+            DatabaseVersion::KDB4(_) => decrypt_kdbx4(data.as_ref(), &key)?.3,
         };
 
         Ok(data)
