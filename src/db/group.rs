@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use uuid::Uuid;
 
 use crate::db::{
-    node::{Node, NodeIter, NodeRef, NodeRefMut},
+    node::{Node, NodeIter, NodePath, NodePathElement, NodeRef, NodeRefMut},
     CustomData, Times,
 };
 
@@ -90,34 +90,32 @@ impl Group {
     /// }
     /// ```
     pub fn get<'a>(&'a self, path: &[&str]) -> Option<NodeRef<'a>> {
+        let node_path = NodePathElement::wrap_titles(path);
+        self.get_internal(&node_path)
+    }
+
+    fn get_internal<'a>(&'a self, path: &NodePath) -> Option<NodeRef<'a>> {
         if path.is_empty() {
             Some(NodeRef::Group(self))
         } else {
             if path.len() == 1 {
-                let head = path[0];
-                self.children.iter().find_map(|n| match n {
-                    Node::Group(g) => {
-                        if g.name == head {
-                            Some(n.as_ref())
-                        } else {
-                            None
-                        }
+                let head = &path[0];
+                self.children.iter().find_map(|n| {
+                    if head.matches(&n) {
+                        return Some(n.as_ref());
                     }
-                    Node::Entry(e) => {
-                        e.get_title()
-                            .and_then(|t| if t == head { Some(n.as_ref()) } else { None })
-                    }
+                    return None;
                 })
             } else {
-                let head = path[0];
-                let tail = &path[1..path.len()];
+                let head = &path[0];
+                let tail = path[1..path.len()].to_owned();
 
                 let head_group = self.children.iter().find_map(|n| match n {
-                    Node::Group(g) if g.name == head => Some(g),
+                    Node::Group(g) if head.matches(&n) => Some(g),
                     _ => None,
                 })?;
 
-                head_group.get(tail)
+                head_group.get_internal(&tail)
             }
         }
     }
@@ -125,29 +123,35 @@ impl Group {
     /// Recursively get a mutable reference to a Group or Entry by specifying a path relative to
     /// the current Group
     pub fn get_mut<'a>(&'a mut self, path: &[&str]) -> Option<NodeRefMut<'a>> {
+        let node_path = NodePathElement::wrap_titles(path);
+        self.get_mut_internal(&node_path)
+    }
+
+    // fn get_internal<'a>(&'a self, path: &NodePath) -> Option<NodeRef<'a>> {
+    fn get_mut_internal<'a>(&'a mut self, path: &NodePath) -> Option<NodeRefMut<'a>> {
         if path.is_empty() {
             Some(NodeRefMut::Group(self))
         } else {
             if path.len() == 1 {
-                let head = path[0];
+                let head = &path[0];
                 self.children
                     .iter_mut()
-                    .filter(|n| match n {
-                        Node::Group(g) => g.name == head,
-                        Node::Entry(e) => e.get_title().map(|t| t == head).unwrap_or(false),
-                    })
+                    .filter(|n| head.matches(n))
                     .map(|t| t.as_mut())
                     .next()
             } else {
-                let head = path[0];
-                let tail = &path[1..path.len()];
+                let head = &path[0];
+                let tail = path[1..path.len()].to_owned();
 
-                let head_group: &mut Group = self.children.iter_mut().find_map(|n| match n {
-                    Node::Group(g) if g.name == head => Some(g),
-                    _ => None,
+                let head_group: &mut Group = self.children.iter_mut().find_map(|n| {
+                    let title_matches = head.matches(&n);
+                    match n {
+                        Node::Group(g) if title_matches => Some(g),
+                        _ => None,
+                    }
                 })?;
 
-                head_group.get_mut(tail)
+                head_group.get_mut_internal(&tail)
             }
         }
     }
@@ -189,6 +193,7 @@ impl<'a> IntoIterator for &'a Group {
 #[cfg(test)]
 mod group_tests {
     use super::Group;
+    use super::NodePathElement;
     use crate::db::Entry;
     use crate::Database;
 
@@ -207,5 +212,86 @@ mod group_tests {
 
         assert!(db.root.get(&["General", "Sample Entry #2"]).is_some());
         assert!(db.root.get(&["General"]).is_some());
+        assert!(db.root.get(&["Invalid Group"]).is_none());
+        assert!(db.root.get(&[]).is_some());
+    }
+
+    #[test]
+    fn get_mut() {
+        let mut db = Database::new(Default::default());
+
+        let mut general_group = Group::new("General");
+        let mut sample_entry = Entry::new();
+        sample_entry.fields.insert(
+            "Title".to_string(),
+            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
+        );
+        general_group.add_child(sample_entry);
+        db.root.add_child(general_group);
+
+        assert!(db.root.get_mut(&["General", "Sample Entry #2"]).is_some());
+        assert!(db.root.get_mut(&["General"]).is_some());
+        assert!(db.root.get_mut(&["Invalid Group"]).is_none());
+        assert!(db.root.get_mut(&[]).is_some());
+    }
+
+    #[test]
+    fn get_internal() {
+        let mut db = Database::new(Default::default());
+
+        let mut general_group = Group::new("General");
+        let mut sample_entry = Entry::new();
+        sample_entry.fields.insert(
+            "Title".to_string(),
+            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
+        );
+        general_group.add_child(sample_entry.clone());
+        db.root.add_child(general_group.clone());
+
+        let general_group_uuid = general_group.uuid.to_string();
+        let sample_entry_uuid = sample_entry.uuid.to_string();
+        let invalid_uuid = uuid::Uuid::new_v4().to_string();
+
+        let group_path = vec![NodePathElement::UUID(&general_group_uuid)];
+        let entry_path = vec![
+            NodePathElement::UUID(&general_group_uuid),
+            NodePathElement::UUID(&sample_entry_uuid),
+        ];
+        let invalid_path = vec![NodePathElement::UUID(&invalid_uuid)];
+
+        assert!(db.root.get_internal(&group_path).is_some());
+        assert!(db.root.get_internal(&entry_path).is_some());
+        assert!(db.root.get_internal(&invalid_path).is_none());
+        assert!(db.root.get_internal(&vec![]).is_some());
+    }
+
+    #[test]
+    fn get_mut_internal() {
+        let mut db = Database::new(Default::default());
+
+        let mut general_group = Group::new("General");
+        let mut sample_entry = Entry::new();
+        sample_entry.fields.insert(
+            "Title".to_string(),
+            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
+        );
+        general_group.add_child(sample_entry.clone());
+        db.root.add_child(general_group.clone());
+
+        let general_group_uuid = general_group.uuid.to_string();
+        let sample_entry_uuid = sample_entry.uuid.to_string();
+        let invalid_uuid = uuid::Uuid::new_v4().to_string();
+
+        let group_path = vec![NodePathElement::UUID(&general_group_uuid)];
+        let entry_path = vec![
+            NodePathElement::UUID(&general_group_uuid),
+            NodePathElement::UUID(&sample_entry_uuid),
+        ];
+        let invalid_path = vec![NodePathElement::UUID(&invalid_uuid)];
+
+        assert!(db.root.get_mut_internal(&group_path).is_some());
+        assert!(db.root.get_mut_internal(&entry_path).is_some());
+        assert!(db.root.get_mut_internal(&invalid_path).is_none());
+        assert!(db.root.get_mut_internal(&vec![]).is_some());
     }
 }
