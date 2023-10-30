@@ -86,6 +86,11 @@ name = "kp-dump-xml"
 required-features = ["utilities"]
 
 [[bin]]
+# Purge the history items in the Database entries
+name = "kp-purge-history"
+required-features = ["utilities", "save_kdbx4"]
+
+[[bin]]
 # decrypt a KeePass database and show the contained data
 name = "kp-show-db"
 required-features = ["utilities"]
