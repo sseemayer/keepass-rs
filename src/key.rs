@@ -3,6 +3,7 @@ use std::io::Read;
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{crypt::calculate_sha256, error::DatabaseKeyError};
 
@@ -58,7 +59,7 @@ fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
 }
 
 /// A KeePass key, which might consist of a password and/or a keyfile
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Zeroize, ZeroizeOnDrop)]
 pub struct DatabaseKey {
     password: Option<String>,
     keyfile: Option<Vec<u8>>,
@@ -68,6 +69,19 @@ impl DatabaseKey {
     pub fn with_password(mut self, password: &str) -> Self {
         self.password = Some(password.to_string());
         self
+    }
+
+    #[cfg(feature = "utilities")]
+    pub fn with_password_from_prompt(
+        mut self,
+        prompt_message: &str,
+    ) -> Result<Self, std::io::Error> {
+        self.password = Some(rpassword::prompt_password(prompt_message)?);
+        // FIXME This prevents using an empty password when using the password prompt.
+        if self.password == Some("".to_string()) {
+            self.password = None;
+        }
+        Ok(self)
     }
 
     pub fn with_keyfile(mut self, keyfile: &mut dyn Read) -> Result<Self, std::io::Error> {
