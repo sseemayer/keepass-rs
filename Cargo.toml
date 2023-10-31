@@ -57,6 +57,7 @@ cbc = "0.1"
 
 uuid = { version = "1.2", features = ["v4", "serde"] }
 getrandom = { version = "0.2", features = ["std"] }
+zeroize = { version = "1", features = ["zeroize_derive"] }
 
 # dependencies for command-line utilities
 anyhow = { version = "1", optional = true }

@@ -31,12 +31,7 @@ pub fn main() -> Result<()> {
         key = key.with_keyfile(&mut File::open(f)?)?;
     }
 
-    let password =
-        rpassword::prompt_password("Password (or blank for none): ").expect("Read password");
-
-    if !password.is_empty() {
-        key = key.with_password(&password);
-    };
+    key = key.with_password_from_prompt("Password (or blank for none): ")?;
 
     let xml = Database::get_xml(&mut source, key)?;
 
