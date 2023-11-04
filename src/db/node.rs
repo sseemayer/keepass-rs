@@ -2,6 +2,45 @@ use std::collections::VecDeque;
 
 use crate::db::{entry::Entry, group::Group};
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub(crate) enum NodePathElement<'a> {
+    #[allow(dead_code)]
+    UUID(&'a str),
+    Title(&'a str),
+}
+
+pub(crate) type NodePath<'a> = Vec<NodePathElement<'a>>;
+
+impl<'a> NodePathElement<'_> {
+    pub(crate) fn matches(&self, node: &Node) -> bool {
+        let uuid = match node {
+            Node::Entry(e) => e.uuid,
+            Node::Group(g) => g.uuid,
+        };
+        let title = match node {
+            Node::Entry(e) => e.get_title(),
+            Node::Group(g) => Some(g.name.as_ref()),
+        };
+        match self {
+            NodePathElement::UUID(u) => uuid.to_string() == *u,
+            NodePathElement::Title(t) => {
+                if let Some(title) = title {
+                    return title == *t;
+                }
+                return false;
+            }
+        }
+    }
+
+    pub(crate) fn wrap_titles(path: &[&'a str]) -> NodePath<'a> {
+        let mut response: NodePath = vec![];
+        for path_element in path {
+            response.push(NodePathElement::Title(path_element));
+        }
+        response
+    }
+}
+
 /// An owned node in the database tree structure which can either be an Entry or Group
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
