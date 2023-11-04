@@ -156,6 +156,11 @@ impl Group {
         }
     }
 
+    /// Convenience method for getting the name of the Group
+    pub fn get_name<'a>(&'a self) -> &'a str {
+        &self.name
+    }
+
     /// Get a timestamp field by name
     ///
     /// Returning the chrono::NaiveDateTime which does not include timezone

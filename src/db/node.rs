@@ -19,7 +19,7 @@ impl<'a> NodePathElement<'_> {
         };
         let title = match node {
             Node::Entry(e) => e.get_title(),
-            Node::Group(g) => Some(g.name.as_ref()),
+            Node::Group(g) => Some(g.get_name()),
         };
         match self {
             NodePathElement::UUID(u) => uuid.to_string() == *u,
