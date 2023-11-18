@@ -64,13 +64,17 @@ impl Database {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
-        let database_version = DatabaseVersion::parse(data.as_ref())?;
+        Database::parse(data.as_ref(), key)
+    }
+
+    pub fn parse(data: &[u8], key: DatabaseKey) -> Result<Database, DatabaseOpenError> {
+        let database_version = DatabaseVersion::parse(data)?;
 
         match database_version {
-            DatabaseVersion::KDB(_) => parse_kdb(data.as_ref(), &key),
+            DatabaseVersion::KDB(_) => parse_kdb(data, &key),
             DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB3(_) => parse_kdbx3(data.as_ref(), &key),
-            DatabaseVersion::KDB4(_) => parse_kdbx4(data.as_ref(), &key),
+            DatabaseVersion::KDB3(_) => parse_kdbx3(data, &key),
+            DatabaseVersion::KDB4(_) => parse_kdbx4(data, &key),
         }
     }
 
@@ -330,6 +334,21 @@ mod database_tests {
         assert!(xml.len() > 100);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_open_invalid_version_header_size() {
+        assert!(Database::parse(&[], DatabaseKey::new().with_password("testing")).is_err());
+        assert!(Database::parse(
+            &[0, 0, 0, 0, 0, 0, 0, 0],
+            DatabaseKey::new().with_password("testing")
+        )
+        .is_err());
+        assert!(Database::parse(
+            &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            DatabaseKey::new().with_password("testing")
+        )
+        .is_err());
     }
 
     #[cfg(feature = "save_kdbx4")]
