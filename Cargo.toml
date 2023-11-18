@@ -24,6 +24,7 @@ utilities = ["anyhow", "clap", "rpassword", "serialization", "totp"]
 serialization = ["serde", "serde_json", "chrono/serde"]
 totp = ["totp-lite", "url", "base32"]
 save_kdbx4 = []
+challenge_response = ["sha1", "hex"]
 
 default = []
 
@@ -45,6 +46,7 @@ chrono = { version = "0.4.23", default-features = false, features = [
 
 # cryptography
 rust-argon2 = "2.0"
+sha1 = { version = "0.10", optional = true }
 sha2 = "0.10"
 aes = "0.8"
 block-modes = "0.9"
@@ -56,6 +58,7 @@ twofish = "0.7"
 cbc = "0.1"
 
 uuid = { version = "1.2", features = ["v4", "serde"] }
+hex = { version = "0.4", optional = true }
 getrandom = { version = "0.2", features = ["std"] }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 

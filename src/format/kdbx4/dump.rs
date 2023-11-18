@@ -43,6 +43,9 @@ pub fn dump_kdbx4(
 
     let (kdf, kdf_seed) = db.config.kdf_config.get_kdf_and_seed()?;
 
+    #[cfg(feature = "challenge_response")]
+    let db_key = db_key.clone().perform_challenge(&kdf_seed)?;
+
     // dump the outer header - need to buffer so that SHA256 can be computed
     let mut header_data = Vec::new();
     KDBX4OuterHeader {

@@ -2,7 +2,7 @@ mod file_read_tests {
     use keepass::{
         db::{Database, NodeRef},
         error::{DatabaseIntegrityError, DatabaseOpenError},
-        DatabaseKey,
+        ChallengeResponseKey, DatabaseKey,
     };
     use uuid::uuid;
 
@@ -389,6 +389,24 @@ mod file_read_tests {
         } else {
             panic!("It should've matched a Group!");
         }
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "challenge_response")]
+    fn open_kdbx4_with_challenge_response_key() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_with_challenge_response_key.kdbx");
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new()
+                .with_password("demopass")
+                .with_challenge_response_key(ChallengeResponseKey::LocalChallenge(
+                    "0102030405060708090a0b0c0d0e0f1011121314".to_string(),
+                )),
+        )?;
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.children.len(), 2);
         Ok(())
     }
 
