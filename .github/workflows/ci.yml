@@ -41,6 +41,8 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
+      - name: typecheck the tests
+        run: cargo check --tests
       - name: run cargo check on all feature combinations
         run: cargo hack check --feature-powerset --no-dev-deps
 
