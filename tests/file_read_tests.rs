@@ -2,7 +2,7 @@ mod file_read_tests {
     use keepass::{
         db::{Database, NodeRef},
         error::{DatabaseIntegrityError, DatabaseOpenError},
-        ChallengeResponseKey, DatabaseKey,
+        DatabaseKey,
     };
     use uuid::uuid;
 
@@ -400,7 +400,7 @@ mod file_read_tests {
             &mut File::open(path)?,
             DatabaseKey::new()
                 .with_password("demopass")
-                .with_challenge_response_key(ChallengeResponseKey::LocalChallenge(
+                .with_challenge_response_key(keepass::ChallengeResponseKey::LocalChallenge(
                     "0102030405060708090a0b0c0d0e0f1011121314".to_string(),
                 )),
         )?;
