@@ -24,7 +24,7 @@ utilities = ["anyhow", "clap", "rpassword", "serialization", "totp"]
 serialization = ["serde", "serde_json", "chrono/serde"]
 totp = ["totp-lite", "url", "base32"]
 save_kdbx4 = []
-challenge_response = ["sha1", "hex"]
+challenge_response = ["sha1", "hex", "dep:challenge_response"]
 
 default = []
 
@@ -56,6 +56,8 @@ chacha20 = "0.9"
 cipher = { version = "0.4", features = ["std"] }
 twofish = "0.7"
 cbc = "0.1"
+
+challenge_response = { version = "0.1", optional = true }
 
 uuid = { version = "1.2", features = ["v4", "serde"] }
 hex = { version = "0.4", optional = true }
@@ -113,3 +115,15 @@ required-features = ["utilities"]
 # parse and write a KeePass database (to check if all fields are kept)
 name = "kp-rewrite"
 required-features = ["utilities", "save_kdbx4"]
+
+[[bin]]
+name = "kp-yk-add"
+required-features = ["utilities", "save_kdbx4", "challenge_response"]
+
+[[bin]]
+name = "kp-yk-remove"
+required-features = ["utilities", "save_kdbx4", "challenge_response"]
+
+[[bin]]
+name = "kp-yk-recover"
+required-features = ["utilities", "save_kdbx4", "challenge_response"]
