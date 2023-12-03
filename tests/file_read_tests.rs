@@ -408,6 +408,27 @@ mod file_read_tests {
     }
 
     #[test]
+    #[ignore]
+    #[cfg(feature = "challenge_response")]
+    fn open_kdbx4_with_yubikey_challenge_response_key() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_with_challenge_response_key.kdbx");
+        let yubikey = keepass::ChallengeResponseKey::get_yubikey(None)?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new()
+                .with_password("demopass")
+                .with_challenge_response_key(keepass::ChallengeResponseKey::YubikeyChallenge(
+                    yubikey,
+                    "2".to_string(),
+                )),
+        )?;
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.children.len(), 2);
+        Ok(())
+    }
+
+    #[test]
     fn test_get_version() -> Result<(), DatabaseIntegrityError> {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
         let version = Database::get_version(&mut File::open(path)?)?;

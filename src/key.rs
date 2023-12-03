@@ -5,10 +5,26 @@ use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+#[cfg(feature = "challenge_response")]
+use challenge_response::{
+    config::{Config, Mode, Slot},
+    Yubico,
+};
+
 use crate::{crypt::calculate_sha256, error::DatabaseKeyError};
 
 pub type KeyElement = Vec<u8>;
 pub type KeyElements = Vec<KeyElement>;
+
+#[cfg(feature = "challenge_response")]
+fn parse_yubikey_slot(slot_number: &str) -> Result<Slot, DatabaseKeyError> {
+    if let Some(slot) = Slot::from_str(slot_number) {
+        return Ok(slot);
+    }
+    return Err(DatabaseKeyError::ChallengeResponseKeyError(
+        "Invalid slot number".to_string(),
+    ));
+}
 
 fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     let parser = EventReader::new(xml);
@@ -62,7 +78,13 @@ fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
 #[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum ChallengeResponseKey {
     LocalChallenge(String),
-    // YubikeyChallenge(String),
+    YubikeyChallenge(Yubikey, String),
+}
+
+#[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
+pub struct Yubikey {
+    pub serial_number: u32,
+    pub name: Option<String>,
 }
 
 #[cfg(feature = "challenge_response")]
@@ -77,7 +99,85 @@ impl ChallengeResponseKey {
                 let response = crate::crypt::calculate_hmac_sha1(&[&challenge], &secret_bytes)?.to_vec();
                 Ok(response)
             }
+            ChallengeResponseKey::YubikeyChallenge(yubikey, slot_number) => {
+                let mut yubikey_client = Yubico::new();
+                let slot = parse_yubikey_slot(slot_number)?;
+
+                let yubikey_device = match yubikey_client.find_yubikey_from_serial(yubikey.serial_number) {
+                    Ok(d) => d,
+                    Err(_e) => {
+                        return Err(DatabaseKeyError::ChallengeResponseKeyError(
+                            "Yubikey not found".to_string(),
+                        ))
+                    }
+                };
+
+                let mut config = Config::new_from(yubikey_device);
+                config = config.set_variable_size(true);
+                config = config.set_mode(Mode::Sha1);
+                config = config.set_slot(slot);
+
+                match yubikey_client.challenge_response_hmac(challenge, config) {
+                    Ok(hmac_result) => Ok(hmac_result.to_vec()),
+                    Err(e) => Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
+                        "Could not perform challenge response: {}",
+                        e.to_string(),
+                    ))),
+                }
+            }
         }
+    }
+
+    pub fn get_available_yubikeys() -> Vec<Yubikey> {
+        let mut yubikey_client = Yubico::new();
+        let mut response: Vec<Yubikey> = vec![];
+        let yubikeys = match yubikey_client.find_all_yubikeys() {
+            Ok(y) => y,
+            // FIXME we should probably return this error to the user.
+            Err(_) => return vec![],
+        };
+        for yubikey in yubikeys {
+            let serial_number = match yubikey.serial {
+                Some(n) => n,
+                None => continue,
+            };
+            response.push(Yubikey {
+                serial_number,
+                name: yubikey.name,
+            });
+        }
+        return response;
+    }
+
+    pub fn get_yubikey(serial_number: Option<u32>) -> Result<Yubikey, DatabaseKeyError> {
+        let all_yubikeys = ChallengeResponseKey::get_available_yubikeys();
+        if all_yubikeys.len() == 0 {
+            return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
+                "No yubikey connected to the system",
+            )));
+        }
+
+        let serial_number = match serial_number {
+            Some(n) => n,
+            None => {
+                if all_yubikeys.len() != 1 {
+                    return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
+                        "Multiple yubikeys are connected to the system. Please provide a serial number.",
+                    )));
+                }
+                return Ok(all_yubikeys[0].clone());
+            }
+        };
+
+        for yubikey in all_yubikeys {
+            if yubikey.serial_number == serial_number {
+                return Ok(yubikey);
+            }
+        }
+        return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
+            "Could not find yubikey with serial number {}",
+            serial_number
+        )));
     }
 }
 
@@ -101,6 +201,14 @@ impl DatabaseKey {
     #[cfg(feature = "utilities")]
     pub fn with_password_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
         self.password = Some(rpassword::prompt_password(prompt_message)?);
+        Ok(self)
+    }
+
+    #[cfg(all(feature = "challenge_response", feature = "utilities"))]
+    pub fn with_hmac_sha1_secret_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
+        self.challenge_response_key = Some(ChallengeResponseKey::LocalChallenge(rpassword::prompt_password(
+            prompt_message,
+        )?));
         Ok(self)
     }
 
