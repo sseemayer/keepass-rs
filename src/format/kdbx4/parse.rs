@@ -79,7 +79,7 @@ pub(crate) fn decrypt_kdbx4(
     let hmac_block_stream = &data[(inner_header_start + 64)..];
 
     // verify header
-    if header_sha256 != crypt::calculate_sha256(&[&data[0..inner_header_start]])?.as_slice() {
+    if header_sha256 != crypt::calculate_sha256(&[header_data])?.as_slice() {
         return Err(DatabaseIntegrityError::HeaderHashMismatch.into());
     }
 
