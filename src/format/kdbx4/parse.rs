@@ -68,9 +68,6 @@ pub(crate) fn decrypt_kdbx4(
     // parse header
     let (outer_header, inner_header_start) = parse_outer_header(data)?;
 
-    #[cfg(feature = "challenge_response")]
-    let db_key = db_key.clone().perform_challenge(&outer_header.kdf_seed)?;
-
     // split file into segments:
     //      header_data         - The outer header data
     //      header_sha256       - A Sha256 hash of header_data (for verification of header integrity)
@@ -80,6 +77,14 @@ pub(crate) fn decrypt_kdbx4(
     let header_sha256 = &data[inner_header_start..(inner_header_start + 32)];
     let header_hmac = &data[(inner_header_start + 32)..(inner_header_start + 64)];
     let hmac_block_stream = &data[(inner_header_start + 64)..];
+
+    // verify header
+    if header_sha256 != crypt::calculate_sha256(&[&data[0..inner_header_start]])?.as_slice() {
+        return Err(DatabaseIntegrityError::HeaderHashMismatch.into());
+    }
+
+    #[cfg(feature = "challenge_response")]
+    let db_key = db_key.clone().perform_challenge(&outer_header.kdf_seed)?;
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
@@ -91,11 +96,6 @@ pub(crate) fn decrypt_kdbx4(
         .transform_key(&composite_key)?;
     let master_key =
         crypt::calculate_sha256(&[outer_header.master_seed.as_ref(), &transformed_key])?;
-
-    // verify header
-    if header_sha256 != crypt::calculate_sha256(&[&data[0..inner_header_start]])?.as_slice() {
-        return Err(DatabaseIntegrityError::HeaderHashMismatch.into());
-    }
 
     // verify credentials
     let hmac_key = crypt::calculate_sha512(&[
