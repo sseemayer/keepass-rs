@@ -26,6 +26,7 @@ pub struct MergeEvent {
     pub event_type: MergeEventType,
 }
 
+// FIXME this should be moved to Database
 #[derive(Debug, Default, Clone)]
 pub struct MergeLog {
     pub warnings: Vec<String>,
@@ -172,7 +173,7 @@ impl Group {
     }
 
     // fn get_internal<'a>(&'a self, path: &NodePath) -> Option<NodeRef<'a>> {
-    fn get_mut_internal<'a>(&'a mut self, path: &NodePath) -> Option<NodeRefMut<'a>> {
+    pub(crate) fn get_mut_internal<'a>(&'a mut self, path: &NodePath) -> Option<NodeRefMut<'a>> {
         if path.is_empty() {
             Some(NodeRefMut::Group(self))
         } else {
@@ -235,6 +236,16 @@ impl Group {
         for node in &mut self.children {
             if let Node::Entry(e) = node {
                 response.push(e)
+            }
+        }
+        response
+    }
+
+    pub fn groups(&self) -> Vec<&Group> {
+        let mut response: Vec<&Group> = vec![];
+        for node in &self.children {
+            if let Node::Group(g) = node {
+                response.push(g);
             }
         }
         response
@@ -441,6 +452,26 @@ impl Group {
                         return Some(e);
                     }
                 }
+            }
+        }
+        None
+    }
+
+    pub fn find_group(&self, id: Uuid, recursive: bool) -> Option<&Group> {
+        for node in &self.children {
+            match node {
+                Node::Group(g) => {
+                    if g.uuid == id {
+                        return Some(g);
+                    }
+                    if !recursive {
+                        continue;
+                    }
+                    if let Some(g) = g.find_group(id, true) {
+                        return Some(g);
+                    }
+                }
+                Node::Entry(e) => continue,
             }
         }
         None

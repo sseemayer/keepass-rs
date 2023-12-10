@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 pub use crate::db::{
     entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
-    group::Group,
+    group::{Group, MergeLog},
     meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     node::{Node, NodeIter, NodeRef, NodeRefMut},
 };
@@ -25,6 +25,7 @@ pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
 use crate::{
     config::DatabaseConfig,
+    db::node::NodePath,
     error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
     format::{
         kdb::parse_kdb,
@@ -131,6 +132,28 @@ impl Database {
             deleted_objects: Default::default(),
             meta: Default::default(),
         }
+    }
+
+    /// Merge this database with another version of this same database.
+    /// This function will use the UUIDs to detect that entries and groups are
+    /// the same.
+    pub fn merge(&mut self, other: &Database) -> Result<MergeLog, String> {
+        self.merge_group(vec![], &other.root)
+    }
+
+    fn merge_group(&mut self, group_location: NodePath, other: &Group) -> Result<MergeLog, String> {
+        let mut destination_group = match self.root.get_mut_internal(&group_location).unwrap() {
+            crate::db::NodeRefMut::Group(g) => g,
+            _ => return Err("".to_string()),
+        };
+
+        for other_group in &other.groups() {
+            let other_destination_group = self.root.find_group(other_group.uuid, false);
+            // if the group doesn't exist in the destination, we create it
+        }
+
+        let mut log = MergeLog::default();
+        Ok(log)
     }
 }
 
