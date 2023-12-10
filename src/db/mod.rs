@@ -177,7 +177,9 @@ impl Database {
             {}
 
             // The group doesn't exist in the destination, we create it
-            let new_group = other_group.clone();
+            let mut new_group = other_group.clone().to_owned();
+            new_group.children = vec![];
+            self.root.add_group(new_group, &new_group_location);
         }
 
         Ok(log)

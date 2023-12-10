@@ -477,6 +477,39 @@ impl Group {
         None
     }
 
+    pub(crate) fn add_group(&mut self, group: Group, path: &NodePath) {
+        if path.len() == 0 {
+            panic!("TODO handle this with a Response.");
+        }
+
+        let mut remaining_path = path.clone();
+        remaining_path.remove(0);
+
+        if remaining_path.len() == 0 {
+            self.add_node(group.clone());
+            return;
+        }
+
+        let next_path = &remaining_path[0];
+
+        let next_path_uuid = match next_path {
+            NodePathElement::UUID(u) => u,
+            NodePathElement::Title(_) => panic!("Not supported"),
+        };
+        println!("Searching for group {}", next_path_uuid);
+        for node in &mut self.children {
+            if let Node::Group(g) = node {
+                if &g.uuid.to_string() != next_path_uuid {
+                    continue;
+                }
+                g.add_group(group, &remaining_path);
+                return;
+            }
+        }
+
+        panic!("TODO handle this with a response");
+    }
+
     pub(crate) fn add_entry(&mut self, entry: Entry, location: &NodeLocation) {
         if location.len() == 0 {
             panic!("TODO handle this with a Response.");
