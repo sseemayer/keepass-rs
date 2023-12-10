@@ -376,6 +376,35 @@ impl Group {
         }
     }
 
+    pub(crate) fn remove_group(&mut self, uuid: &Uuid) -> Result<Group, String> {
+        let mut removed_group: Option<Group> = None;
+        let mut new_nodes: Vec<Node> = vec![];
+        for node in &self.children {
+            match node {
+                Node::Entry(_) => {
+                    new_nodes.push(node.clone());
+                }
+                Node::Group(g) => {
+                    if &g.uuid != uuid {
+                        new_nodes.push(node.clone());
+                        continue;
+                    }
+                    removed_group = Some(g.clone());
+                }
+            }
+        }
+
+        if let Some(group) = removed_group {
+            self.children = new_nodes;
+            return Ok(group);
+        }
+
+        return Err(format!(
+            "Could not find group {} in group {}.",
+            uuid, self.name
+        ));
+    }
+
     pub(crate) fn find_entry_location(&self, id: Uuid) -> Option<NodeLocation> {
         let mut current_location = vec![GroupRef {
             uuid: self.uuid.clone(),
@@ -928,6 +957,58 @@ mod group_tests {
         assert_eq!(merge_result.events.len(), 1);
 
         let destination_entries = destination_group.get_all_entries(&vec![]);
+        assert_eq!(destination_entries.len(), 1);
+        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+        assert_eq!(created_entry_location.len(), 2);
+        assert_eq!(created_entry_location[0].name, "group1".to_string());
+        assert_eq!(created_entry_location[1].name, "subgroup2".to_string());
+    }
+
+    #[test]
+    fn test_merge_group_relocation() {
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.set_field_and_commit("Title", "entry1");
+
+        let mut destination_root_group = Group::new("root");
+        let mut destination_group_1 = Group::new("group1");
+        let mut destination_group_2 = Group::new("group2");
+        let mut destination_sub_group_1 = Group::new("subgroup1");
+        let sub_group_1_uuid = destination_sub_group_1.uuid.clone();
+        let mut destination_sub_group_2 = Group::new("subgroup2");
+
+        destination_sub_group_1.add_node(entry.clone());
+        destination_group_1.add_node(destination_sub_group_1);
+        destination_group_2.add_node(destination_sub_group_2);
+        destination_root_group.add_node(destination_group_1);
+        destination_root_group.add_node(destination_group_2);
+
+        let mut source_root_group = destination_root_group.clone();
+
+        let mut source_group_1 = match source_root_group.get_mut(&["group1"]).unwrap() {
+            crate::db::NodeRefMut::Group(g) => g,
+            _ => panic!("This should never happen."),
+        };
+        let mut source_sub_group_1 = source_group_1.remove_group(&sub_group_1_uuid).unwrap();
+        thread::sleep(time::Duration::from_secs(1));
+        source_sub_group_1.times.set_location_changed(Times::now());
+        // FIXME we should not have to update the history here. We should
+        // have a better compare function in the merge function instead.
+        // source_sub_group_1.update_history();
+
+        drop(source_group_1);
+        let mut source_group_2 = match source_root_group.get_mut(&["group2"]).unwrap() {
+            crate::db::NodeRefMut::Group(g) => g,
+            _ => panic!("This should never happen."),
+        };
+
+        source_group_2.add_node(source_sub_group_1);
+
+        let merge_result = destination_root_group.merge(&source_root_group).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 1);
+
+        let destination_entries = destination_root_group.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 2);
