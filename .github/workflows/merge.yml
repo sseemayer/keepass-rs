@@ -12,11 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: stable
-          override: true
       - name: run cargo test
         run: cargo test --all-features
 
@@ -87,11 +85,9 @@ jobs:
           sed -i 's/0.0.0-placeholder-version/${{ env.next-version }}/' Cargo.toml
           git diff
 
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: stable
-          override: true
 
       - name: Publish new Cargo version
         env:
