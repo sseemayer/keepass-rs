@@ -142,17 +142,44 @@ impl Database {
     }
 
     fn merge_group(&mut self, group_location: NodePath, other: &Group) -> Result<MergeLog, String> {
-        let mut destination_group = match self.root.get_mut_internal(&group_location).unwrap() {
-            crate::db::NodeRefMut::Group(g) => g,
+        let mut log = MergeLog::default();
+
+        let destination_group = match self.root.get_internal(&group_location).unwrap() {
+            crate::db::NodeRef::Group(g) => g,
             _ => return Err("".to_string()),
         };
+        // We don't need the original group here, only a copy so that we can do some
+        // queries on it.
+        let destination_group = destination_group.clone();
 
         for other_group in &other.groups() {
-            let other_destination_group = self.root.find_group(other_group.uuid, false);
-            // if the group doesn't exist in the destination, we create it
+            let mut new_group_location = group_location.clone();
+            let current_group_uuid = other_group.uuid.to_string();
+            new_group_location.push(crate::db::node::NodePathElement::UUID(&current_group_uuid));
+
+            // The group already exists and is at the right location, so we can proceed and merge
+            // the two groups.
+            if destination_group
+                .find_group(destination_group.uuid.clone(), false)
+                .is_some()
+            {
+                let new_merge_log = self.merge_group(new_group_location, other_group)?;
+                log.merge_with(&new_merge_log);
+                continue;
+            }
+
+            // The group already exists but is not at the right location. We might have to
+            // relocate it.
+            if self
+                .root
+                .find_group(destination_group.uuid.clone(), true)
+                .is_some()
+            {}
+
+            // The group doesn't exist in the destination, we create it
+            let new_group = other_group.clone();
         }
 
-        let mut log = MergeLog::default();
         Ok(log)
     }
 }

@@ -139,7 +139,7 @@ impl Group {
         self.get_internal(&node_path)
     }
 
-    fn get_internal<'a>(&'a self, path: &NodePath) -> Option<NodeRef<'a>> {
+    pub(crate) fn get_internal<'a>(&'a self, path: &NodePath) -> Option<NodeRef<'a>> {
         if path.is_empty() {
             Some(NodeRef::Group(self))
         } else {
