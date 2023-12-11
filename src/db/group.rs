@@ -558,7 +558,11 @@ impl Group {
         None
     }
 
-    pub(crate) fn add_group(&mut self, group: Group, path: &NodeLocation2) {
+    pub(crate) fn add_group_or_entry(
+        &mut self,
+        node: impl Into<Node> + Clone,
+        path: &NodeLocation2,
+    ) {
         if path.len() == 0 {
             panic!("TODO handle this with a Response.");
         }
@@ -567,19 +571,19 @@ impl Group {
         remaining_path.remove(0);
 
         if remaining_path.len() == 0 {
-            self.add_node(group.clone());
+            self.add_node(node.clone());
             return;
         }
 
         let next_path_uuid = &remaining_path[0];
 
         println!("Searching for group {}", next_path_uuid);
-        for node in &mut self.children {
-            if let Node::Group(g) = node {
+        for n in &mut self.children {
+            if let Node::Group(g) = n {
                 if &g.uuid != next_path_uuid {
                     continue;
                 }
-                g.add_group(group, &remaining_path);
+                g.add_group_or_entry(node, &remaining_path);
                 return;
             }
         }

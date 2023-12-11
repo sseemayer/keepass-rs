@@ -174,13 +174,25 @@ impl Database {
                 }
 
                 // TODO continue the merge logic for entries
+                continue;
             }
+
+            // The entry doesn't exist in the destination, we create it
+            let mut new_entry = other_entry.clone().to_owned();
+            println!("Adding entry at {:?}", current_group_path);
+            self.root
+                .add_group_or_entry(new_entry.clone(), &current_group_path);
+
+            // TODO should we update the time info for the entry?
+            log.events.push(MergeEvent {
+                event_type: MergeEventType::EntryCreated,
+                node_uuid: new_entry.uuid,
+            });
         }
 
         for other_group in &current_group.groups() {
             let mut new_group_location = current_group_path.clone();
             let other_group_uuid = other_group.uuid;
-            let other_group_uuid_str = other_group.uuid.to_string();
             new_group_location.push(other_group_uuid);
 
             let destination_group_location = self.root.find_node_location_2(other_group.uuid);
@@ -250,7 +262,7 @@ impl Database {
             // The group doesn't exist in the destination, we create it
             let mut new_group = other_group.clone().to_owned();
             new_group.children = vec![];
-            self.root.add_group(new_group, &new_group_location);
+            self.root.add_group_or_entry(new_group, &new_group_location);
             let new_merge_log = self.merge_group(new_group_location, other_group)?;
             log = log.merge_with(&new_merge_log);
         }
