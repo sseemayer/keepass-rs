@@ -52,13 +52,7 @@ pub(crate) struct GroupRef {
 
 pub(crate) type NodeLocation = Vec<GroupRef>;
 
-pub(crate) type NodeLocation2 = Vec<String>;
-pub(crate) fn node_location_to_node_path(node_location: &NodeLocation2) -> NodePath {
-    node_location
-        .iter()
-        .map(|n| NodePathElement::UUID(n))
-        .collect()
-}
+pub(crate) type NodeLocation2 = Vec<Uuid>;
 
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -204,6 +198,60 @@ impl Group {
                 })?;
 
                 head_group.get_mut_internal(&tail)
+            }
+        }
+    }
+
+    pub(crate) fn find<'a>(&'a self, path: &Vec<Uuid>) -> Option<NodeRef<'a>> {
+        if path.is_empty() {
+            Some(NodeRef::Group(self))
+        } else {
+            if path.len() == 1 {
+                let head = &path[0];
+                self.children.iter().find_map(|n| {
+                    if head == &n.get_uuid() {
+                        return Some(n.as_ref());
+                    }
+                    return None;
+                })
+            } else {
+                let head = &path[0];
+                let tail = path[1..path.len()].to_owned();
+
+                let head_group = self.children.iter().find_map(|n| match n {
+                    Node::Group(g) if head == &n.get_uuid() => Some(g),
+                    _ => None,
+                })?;
+
+                head_group.find(&tail)
+            }
+        }
+    }
+
+    pub(crate) fn find_mut<'a>(&'a mut self, path: &Vec<Uuid>) -> Option<NodeRefMut<'a>> {
+        if path.is_empty() {
+            Some(NodeRefMut::Group(self))
+        } else {
+            if path.len() == 1 {
+                let head = &path[0];
+                self.children
+                    .iter_mut()
+                    .filter(|n| head == &n.get_uuid())
+                    .map(|t| t.as_mut())
+                    .next()
+            } else {
+                let head = &path[0];
+                let tail = path[1..path.len()].to_owned();
+
+                let head_group: &mut Group = self.children.iter_mut().find_map(|n| {
+                    let uuid_matches = head == &n.get_uuid();
+                    match n {
+                        Node::Group(g) if uuid_matches => Some(g),
+                        _ => None,
+                    }
+                })?;
+
+                head_group.find_mut(&tail)
             }
         }
     }
@@ -424,7 +472,7 @@ impl Group {
     }
 
     pub(crate) fn find_node_location_2(&self, id: Uuid) -> Option<NodeLocation2> {
-        let mut current_location = vec![self.uuid.to_string()];
+        let mut current_location = vec![self.uuid];
         for node in &self.children {
             match node {
                 Node::Entry(e) => {
@@ -1076,10 +1124,16 @@ mod group_tests {
         let mut destination_group_2 = Group::new("group2");
         println!("destination_group_2.uuid: {:?}", destination_group_2.uuid);
         let mut destination_sub_group_1 = Group::new("subgroup1");
-        println!("destination_sub_group_1.uuid: {:?}", destination_sub_group_1.uuid);
+        println!(
+            "destination_sub_group_1.uuid: {:?}",
+            destination_sub_group_1.uuid
+        );
         let sub_group_1_uuid = destination_sub_group_1.uuid.clone();
         let mut destination_sub_group_2 = Group::new("subgroup2");
-        println!("destination_sub_group_2.uuid: {:?}", destination_sub_group_2.uuid);
+        println!(
+            "destination_sub_group_2.uuid: {:?}",
+            destination_sub_group_2.uuid
+        );
 
         destination_sub_group_1.add_node(entry.clone());
         destination_group_1.add_node(destination_sub_group_1);

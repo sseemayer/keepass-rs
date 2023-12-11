@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 pub use crate::db::{
     entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
-    group::{Group, MergeLog, MergeEvent, MergeEventType},
+    group::{Group, MergeEvent, MergeEventType, MergeLog},
     meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     node::{Node, NodeIter, NodeRef, NodeRefMut},
 };
@@ -25,7 +25,7 @@ pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
 use crate::{
     config::DatabaseConfig,
-    db::group::{node_location_to_node_path, NodeLocation2},
+    db::group::NodeLocation2,
     db::node::NodePath,
     error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
     format::{
@@ -156,7 +156,7 @@ impl Database {
         // We don't need the original group here, only a copy so that we can do some
         // queries on it.
         let destination_group = destination_group.clone();
-        let current_group_uuid = current_group.uuid.to_string();
+        let current_group_uuid = current_group.uuid;
 
         for other_entry in &current_group.entries() {
             // find the existing location
@@ -180,8 +180,11 @@ impl Database {
 
         for other_group in &current_group.groups() {
             let mut new_group_location = current_group_path.clone();
-            let other_group_uuid = other_group.uuid.to_string();
-            new_group_location.push(crate::db::node::NodePathElement::UUID(&other_group_uuid));
+            let other_group_uuid = other_group.uuid;
+            let other_group_uuid_str = other_group.uuid.to_string();
+            new_group_location.push(crate::db::node::NodePathElement::UUID(
+                &other_group_uuid_str,
+            ));
 
             let destination_group_location = self.root.find_node_location_2(other_group.uuid);
             // The group already exists in the destination database.
@@ -269,11 +272,7 @@ impl Database {
         let mut new_from = from.clone();
         new_from.remove(0);
 
-        let source_group = match self
-            .root
-            .get_mut_internal(&node_location_to_node_path(&new_from))
-            .unwrap()
-        {
+        let source_group = match self.root.find_mut(&new_from).unwrap() {
             NodeRefMut::Group(g) => g,
             NodeRefMut::Entry(_) => panic!("".to_string()),
         };

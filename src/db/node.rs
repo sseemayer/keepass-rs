@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use uuid::Uuid;
 
 use crate::db::{entry::Entry, group::Group};
 
@@ -56,6 +57,13 @@ impl Node {
 
     pub fn as_mut<'a>(&'a mut self) -> NodeRefMut<'a> {
         self.into()
+    }
+
+    pub fn get_uuid(&self) -> Uuid {
+        match self {
+            Node::Group(g) => g.uuid,
+            Node::Entry(e) => e.uuid,
+        }
     }
 }
 
