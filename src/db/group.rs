@@ -564,18 +564,14 @@ impl Group {
         path: &NodeLocation2,
     ) {
         if path.len() == 0 {
-            panic!("TODO handle this with a Response.");
-        }
-
-        let mut remaining_path = path.clone();
-        remaining_path.remove(0);
-
-        if remaining_path.len() == 0 {
             self.add_node(node.clone());
             return;
         }
 
-        let next_path_uuid = &remaining_path[0];
+        let next_path_uuid = &path[0];
+
+        let mut remaining_path = path.clone();
+        remaining_path.remove(0);
 
         println!("Searching for group {}", next_path_uuid);
         for n in &mut self.children {
