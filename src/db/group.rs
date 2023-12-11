@@ -1030,11 +1030,13 @@ mod group_tests {
 
     #[test]
     fn test_merge_group_relocation() {
+        let mut destination_db = Database::new(Default::default());
+
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        let mut destination_root_group = Group::new("root");
+        destination_db.root = Group::new("root");
         let mut destination_group_1 = Group::new("group1");
         let mut destination_group_2 = Group::new("group2");
         let mut destination_sub_group_1 = Group::new("subgroup1");
@@ -1044,35 +1046,38 @@ mod group_tests {
         destination_sub_group_1.add_node(entry.clone());
         destination_group_1.add_node(destination_sub_group_1);
         destination_group_2.add_node(destination_sub_group_2);
-        destination_root_group.add_node(destination_group_1);
-        destination_root_group.add_node(destination_group_2);
+        destination_db.root.add_node(destination_group_1);
+        destination_db.root.add_node(destination_group_2);
 
-        let mut source_root_group = destination_root_group.clone();
+        let mut source_db = destination_db.clone();
 
-        let mut source_group_1 = match source_root_group.get_mut(&["group1"]).unwrap() {
+        let mut source_group_1 = match source_db.root.get_mut(&["group1"]).unwrap() {
             crate::db::NodeRefMut::Group(g) => g,
             _ => panic!("This should never happen."),
         };
         let mut source_sub_group_1 = source_group_1.remove_group(&sub_group_1_uuid).unwrap();
+        println!("time now {:?}", Times::now());
         thread::sleep(time::Duration::from_secs(1));
+        println!("time now {:?}", Times::now());
         source_sub_group_1.times.set_location_changed(Times::now());
-        // FIXME we should not have to update the history here. We should
-        // have a better compare function in the merge function instead.
-        // source_sub_group_1.update_history();
+        println!(
+            "source_sub_group_1.times.get_location_changed() {:?}",
+            source_sub_group_1.times.get_location_changed()
+        );
 
         drop(source_group_1);
-        let mut source_group_2 = match source_root_group.get_mut(&["group2"]).unwrap() {
+        let mut source_group_2 = match source_db.root.get_mut(&["group2"]).unwrap() {
             crate::db::NodeRefMut::Group(g) => g,
             _ => panic!("This should never happen."),
         };
 
         source_group_2.add_node(source_sub_group_1);
 
-        let merge_result = destination_root_group.merge(&source_root_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let destination_entries = destination_root_group.get_all_entries(&vec![]);
+        let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 2);

@@ -30,7 +30,7 @@ const SALSA_20: u32 = 2;
 const CHA_CHA_20: u32 = 3;
 
 /// Configuration of how a database should be stored
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct DatabaseConfig {
     /// Version of the outer database file

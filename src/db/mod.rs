@@ -37,7 +37,7 @@ use crate::{
 };
 
 /// A decrypted KeePass database
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Database {
     /// Configuration settings of the database such as encryption and compression algorithms
@@ -144,6 +144,7 @@ impl Database {
     fn merge_group(&mut self, group_location: NodePath, other: &Group) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
+        println!("get_internal for group {:?}", group_location);
         let destination_group = match self.root.get_internal(&group_location).unwrap() {
             crate::db::NodeRef::Group(g) => g,
             _ => return Err("".to_string()),
@@ -160,7 +161,7 @@ impl Database {
             // The group already exists and is at the right location, so we can proceed and merge
             // the two groups.
             if destination_group
-                .find_group(destination_group.uuid.clone(), false)
+                .find_group(other_group.uuid.clone(), false)
                 .is_some()
             {
                 let new_merge_log = self.merge_group(new_group_location, other_group)?;
@@ -168,18 +169,53 @@ impl Database {
                 continue;
             }
 
+            let existing_group = self.root.find_group(other_group.uuid.clone(), true);
+
             // The group already exists but is not at the right location. We might have to
             // relocate it.
-            if self
-                .root
-                .find_group(destination_group.uuid.clone(), true)
-                .is_some()
-            {}
+            if let Some(existing_group) = existing_group {
+                let existing_group_location_changed =
+                    match existing_group.times.get_location_changed() {
+                        Some(t) => *t,
+                        None => {
+                            log.warnings.push(format!(
+                                "Entry {} did not have a location changed timestamp",
+                                existing_group.uuid
+                            ));
+                            Times::now()
+                        }
+                    };
+                let other_group_location_changed = match other_group.times.get_location_changed() {
+                    Some(t) => *t,
+                    None => {
+                        log.warnings.push(format!(
+                            "Entry {} did not have a location changed timestamp",
+                            other_group.uuid
+                        ));
+                        Times::epoch()
+                    }
+                };
+                // The other group was moved after the current group, so we have to relocate it.
+                if existing_group_location_changed < other_group_location_changed {
+                    println!("Relocating group {}", other_group.uuid);
+                    // FIXME this should remove from any group the location might be in.
+                    let relocated_group = self.root.remove_group(&other_group.uuid)?;
+                    self.root.add_group(relocated_group, &new_group_location);
+                } else {
+                    println!("Not relocating group {}", other_group.uuid);
+                }
+
+                let new_merge_log = self.merge_group(new_group_location, other_group)?;
+                log.merge_with(&new_merge_log);
+                continue;
+            }
 
             // The group doesn't exist in the destination, we create it
             let mut new_group = other_group.clone().to_owned();
             new_group.children = vec![];
             self.root.add_group(new_group, &new_group_location);
+            let new_merge_log = self.merge_group(new_group_location, other_group)?;
+            log.merge_with(&new_merge_log);
         }
 
         Ok(log)
