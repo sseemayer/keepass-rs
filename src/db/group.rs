@@ -12,9 +12,9 @@ use crate::db::{
 pub enum MergeEventType {
     EntryCreated,
     EntryLocationUpdated,
-
     EntryUpdated,
     GroupCreated,
+    GroupLocationUpdated,
 }
 
 #[derive(Debug, Clone)]
@@ -1110,15 +1110,17 @@ mod group_tests {
         source_group_2.add_node(source_sub_group_1);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
+        println!("merge_result: {:?}", merge_result);
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
         let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
-        assert_eq!(created_entry_location.len(), 2);
-        assert_eq!(created_entry_location[0].name, "group1".to_string());
-        assert_eq!(created_entry_location[1].name, "subgroup2".to_string());
+        assert_eq!(created_entry_location.len(), 3);
+        assert_eq!(created_entry_location[0].name, "root".to_string());
+        assert_eq!(created_entry_location[1].name, "group2".to_string());
+        assert_eq!(created_entry_location[2].name, "subgroup1".to_string());
     }
 
     #[test]

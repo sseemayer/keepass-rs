@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 pub use crate::db::{
     entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
-    group::{Group, MergeLog},
+    group::{Group, MergeLog, MergeEvent, MergeEventType},
     meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     node::{Node, NodeIter, NodeRef, NodeRefMut},
 };
@@ -149,7 +149,6 @@ impl Database {
     ) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
-        println!("get_internal for group {:?}", current_group_path);
         let destination_group = match self.root.get_internal(&current_group_path).unwrap() {
             crate::db::NodeRef::Group(g) => g,
             _ => return Err("".to_string()),
@@ -172,7 +171,7 @@ impl Database {
                 // the two groups.
                 if parent_group_uuid == &current_group_uuid {
                     let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                    log.merge_with(&new_merge_log);
+                    log = log.merge_with(&new_merge_log);
                     continue;
                 }
 
@@ -212,23 +211,27 @@ impl Database {
                         &current_group_path,
                     )?;
 
+                    log.events.push(MergeEvent {
+                        event_type: MergeEventType::GroupLocationUpdated,
+                        node_uuid: other_group.uuid,
+                    });
+
                     let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                    log.merge_with(&new_merge_log);
+                    log = log.merge_with(&new_merge_log);
                     continue;
                 }
 
                 let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                log.merge_with(&new_merge_log);
+                log = log.merge_with(&new_merge_log);
                 continue;
             }
 
             // The group doesn't exist in the destination, we create it
             let mut new_group = other_group.clone().to_owned();
             new_group.children = vec![];
-            println!("Adding new group at {:?}", &new_group_location);
             self.root.add_group(new_group, &new_group_location);
             let new_merge_log = self.merge_group(new_group_location, other_group)?;
-            log.merge_with(&new_merge_log);
+            log = log.merge_with(&new_merge_log);
         }
 
         Ok(log)
@@ -240,11 +243,14 @@ impl Database {
         from: &NodeLocation2,
         to: &NodePath,
     ) -> Result<(), String> {
-        println!("Relocating group {} from {:?} to {:?}", node_uuid, from, to);
+        // FIXME this isn't great. The new functions return the root node but not
+        // the old search functions.
+        let mut new_from = from.clone();
+        new_from.remove(0);
 
         let source_group = match self
             .root
-            .get_mut_internal(&node_location_to_node_path(from))
+            .get_mut_internal(&node_location_to_node_path(&new_from))
             .unwrap()
         {
             NodeRefMut::Group(g) => g,
