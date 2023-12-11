@@ -52,6 +52,14 @@ pub(crate) struct GroupRef {
 
 pub(crate) type NodeLocation = Vec<GroupRef>;
 
+pub(crate) type NodeLocation2 = Vec<String>;
+pub(crate) fn node_location_to_node_path(node_location: &NodeLocation2) -> NodePath {
+    node_location
+        .iter()
+        .map(|n| NodePathElement::UUID(n))
+        .collect()
+}
+
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
@@ -172,7 +180,6 @@ impl Group {
         self.get_mut_internal(&node_path)
     }
 
-    // fn get_internal<'a>(&'a self, path: &NodePath) -> Option<NodeRef<'a>> {
     pub(crate) fn get_mut_internal<'a>(&'a mut self, path: &NodePath) -> Option<NodeRefMut<'a>> {
         if path.is_empty() {
             Some(NodeRefMut::Group(self))
@@ -414,6 +421,29 @@ impl Group {
             "Could not find group {} in group {}.",
             uuid, self.name
         ));
+    }
+
+    pub(crate) fn find_node_location_2(&self, id: Uuid) -> Option<NodeLocation2> {
+        let mut current_location = vec![self.uuid.to_string()];
+        for node in &self.children {
+            match node {
+                Node::Entry(e) => {
+                    if e.uuid == id {
+                        return Some(current_location);
+                    }
+                }
+                Node::Group(g) => {
+                    if g.uuid == id {
+                        return Some(current_location);
+                    }
+                    if let Some(mut location) = g.find_node_location_2(id) {
+                        current_location.append(&mut location);
+                        return Some(current_location);
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub(crate) fn find_node_location(&self, id: Uuid) -> Option<NodeLocation> {
@@ -1040,11 +1070,16 @@ mod group_tests {
         entry.set_field_and_commit("Title", "entry1");
 
         destination_db.root = Group::new("root");
+        println!("destination_db.root.uuid: {:?}", destination_db.root.uuid);
         let mut destination_group_1 = Group::new("group1");
+        println!("destination_group_1.uuid: {:?}", destination_group_1.uuid);
         let mut destination_group_2 = Group::new("group2");
+        println!("destination_group_2.uuid: {:?}", destination_group_2.uuid);
         let mut destination_sub_group_1 = Group::new("subgroup1");
+        println!("destination_sub_group_1.uuid: {:?}", destination_sub_group_1.uuid);
         let sub_group_1_uuid = destination_sub_group_1.uuid.clone();
         let mut destination_sub_group_2 = Group::new("subgroup2");
+        println!("destination_sub_group_2.uuid: {:?}", destination_sub_group_2.uuid);
 
         destination_sub_group_1.add_node(entry.clone());
         destination_group_1.add_node(destination_sub_group_1);
@@ -1059,9 +1094,7 @@ mod group_tests {
             _ => panic!("This should never happen."),
         };
         let mut source_sub_group_1 = source_group_1.remove_group(&sub_group_1_uuid).unwrap();
-        println!("time now {:?}", Times::now());
         thread::sleep(time::Duration::from_secs(1));
-        println!("time now {:?}", Times::now());
         source_sub_group_1.times.set_location_changed(Times::now());
         println!(
             "source_sub_group_1.times.get_location_changed() {:?}",

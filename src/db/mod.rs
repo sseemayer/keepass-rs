@@ -25,6 +25,7 @@ pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
 use crate::{
     config::DatabaseConfig,
+    db::group::{node_location_to_node_path, NodeLocation2},
     db::node::NodePath,
     error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
     format::{
@@ -162,13 +163,14 @@ impl Database {
             let current_group_uuid = other_group.uuid.to_string();
             new_group_location.push(crate::db::node::NodePathElement::UUID(&current_group_uuid));
 
-            let destination_group_location = self.root.find_node_location(other_group.uuid);
+            let destination_group_location = self.root.find_node_location_2(other_group.uuid);
             // The group already exists in the destination database.
             if let Some(destination_group_location) = destination_group_location {
-                let parent_group = destination_group_location.last().unwrap();
+                let parent_group_uuid = destination_group_location.last().unwrap();
+
                 // The group already exists and is at the right location, so we can proceed and merge
                 // the two groups.
-                if parent_group.uuid.to_string() == current_group_uuid {
+                if parent_group_uuid == &current_group_uuid {
                     let new_merge_log = self.merge_group(new_group_location, other_group)?;
                     log.merge_with(&new_merge_log);
                     continue;
@@ -204,12 +206,15 @@ impl Database {
                 };
                 // The other group was moved after the current group, so we have to relocate it.
                 if existing_group_location_changed < other_group_location_changed {
-                    println!("Relocating group {}", other_group.uuid);
-                    // FIXME this should remove from any group the location might be in.
-                    let relocated_group = self.root.remove_group(&other_group.uuid)?;
-                    self.root.add_group(relocated_group, &new_group_location);
-                } else {
-                    println!("Not relocating group {}", other_group.uuid);
+                    self.relocate_node(
+                        &other_group.uuid,
+                        &destination_group_location,
+                        &current_group_path,
+                    )?;
+
+                    let new_merge_log = self.merge_group(new_group_location, other_group)?;
+                    log.merge_with(&new_merge_log);
+                    continue;
                 }
 
                 let new_merge_log = self.merge_group(new_group_location, other_group)?;
@@ -227,6 +232,36 @@ impl Database {
         }
 
         Ok(log)
+    }
+
+    fn relocate_node(
+        &mut self,
+        node_uuid: &Uuid,
+        from: &NodeLocation2,
+        to: &NodePath,
+    ) -> Result<(), String> {
+        println!("Relocating group {} from {:?} to {:?}", node_uuid, from, to);
+
+        let source_group = match self
+            .root
+            .get_mut_internal(&node_location_to_node_path(from))
+            .unwrap()
+        {
+            NodeRefMut::Group(g) => g,
+            NodeRefMut::Entry(_) => panic!("".to_string()),
+        };
+
+        // FIXME this should work for entries too!!!
+        let relocated_group = source_group.remove_group(&node_uuid)?;
+
+        let destination_group = match self.root.get_mut_internal(&to).unwrap() {
+            NodeRefMut::Group(g) => g,
+            NodeRefMut::Entry(_) => panic!("".to_string()),
+        };
+        destination_group
+            .children
+            .push(Node::Group(relocated_group));
+        Ok(())
     }
 }
 
