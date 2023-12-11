@@ -416,7 +416,7 @@ impl Group {
         ));
     }
 
-    pub(crate) fn find_entry_location(&self, id: Uuid) -> Option<NodeLocation> {
+    pub(crate) fn find_node_location(&self, id: Uuid) -> Option<NodeLocation> {
         let mut current_location = vec![GroupRef {
             uuid: self.uuid.clone(),
             name: self.name.clone(),
@@ -429,7 +429,10 @@ impl Group {
                     }
                 }
                 Node::Group(g) => {
-                    if let Some(mut location) = g.find_entry_location(id) {
+                    if g.uuid == id {
+                        return Some(current_location);
+                    }
+                    if let Some(mut location) = g.find_node_location(id) {
                         current_location.append(&mut location);
                         return Some(current_location);
                     }
@@ -559,7 +562,7 @@ impl Group {
                 Some(e) => e,
                 None => continue,
             };
-            let existing_entry_location = match self.find_entry_location(entry.uuid) {
+            let existing_entry_location = match self.find_node_location(entry.uuid) {
                 Some(l) => l,
                 None => continue,
             };

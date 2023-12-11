@@ -141,11 +141,15 @@ impl Database {
         self.merge_group(vec![], &other.root)
     }
 
-    fn merge_group(&mut self, group_location: NodePath, other: &Group) -> Result<MergeLog, String> {
+    fn merge_group(
+        &mut self,
+        current_group_path: NodePath,
+        current_group: &Group,
+    ) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
-        println!("get_internal for group {:?}", group_location);
-        let destination_group = match self.root.get_internal(&group_location).unwrap() {
+        println!("get_internal for group {:?}", current_group_path);
+        let destination_group = match self.root.get_internal(&current_group_path).unwrap() {
             crate::db::NodeRef::Group(g) => g,
             _ => return Err("".to_string()),
         };
@@ -153,27 +157,30 @@ impl Database {
         // queries on it.
         let destination_group = destination_group.clone();
 
-        for other_group in &other.groups() {
-            let mut new_group_location = group_location.clone();
+        for other_group in &current_group.groups() {
+            let mut new_group_location = current_group_path.clone();
             let current_group_uuid = other_group.uuid.to_string();
             new_group_location.push(crate::db::node::NodePathElement::UUID(&current_group_uuid));
 
-            // The group already exists and is at the right location, so we can proceed and merge
-            // the two groups.
-            if destination_group
-                .find_group(other_group.uuid.clone(), false)
-                .is_some()
-            {
-                let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                log.merge_with(&new_merge_log);
-                continue;
-            }
+            let destination_group_location = self.root.find_node_location(other_group.uuid);
+            // The group already exists in the destination database.
+            if let Some(destination_group_location) = destination_group_location {
+                let parent_group = destination_group_location.last().unwrap();
+                // The group already exists and is at the right location, so we can proceed and merge
+                // the two groups.
+                if parent_group.uuid.to_string() == current_group_uuid {
+                    let new_merge_log = self.merge_group(new_group_location, other_group)?;
+                    log.merge_with(&new_merge_log);
+                    continue;
+                }
 
-            let existing_group = self.root.find_group(other_group.uuid.clone(), true);
-
-            // The group already exists but is not at the right location. We might have to
-            // relocate it.
-            if let Some(existing_group) = existing_group {
+                // The group already exists but is not at the right location. We might have to
+                // relocate it.
+                // FIXME use the location to get the group!
+                let existing_group = self
+                    .root
+                    .find_group(other_group.uuid.clone(), true)
+                    .unwrap();
                 let existing_group_location_changed =
                     match existing_group.times.get_location_changed() {
                         Some(t) => *t,
@@ -213,6 +220,7 @@ impl Database {
             // The group doesn't exist in the destination, we create it
             let mut new_group = other_group.clone().to_owned();
             new_group.children = vec![];
+            println!("Adding new group at {:?}", &new_group_location);
             self.root.add_group(new_group, &new_group_location);
             let new_merge_log = self.merge_group(new_group_location, other_group)?;
             log.merge_with(&new_merge_log);
