@@ -156,11 +156,32 @@ impl Database {
         // We don't need the original group here, only a copy so that we can do some
         // queries on it.
         let destination_group = destination_group.clone();
+        let current_group_uuid = current_group.uuid.to_string();
+
+        for other_entry in &current_group.entries() {
+            // find the existing location
+            let destination_entry_location = self.root.find_node_location_2(other_entry.uuid);
+
+            // The group already exists in the destination database.
+            if let Some(destination_entry_location) = destination_entry_location {
+                let parent_group_uuid = destination_entry_location.last().unwrap();
+
+                // The group already exists and is at the right location, so we can proceed and merge
+                // the two groups.
+                if parent_group_uuid == &current_group_uuid {
+                    // let new_merge_log = self.merge_group(new_group_location, other_group)?;
+                    // log = log.merge_with(&new_merge_log);
+                    continue;
+                }
+
+                // TODO continue the merge logic for entries
+            }
+        }
 
         for other_group in &current_group.groups() {
             let mut new_group_location = current_group_path.clone();
-            let current_group_uuid = other_group.uuid.to_string();
-            new_group_location.push(crate::db::node::NodePathElement::UUID(&current_group_uuid));
+            let other_group_uuid = other_group.uuid.to_string();
+            new_group_location.push(crate::db::node::NodePathElement::UUID(&other_group_uuid));
 
             let destination_group_location = self.root.find_node_location_2(other_group.uuid);
             // The group already exists in the destination database.
@@ -169,7 +190,7 @@ impl Database {
 
                 // The group already exists and is at the right location, so we can proceed and merge
                 // the two groups.
-                if parent_group_uuid == &current_group_uuid {
+                if parent_group_uuid == &other_group_uuid {
                     let new_merge_log = self.merge_group(new_group_location, other_group)?;
                     log = log.merge_with(&new_merge_log);
                     continue;
@@ -258,6 +279,7 @@ impl Database {
         };
 
         // FIXME this should work for entries too!!!
+        // FIXME should we update the location changed timestamp??
         let relocated_group = source_group.remove_group(&node_uuid)?;
 
         let destination_group = match self.root.get_mut_internal(&to).unwrap() {
