@@ -26,7 +26,6 @@ pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 use crate::{
     config::DatabaseConfig,
     db::group::NodeLocation2,
-    db::node::NodePath,
     error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
     format::{
         kdb::parse_kdb,
@@ -144,12 +143,12 @@ impl Database {
 
     fn merge_group(
         &mut self,
-        current_group_path: NodePath,
+        current_group_path: NodeLocation2,
         current_group: &Group,
     ) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
-        let destination_group = match self.root.get_internal(&current_group_path).unwrap() {
+        let destination_group = match self.root.find(&current_group_path).unwrap() {
             crate::db::NodeRef::Group(g) => g,
             _ => return Err("".to_string()),
         };
@@ -182,9 +181,7 @@ impl Database {
             let mut new_group_location = current_group_path.clone();
             let other_group_uuid = other_group.uuid;
             let other_group_uuid_str = other_group.uuid.to_string();
-            new_group_location.push(crate::db::node::NodePathElement::UUID(
-                &other_group_uuid_str,
-            ));
+            new_group_location.push(other_group_uuid);
 
             let destination_group_location = self.root.find_node_location_2(other_group.uuid);
             // The group already exists in the destination database.
@@ -265,7 +262,7 @@ impl Database {
         &mut self,
         node_uuid: &Uuid,
         from: &NodeLocation2,
-        to: &NodePath,
+        to: &NodeLocation2,
     ) -> Result<(), String> {
         // FIXME this isn't great. The new functions return the root node but not
         // the old search functions.
@@ -281,7 +278,7 @@ impl Database {
         // FIXME should we update the location changed timestamp??
         let relocated_group = source_group.remove_group(&node_uuid)?;
 
-        let destination_group = match self.root.get_mut_internal(&to).unwrap() {
+        let destination_group = match self.root.find_mut(&to).unwrap() {
             NodeRefMut::Group(g) => g,
             NodeRefMut::Entry(_) => panic!("".to_string()),
         };
