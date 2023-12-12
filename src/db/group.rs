@@ -970,25 +970,26 @@ mod group_tests {
 
     #[test]
     fn test_merge_add_new_non_root_entry() {
+        let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group = Group::new("subgroup1");
         destination_group.add_node(destination_sub_group);
+        destination_db.root = destination_group.clone();
 
-        let mut source_group = destination_group.clone();
-        let mut source_sub_group = &mut source_group.groups_mut()[0];
+        let mut source_db = destination_db.clone();
+        let mut source_sub_group = &mut source_db.root.groups_mut()[0];
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
         source_sub_group.add_node(entry);
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
-        let destination_entries = destination_group.get_all_entries(&vec![]);
+        let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
-        println!("{:?}", created_entry_location);
         assert_eq!(created_entry_location.len(), 2);
     }
 
