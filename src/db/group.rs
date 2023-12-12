@@ -974,6 +974,39 @@ mod group_tests {
     }
 
     #[test]
+    fn test_merge_deleted_entry_in_destination() {
+        let mut destination_db = Database::new(Default::default());
+        destination_db.root = Group::new("group1");
+
+        let mut source_db = destination_db.clone();
+
+        let mut source_group = match source_db.root.get_mut(&[]).unwrap() {
+            crate::db::NodeRefMut::Group(g) => g,
+            _ => panic!("This should never happen."),
+        };
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.set_field_and_commit("Title", "entry1");
+        source_group.add_node(entry);
+
+        destination_db
+            .deleted_objects
+            .objects
+            .push(crate::db::DeletedObject {
+                uuid: entry_uuid.clone(),
+                deletion_time: Times::now(),
+            });
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 0);
+        assert_eq!(destination_db.root.children.len(), 0);
+        let new_entry = destination_db.root.find_entry_by_uuid(entry_uuid);
+        assert!(new_entry.is_none());
+    }
+
+    #[test]
     fn test_merge_add_new_non_root_entry() {
         let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");

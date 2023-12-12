@@ -218,6 +218,9 @@ impl Database {
                 continue;
             }
 
+            if self.deleted_objects.contains(other_entry.uuid) {
+                continue;
+            }
             // The entry doesn't exist in the destination, we create it
             let mut new_entry = other_entry.clone().to_owned();
             println!("Adding entry at {:?}", current_group_path);
@@ -475,6 +478,17 @@ pub struct HeaderAttachment {
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct DeletedObjects {
     pub objects: Vec<DeletedObject>,
+}
+
+impl DeletedObjects {
+    pub fn contains(&self, uuid: Uuid) -> bool {
+        for deleted_object in &self.objects {
+            if deleted_object.uuid == uuid {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 /// A reference to a deleted element
