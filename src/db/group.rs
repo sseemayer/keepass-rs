@@ -475,35 +475,6 @@ impl Group {
         ));
     }
 
-    pub(crate) fn remove_group(&mut self, uuid: &Uuid) -> Result<Group, String> {
-        let mut removed_group: Option<Group> = None;
-        let mut new_nodes: Vec<Node> = vec![];
-        for node in &self.children {
-            match node {
-                Node::Entry(_) => {
-                    new_nodes.push(node.clone());
-                }
-                Node::Group(g) => {
-                    if &g.uuid != uuid {
-                        new_nodes.push(node.clone());
-                        continue;
-                    }
-                    removed_group = Some(g.clone());
-                }
-            }
-        }
-
-        if let Some(group) = removed_group {
-            self.children = new_nodes;
-            return Ok(group);
-        }
-
-        return Err(format!(
-            "Could not find group {} in group {}.",
-            uuid, self.name
-        ));
-    }
-
     pub(crate) fn find_node_location_2(&self, id: Uuid) -> Option<NodeLocation2> {
         let mut current_location = vec![self.uuid];
         for node in &self.children {
@@ -1191,7 +1162,10 @@ mod group_tests {
             crate::db::NodeRefMut::Group(g) => g,
             _ => panic!("This should never happen."),
         };
-        let mut source_sub_group_1 = source_group_1.remove_group(&sub_group_1_uuid).unwrap();
+        let mut source_sub_group_1 = match source_group_1.remove_node(&sub_group_1_uuid).unwrap() {
+            Node::Group(g) => g,
+            _ => panic!("This should not happen."),
+        };
         thread::sleep(time::Duration::from_secs(1));
         source_sub_group_1.times.set_location_changed(Times::now());
         println!(
