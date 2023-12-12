@@ -165,15 +165,56 @@ impl Database {
             if let Some(destination_entry_location) = destination_entry_location {
                 let parent_group_uuid = destination_entry_location.last().unwrap();
 
-                // The group already exists and is at the right location, so we can proceed and merge
+                // The entry already exists and is at the right location, so we can proceed and merge
                 // the two groups.
-                if parent_group_uuid == &current_group_uuid {
-                    // let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                    // log = log.merge_with(&new_merge_log);
-                    continue;
+                if parent_group_uuid != &current_group_uuid {
+                    // The entry already exists but is not at the right location. We might have to
+                    // relocate it.
+                    // FIXME use the location to get the entry!
+                    let existing_entry = self
+                        .root
+                        .find_entry_by_uuid(other_entry.uuid.clone())
+                        .unwrap();
+
+                    let source_location_changed_time =
+                        match other_entry.times.get_location_changed() {
+                            Some(t) => *t,
+                            None => {
+                                log.warnings.push(format!(
+                                    "Entry {} did not have a location updated timestamp",
+                                    other_entry.uuid
+                                ));
+                                Times::epoch()
+                            }
+                        };
+                    let destination_location_changed =
+                        match existing_entry.times.get_location_changed() {
+                            Some(t) => *t,
+                            None => {
+                                log.warnings.push(format!(
+                                    "Entry {} did not have a location updated timestamp",
+                                    other_entry.uuid
+                                ));
+                                Times::now()
+                            }
+                        };
+                    if source_location_changed_time > destination_location_changed {
+                        log.events.push(MergeEvent {
+                            event_type: MergeEventType::EntryLocationUpdated,
+                            node_uuid: other_entry.uuid,
+                        });
+                        self.relocate_node(
+                            &other_entry.uuid,
+                            &destination_entry_location,
+                            &current_group_path,
+                        )?;
+                    }
                 }
 
-                // TODO continue the merge logic for entries
+                // TODO actually merge the entries.
+                // let new_merge_log = self.merge_group(new_group_location, other_group)?;
+                // log = log.merge_with(&new_merge_log);
+                //
                 continue;
             }
 
@@ -262,7 +303,12 @@ impl Database {
             // The group doesn't exist in the destination, we create it
             let mut new_group = other_group.clone().to_owned();
             new_group.children = vec![];
-            self.root.add_group_or_entry(new_group, &new_group_location);
+            println!("Adding new group {}", new_group.name);
+            log.events.push(MergeEvent {
+                event_type: MergeEventType::GroupCreated,
+                node_uuid: new_group.uuid.clone(),
+            });
+            self.root.add_group_or_entry(new_group, &current_group_path);
             let new_merge_log = self.merge_group(new_group_location, other_group)?;
             log = log.merge_with(&new_merge_log);
         }
@@ -286,17 +332,14 @@ impl Database {
             NodeRefMut::Entry(_) => panic!("".to_string()),
         };
 
-        // FIXME this should work for entries too!!!
         // FIXME should we update the location changed timestamp??
-        let relocated_group = source_group.remove_group(&node_uuid)?;
+        let relocated_node = source_group.remove_node(&node_uuid)?;
 
         let destination_group = match self.root.find_mut(&to).unwrap() {
             NodeRefMut::Group(g) => g,
             NodeRefMut::Entry(_) => panic!("".to_string()),
         };
-        destination_group
-            .children
-            .push(Node::Group(relocated_group));
+        destination_group.children.push(relocated_node);
         Ok(())
     }
 }

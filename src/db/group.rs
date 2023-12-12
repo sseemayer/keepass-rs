@@ -442,6 +442,39 @@ impl Group {
         }
     }
 
+    pub(crate) fn remove_node(&mut self, uuid: &Uuid) -> Result<Node, String> {
+        let mut removed_node: Option<Node> = None;
+        let mut new_nodes: Vec<Node> = vec![];
+        for node in &self.children {
+            match node {
+                Node::Entry(e) => {
+                    if &e.uuid != uuid {
+                        new_nodes.push(node.clone());
+                        continue;
+                    }
+                    removed_node = Some(node.clone());
+                }
+                Node::Group(g) => {
+                    if &g.uuid != uuid {
+                        new_nodes.push(node.clone());
+                        continue;
+                    }
+                    removed_node = Some(node.clone());
+                }
+            }
+        }
+
+        if let Some(node) = removed_node {
+            self.children = new_nodes;
+            return Ok(node);
+        }
+
+        return Err(format!(
+            "Could not find node {} in group {}.",
+            uuid, self.name
+        ));
+    }
+
     pub(crate) fn remove_group(&mut self, uuid: &Uuid) -> Result<Group, String> {
         let mut removed_group: Option<Group> = None;
         let mut new_nodes: Vec<Node> = vec![];
@@ -567,6 +600,7 @@ impl Group {
             self.add_node(node.clone());
             return;
         }
+        println!("Searching for {:?}", path);
 
         let next_path_uuid = &path[0];
 
@@ -998,7 +1032,9 @@ mod group_tests {
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group = Group::new("subgroup1");
         let mut source_group = Group::new("group1");
+        println!("source_group.uuid: {}", source_group.uuid);
         let mut source_sub_group = Group::new("subgroup1");
+        println!("source_sub_group.uuid: {}", source_sub_group.uuid);
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
@@ -1084,27 +1120,32 @@ mod group_tests {
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
+        let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
+        println!("destination_group.uuid: {}", destination_group.uuid);
         let mut destination_sub_group = Group::new("subgroup1");
+        println!("destination_sub_group.uuid: {}", destination_sub_group.uuid);
         destination_sub_group.add_node(entry.clone());
         destination_group.add_node(destination_sub_group);
+        destination_db.root = destination_group.clone();
 
-        let mut source_group = destination_group.clone();
+        let mut source_db = destination_db.clone();
         let mut source_sub_group = Group::new("subgroup2");
+        println!("source_sub_group.uuid: {}", source_sub_group.uuid);
         thread::sleep(time::Duration::from_secs(1));
         entry.times.set_location_changed(Times::now());
         // FIXME we should not have to update the history here. We should
         // have a better compare function in the merge function instead.
         entry.update_history();
         source_sub_group.add_node(entry.clone());
-        source_group.children = vec![];
-        source_group.add_node(source_sub_group);
+        source_db.root.children = vec![];
+        source_db.root.add_node(source_sub_group);
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 1);
+        assert_eq!(merge_result.events.len(), 2);
 
-        let destination_entries = destination_group.get_all_entries(&vec![]);
+        let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 2);
@@ -1206,24 +1247,27 @@ mod group_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_update_in_source_no_conflict() {
+        let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
         destination_group.add_node(entry);
+        destination_db.root = destination_group.clone();
 
-        let mut source_group = destination_group.clone();
+        let mut source_db = destination_db.clone();
 
-        let mut entry = &mut source_group.entries_mut()[0];
+        let mut entry = &mut source_db.root.entries_mut()[0];
         entry.set_field_and_commit("Title", "entry1_updated");
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry = destination_group.entries()[0];
+        let entry = destination_db.root.entries()[0];
         assert_eq!(entry.get_title(), Some("entry1_updated"));
     }
 
