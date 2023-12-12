@@ -1182,6 +1182,7 @@ mod group_tests {
 
     #[test]
     fn test_update_in_destination_no_conflict() {
+        let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
 
         let mut entry = Entry::new();
@@ -1189,17 +1190,18 @@ mod group_tests {
         entry.set_field_and_commit("Title", "entry1");
 
         destination_group.add_node(entry);
+        destination_db.root = destination_group.clone();
 
-        let mut source_group = destination_group.clone();
+        let mut source_db = destination_db.clone();
 
-        let mut entry = &mut destination_group.entries_mut()[0];
+        let mut entry = &mut destination_db.root.entries_mut()[0];
         entry.set_field_and_commit("Title", "entry1_updated");
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry = destination_group.entries()[0];
+        let entry = destination_db.root.entries()[0];
         assert_eq!(entry.get_title(), Some("entry1_updated"));
     }
 
