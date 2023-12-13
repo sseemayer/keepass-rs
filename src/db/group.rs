@@ -1168,22 +1168,11 @@ mod group_tests {
         entry.set_field_and_commit("Title", "entry1");
 
         destination_db.root = Group::new("root");
-        println!("destination_db.root.uuid: {:?}", destination_db.root.uuid);
         let mut destination_group_1 = Group::new("group1");
-        println!("destination_group_1.uuid: {:?}", destination_group_1.uuid);
         let mut destination_group_2 = Group::new("group2");
-        println!("destination_group_2.uuid: {:?}", destination_group_2.uuid);
         let mut destination_sub_group_1 = Group::new("subgroup1");
-        println!(
-            "destination_sub_group_1.uuid: {:?}",
-            destination_sub_group_1.uuid
-        );
         let sub_group_1_uuid = destination_sub_group_1.uuid.clone();
         let mut destination_sub_group_2 = Group::new("subgroup2");
-        println!(
-            "destination_sub_group_2.uuid: {:?}",
-            destination_sub_group_2.uuid
-        );
 
         destination_sub_group_1.add_node(entry.clone());
         destination_group_1.add_node(destination_sub_group_1);
@@ -1203,10 +1192,6 @@ mod group_tests {
         };
         thread::sleep(time::Duration::from_secs(1));
         source_sub_group_1.times.set_location_changed(Times::now());
-        println!(
-            "source_sub_group_1.times.get_location_changed() {:?}",
-            source_sub_group_1.times.get_location_changed()
-        );
 
         drop(source_group_1);
         let mut source_group_2 = match source_db.root.get_mut(&["group2"]).unwrap() {
@@ -1217,7 +1202,6 @@ mod group_tests {
         source_group_2.add_node(source_sub_group_1);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
-        println!("merge_result: {:?}", merge_result);
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
