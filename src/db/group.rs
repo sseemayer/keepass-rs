@@ -44,14 +44,6 @@ impl MergeLog {
     }
 }
 
-#[derive(Debug, Default, Eq, PartialEq, Clone)]
-pub(crate) struct GroupRef {
-    pub uuid: Uuid,
-    pub name: String,
-}
-
-// pub(crate) type NodeLocation = Vec<GroupRef>;
-
 pub(crate) type NodeLocation = Vec<Uuid>;
 
 /// A database group with child groups and entries
@@ -522,7 +514,7 @@ mod group_tests {
     use std::{thread, time};
 
     use super::NodePathElement;
-    use super::{Entry, Group, GroupRef, Node, Times, Value};
+    use super::{Entry, Group, Node, Times, Value};
     use crate::db::NodeRef;
     use crate::{Database, DatabaseKey};
 
