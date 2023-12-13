@@ -25,7 +25,7 @@ pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
 use crate::{
     config::DatabaseConfig,
-    db::group::NodeLocation2,
+    db::group::NodeLocation,
     error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
     format::{
         kdb::parse_kdb,
@@ -143,7 +143,7 @@ impl Database {
 
     fn merge_group(
         &mut self,
-        current_group_path: NodeLocation2,
+        current_group_path: NodeLocation,
         current_group: &Group,
     ) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
@@ -159,7 +159,7 @@ impl Database {
 
         for other_entry in &current_group.entries() {
             // find the existing location
-            let destination_entry_location = self.root.find_node_location_2(other_entry.uuid);
+            let destination_entry_location = self.root.find_node_location(other_entry.uuid);
 
             // The group already exists in the destination database.
             if let Some(destination_entry_location) = destination_entry_location {
@@ -293,7 +293,7 @@ impl Database {
             let other_group_uuid = other_group.uuid;
             new_group_location.push(other_group_uuid);
 
-            let destination_group_location = self.root.find_node_location_2(other_group.uuid);
+            let destination_group_location = self.root.find_node_location(other_group.uuid);
             // The group already exists in the destination database.
             if let Some(destination_group_location) = destination_group_location {
                 let parent_group_uuid = destination_group_location.last().unwrap();
@@ -376,8 +376,8 @@ impl Database {
     fn relocate_node(
         &mut self,
         node_uuid: &Uuid,
-        from: &NodeLocation2,
-        to: &NodeLocation2,
+        from: &NodeLocation,
+        to: &NodeLocation,
     ) -> Result<(), String> {
         // FIXME this isn't great. The new functions return the root node but not
         // the old search functions.

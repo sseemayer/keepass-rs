@@ -50,9 +50,9 @@ pub(crate) struct GroupRef {
     pub name: String,
 }
 
-pub(crate) type NodeLocation = Vec<GroupRef>;
+// pub(crate) type NodeLocation = Vec<GroupRef>;
 
-pub(crate) type NodeLocation2 = Vec<Uuid>;
+pub(crate) type NodeLocation = Vec<Uuid>;
 
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -342,52 +342,6 @@ impl Group {
         false
     }
 
-    pub(crate) fn get_group_mut(
-        &mut self,
-        location: &NodeLocation,
-        create_groups: bool,
-    ) -> Result<&mut Group, String> {
-        if location.len() == 0 {
-            return Err("Empty location.".to_string());
-        }
-
-        let mut remaining_location = location.clone();
-        remaining_location.remove(0);
-
-        if remaining_location.len() == 0 {
-            return Ok(self);
-        }
-
-        let next_location = &remaining_location[0];
-        let mut next_location_uuid = next_location.uuid;
-
-        if !self.has_group(next_location_uuid) && create_groups {
-            let mut current_group: Option<Group> = None;
-            for i in (0..(remaining_location.len())).rev() {
-                let mut new_group = Group::new(&remaining_location[i].name);
-                if let Some(group) = &current_group {
-                    new_group.add_node(group.clone());
-                }
-                current_group = Some(new_group);
-            }
-
-            let current_group = current_group.unwrap();
-            next_location_uuid = current_group.uuid;
-            self.add_node(current_group);
-        }
-
-        for node in &mut self.children {
-            if let Node::Group(g) = node {
-                if g.uuid != next_location_uuid {
-                    continue;
-                }
-                return g.get_group_mut(&remaining_location, create_groups);
-            }
-        }
-
-        return Err("The group was not found.".to_string());
-    }
-
     pub fn add_node<T>(&mut self, n: T)
     where
         T: Into<Node>,
@@ -428,7 +382,7 @@ impl Group {
         ));
     }
 
-    pub(crate) fn find_node_location_2(&self, id: Uuid) -> Option<NodeLocation2> {
+    pub(crate) fn find_node_location(&self, id: Uuid) -> Option<NodeLocation> {
         let mut current_location = vec![self.uuid];
         for node in &self.children {
             match node {
@@ -441,7 +395,7 @@ impl Group {
                     if g.uuid == id {
                         return Some(current_location);
                     }
-                    if let Some(mut location) = g.find_node_location_2(id) {
+                    if let Some(mut location) = g.find_node_location(id) {
                         current_location.append(&mut location);
                         return Some(current_location);
                     }
@@ -492,7 +446,7 @@ impl Group {
     pub(crate) fn add_group_or_entry(
         &mut self,
         node: impl Into<Node> + Clone,
-        path: &NodeLocation2,
+        path: &NodeLocation,
     ) {
         if path.len() == 0 {
             self.add_node(node.clone());
@@ -519,45 +473,6 @@ impl Group {
         panic!("TODO handle this with a response");
     }
 
-    pub(crate) fn add_entry(&mut self, entry: Entry, location: &NodeLocation) {
-        if location.len() == 0 {
-            panic!("TODO handle this with a Response.");
-        }
-
-        let mut remaining_location = location.clone();
-        remaining_location.remove(0);
-
-        if remaining_location.len() == 0 {
-            self.add_node(entry.clone());
-            return;
-        }
-
-        let next_location = &remaining_location[0];
-
-        println!(
-            "Searching for group {} {:?}",
-            next_location.name, next_location.uuid
-        );
-        for node in &mut self.children {
-            if let Node::Group(g) = node {
-                if g.uuid != next_location.uuid {
-                    continue;
-                }
-                g.add_entry(entry, &remaining_location);
-                return;
-            }
-        }
-
-        // The group was not found, so we create it.
-        let mut new_group = Group {
-            name: next_location.name.clone(),
-            uuid: next_location.uuid.clone(),
-            ..Default::default()
-        };
-        new_group.add_entry(entry, &remaining_location);
-        self.add_node(new_group);
-    }
-
     // Recursively get all the entries in the group, along with their
     // location.
     pub(crate) fn get_all_entries(
@@ -566,10 +481,7 @@ impl Group {
     ) -> Vec<(&Entry, NodeLocation)> {
         let mut response: Vec<(&Entry, NodeLocation)> = vec![];
         let mut new_location = current_location.clone();
-        new_location.push(GroupRef {
-            uuid: self.uuid.clone(),
-            name: self.name.clone(),
-        });
+        new_location.push(self.uuid.clone());
 
         for node in &self.children {
             match node {
@@ -913,8 +825,8 @@ mod group_tests {
         assert_eq!(destination_entries.len(), 1);
         let (moved_entry, moved_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(moved_entry_location.len(), 2);
-        assert_eq!(moved_entry_location[0].name, "group1".to_string());
-        assert_eq!(moved_entry_location[1].name, "subgroup2".to_string());
+        assert_eq!(moved_entry_location[0], destination_group.uuid);
+        assert_eq!(moved_entry_location[1], destination_sub_group2.uuid);
     }
 
     #[test]
@@ -932,7 +844,7 @@ mod group_tests {
 
         let mut source_db = destination_db.clone();
         let mut source_sub_group = Group::new("subgroup2");
-        println!("source_sub_group.uuid: {}", source_sub_group.uuid);
+        let source_sub_group_uuid = source_sub_group.uuid.clone();
         thread::sleep(time::Duration::from_secs(1));
         entry.times.set_location_changed(Times::now());
         // FIXME we should not have to update the history here. We should
@@ -950,8 +862,8 @@ mod group_tests {
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 2);
-        assert_eq!(created_entry_location[0].name, "group1".to_string());
-        assert_eq!(created_entry_location[1].name, "subgroup2".to_string());
+        assert_eq!(created_entry_location[0], destination_group.uuid);
+        assert_eq!(created_entry_location[1], source_sub_group_uuid);
     }
 
     #[test]
@@ -965,6 +877,7 @@ mod group_tests {
         destination_db.root = Group::new("root");
         let mut destination_group_1 = Group::new("group1");
         let mut destination_group_2 = Group::new("group2");
+        let group_2_uuid = destination_group_2.uuid.clone();
         let mut destination_sub_group_1 = Group::new("subgroup1");
         let sub_group_1_uuid = destination_sub_group_1.uuid.clone();
         let mut destination_sub_group_2 = Group::new("subgroup2");
@@ -1004,9 +917,9 @@ mod group_tests {
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 3);
-        assert_eq!(created_entry_location[0].name, "root".to_string());
-        assert_eq!(created_entry_location[1].name, "group2".to_string());
-        assert_eq!(created_entry_location[2].name, "subgroup1".to_string());
+        assert_eq!(created_entry_location[0], destination_db.root.uuid);
+        assert_eq!(created_entry_location[1], group_2_uuid);
+        assert_eq!(created_entry_location[2], sub_group_1_uuid);
     }
 
     #[test]
