@@ -323,24 +323,6 @@ impl Group {
         }
     }
 
-    pub(crate) fn has_group(&self, uuid: Uuid) -> bool {
-        for node in &self.children {
-            if let Node::Group(g) = node {
-                if g.uuid == uuid {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    pub fn add_node<T>(&mut self, n: T)
-    where
-        T: Into<Node>,
-    {
-        self.children.push(n.into())
-    }
-
     pub(crate) fn remove_node(&mut self, uuid: &Uuid) -> Result<Node, String> {
         let mut removed_node: Option<Node> = None;
         let mut new_nodes: Vec<Node> = vec![];
@@ -441,7 +423,7 @@ impl Group {
         path: &NodeLocation,
     ) {
         if path.len() == 0 {
-            self.add_node(node.clone());
+            self.add_child(node.clone());
             return;
         }
         println!("Searching for {:?}", path);
@@ -623,7 +605,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        destination_group.add_node(entry);
+        destination_group.add_child(entry);
         destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
@@ -666,7 +648,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_group.add_node(entry);
+        source_group.add_child(entry);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -701,7 +683,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_group.add_node(entry);
+        source_group.add_child(entry);
 
         destination_db
             .deleted_objects
@@ -724,7 +706,7 @@ mod group_tests {
         let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group = Group::new("subgroup1");
-        destination_group.add_node(destination_sub_group);
+        destination_group.add_child(destination_sub_group);
         destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
@@ -733,7 +715,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_sub_group.add_node(entry);
+        source_sub_group.add_child(entry);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -759,9 +741,9 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_sub_group.add_node(entry);
-        source_group.add_node(source_sub_group);
-        source_db.root.add_node(source_group);
+        source_sub_group.add_child(entry);
+        source_group.add_child(source_sub_group);
+        source_db.root.add_child(source_group);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -782,18 +764,15 @@ mod group_tests {
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group1 = Group::new("subgroup1");
         let mut destination_sub_group2 = Group::new("subgroup2");
-        destination_sub_group1.add_node(entry.clone());
-        destination_group.add_node(destination_sub_group1.clone());
-        destination_group.add_node(destination_sub_group2.clone());
+        destination_sub_group1.add_child(entry.clone());
+        destination_group.add_child(destination_sub_group1.clone());
+        destination_group.add_child(destination_sub_group2.clone());
         destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
         assert!(source_db.root.get_all_entries(&vec![]).len() == 1);
 
-        let mut relocated_entry = match source_db.root.get_mut(&[
-            "subgroup1",
-            "entry1",
-        ]).unwrap() {
+        let mut relocated_entry = match source_db.root.get_mut(&["subgroup1", "entry1"]).unwrap() {
             crate::db::NodeRefMut::Entry(e) => e,
             crate::db::NodeRefMut::Group(g) => panic!("This should never happen"),
         };
@@ -803,11 +782,13 @@ mod group_tests {
         relocated_entry.update_history();
         drop(&relocated_entry);
 
-        source_db.relocate_node(
-            &entry_uuid,
-            &vec![destination_group.uuid, destination_sub_group1.uuid],
-            &vec![destination_sub_group2.uuid],
-        ).unwrap();
+        source_db
+            .relocate_node(
+                &entry_uuid,
+                &vec![destination_group.uuid, destination_sub_group1.uuid],
+                &vec![destination_sub_group2.uuid],
+            )
+            .unwrap();
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -830,8 +811,8 @@ mod group_tests {
         let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group = Group::new("subgroup1");
-        destination_sub_group.add_node(entry.clone());
-        destination_group.add_node(destination_sub_group);
+        destination_sub_group.add_child(entry.clone());
+        destination_group.add_child(destination_sub_group);
         destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
@@ -842,9 +823,9 @@ mod group_tests {
         // FIXME we should not have to update the history here. We should
         // have a better compare function in the merge function instead.
         entry.update_history();
-        source_sub_group.add_node(entry.clone());
+        source_sub_group.add_child(entry.clone());
         source_db.root.children = vec![];
-        source_db.root.add_node(source_sub_group);
+        source_db.root.add_child(source_sub_group);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -874,11 +855,11 @@ mod group_tests {
         let sub_group_1_uuid = destination_sub_group_1.uuid.clone();
         let mut destination_sub_group_2 = Group::new("subgroup2");
 
-        destination_sub_group_1.add_node(entry.clone());
-        destination_group_1.add_node(destination_sub_group_1);
-        destination_group_2.add_node(destination_sub_group_2);
-        destination_db.root.add_node(destination_group_1);
-        destination_db.root.add_node(destination_group_2);
+        destination_sub_group_1.add_child(entry.clone());
+        destination_group_1.add_child(destination_sub_group_1);
+        destination_group_2.add_child(destination_sub_group_2);
+        destination_db.root.add_child(destination_group_1);
+        destination_db.root.add_child(destination_group_2);
 
         let mut source_db = destination_db.clone();
 
@@ -899,7 +880,7 @@ mod group_tests {
             _ => panic!("This should never happen."),
         };
 
-        source_group_2.add_node(source_sub_group_1);
+        source_group_2.add_child(source_sub_group_1);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -923,7 +904,7 @@ mod group_tests {
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        destination_group.add_node(entry);
+        destination_group.add_child(entry);
         destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
@@ -947,7 +928,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        destination_group.add_node(entry);
+        destination_group.add_child(entry);
         destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
@@ -971,7 +952,7 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        destination_group.add_node(entry);
+        destination_group.add_child(entry);
         destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
