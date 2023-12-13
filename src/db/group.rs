@@ -1033,26 +1033,30 @@ mod group_tests {
 
     #[test]
     fn test_merge_add_new_entry_new_group() {
+        let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group = Group::new("subgroup1");
-        let mut source_group = Group::new("group1");
-        println!("source_group.uuid: {}", source_group.uuid);
-        let mut source_sub_group = Group::new("subgroup1");
-        println!("source_sub_group.uuid: {}", source_sub_group.uuid);
+        destination_db.root = destination_group.clone();
+
+        let mut source_db = destination_db.clone();
+
+        let mut source_group = Group::new("group2");
+        let mut source_sub_group = Group::new("subgroup2");
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
         source_sub_group.add_node(entry);
         source_group.add_node(source_sub_group);
+        source_db.root.add_node(source_group);
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 1);
-        let destination_entries = destination_group.get_all_entries(&vec![]);
+        assert_eq!(merge_result.events.len(), 3);
+        let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
-        assert_eq!(created_entry_location.len(), 2);
+        assert_eq!(created_entry_location.len(), 3);
     }
 
     #[test]
