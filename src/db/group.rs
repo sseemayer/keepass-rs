@@ -1066,57 +1066,43 @@ mod group_tests {
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
+
+        let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
         let mut destination_sub_group1 = Group::new("subgroup1");
         let mut destination_sub_group2 = Group::new("subgroup2");
         destination_sub_group1.add_node(entry.clone());
         destination_group.add_node(destination_sub_group1.clone());
         destination_group.add_node(destination_sub_group2.clone());
+        destination_db.root = destination_group.clone();
 
-        let mut source_group = destination_group.clone();
-        assert!(source_group.get_all_entries(&vec![]).len() == 1);
+        let mut source_db = destination_db.clone();
+        assert!(source_db.root.get_all_entries(&vec![]).len() == 1);
 
-        let mut removed_entry = source_group
-            .remove_entry(
-                &entry_uuid,
-                &vec![
-                    GroupRef {
-                        uuid: destination_group.uuid.clone(),
-                        name: "".to_string(),
-                    },
-                    GroupRef {
-                        uuid: destination_sub_group1.uuid.clone(),
-                        name: "".to_string(),
-                    },
-                ],
-            )
-            .unwrap();
-        removed_entry.times.set_location_changed(Times::now());
-        assert!(source_group.get_all_entries(&vec![]).len() == 0);
+        let mut relocated_entry = match source_db.root.get_mut(&[
+            "subgroup1",
+            "entry1",
+        ]).unwrap() {
+            crate::db::NodeRefMut::Entry(e) => e,
+            crate::db::NodeRefMut::Group(g) => panic!("This should never happen"),
+        };
+        relocated_entry.times.set_location_changed(Times::now());
         // FIXME we should not have to update the history here. We should
         // have a better compare function in the merge function instead.
-        removed_entry.update_history();
-        source_group
-            .insert_entry(
-                removed_entry,
-                &vec![
-                    GroupRef {
-                        uuid: destination_group.uuid.clone(),
-                        name: "".to_string(),
-                    },
-                    GroupRef {
-                        uuid: destination_sub_group2.uuid.clone(),
-                        name: "".to_string(),
-                    },
-                ],
-            )
-            .unwrap();
+        relocated_entry.update_history();
+        drop(&relocated_entry);
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        source_db.relocate_node(
+            &entry_uuid,
+            &vec![destination_group.uuid, destination_sub_group1.uuid],
+            &vec![destination_sub_group2.uuid],
+        ).unwrap();
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let destination_entries = destination_group.get_all_entries(&vec![]);
+        let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (moved_entry, moved_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(moved_entry_location.len(), 2);

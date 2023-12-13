@@ -238,7 +238,7 @@ impl Database {
                     };
 
                 if destination_last_modification == source_last_modification {
-                    if !existing_entry.eq(&other_entry) {
+                    if !existing_entry.has_diverged_from(&other_entry) {
                         // This should never happen.
                         // This means that an entry was updated without updating the last modification
                         // timestamp.

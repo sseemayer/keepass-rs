@@ -101,6 +101,15 @@ impl Entry {
         thread::sleep(time::Duration::from_secs(1));
         self.update_history();
     }
+
+    // Convenience function used in when merging two entries
+    pub(crate) fn has_diverged_from(&self, other_entry: &Entry) -> bool {
+        let mut self_without_times = self.clone();
+        self_without_times.times = Times::new();
+        let mut other_without_times = other_entry.clone();
+        other_without_times.times = Times::new();
+        !self_without_times.eq(other_entry)
+    }
 }
 
 impl<'a> Entry {
