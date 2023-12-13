@@ -907,36 +907,38 @@ mod group_tests {
 
     #[test]
     fn test_merge_idempotence() {
+        let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
         destination_group.add_node(entry);
+        destination_db.root = destination_group.clone();
 
-        let mut source_group = destination_group.clone();
+        let mut source_db = destination_db.clone();
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
         assert_eq!(destination_group.children.len(), 1);
         // The 2 groups should be exactly the same after merging, since
         // nothing was performed during the merge.
-        assert_eq!(destination_group, source_group);
+        assert_eq!(destination_db, source_db);
 
-        let mut entry = &mut destination_group.entries_mut()[0];
+        let mut entry = &mut destination_db.root.entries_mut()[0];
         entry.set_field_and_commit("Title", "entry1_updated");
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
-        let destination_group_just_after_merge = destination_group.clone();
+        let destination_db_just_after_merge = destination_db.clone();
 
-        let merge_result = destination_group.merge(&source_group).unwrap();
+        let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
         // Merging twice in a row, even if the first merge updated the destination group,
         // should not create more changes.
-        assert_eq!(destination_group_just_after_merge, destination_group);
+        assert_eq!(destination_db_just_after_merge, destination_db);
     }
 
     #[test]
