@@ -165,17 +165,17 @@ impl Database {
             if let Some(destination_entry_location) = destination_entry_location {
                 let parent_group_uuid = destination_entry_location.last().unwrap();
 
+                // The entry already exists but is not at the right location. We might have to
+                // relocate it.
+                // FIXME use the location to get the entry!
+                let existing_entry = self
+                    .root
+                    .find_entry_by_uuid(other_entry.uuid.clone())
+                    .unwrap().clone();
+
                 // The entry already exists and is at the right location, so we can proceed and merge
                 // the two groups.
                 if parent_group_uuid != &current_group_uuid {
-                    // The entry already exists but is not at the right location. We might have to
-                    // relocate it.
-                    // FIXME use the location to get the entry!
-                    let existing_entry = self
-                        .root
-                        .find_entry_by_uuid(other_entry.uuid.clone())
-                        .unwrap();
-
                     let source_location_changed_time =
                         match other_entry.times.get_location_changed() {
                             Some(t) => *t,
@@ -211,10 +211,64 @@ impl Database {
                     }
                 }
 
-                // TODO actually merge the entries.
-                // let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                // log = log.merge_with(&new_merge_log);
-                //
+                if existing_entry == **other_entry {
+                    continue;
+                }
+
+                let source_last_modification = match other_entry.times.get_last_modification() {
+                    Some(t) => *t,
+                    None => {
+                        log.warnings.push(format!(
+                            "Entry {} did not have a last modification timestamp",
+                            other_entry.uuid
+                        ));
+                        Times::epoch()
+                    }
+                };
+                let destination_last_modification =
+                    match existing_entry.times.get_last_modification() {
+                        Some(t) => *t,
+                        None => {
+                            log.warnings.push(format!(
+                                "Entry {} did not have a last modification timestamp",
+                                other_entry.uuid
+                            ));
+                            Times::now()
+                        }
+                    };
+
+                if destination_last_modification == source_last_modification {
+                    if !existing_entry.eq(&other_entry) {
+                        // This should never happen.
+                        // This means that an entry was updated without updating the last modification
+                        // timestamp.
+                        return Err(
+                            "Entries have the same modification time but are not the same!"
+                                .to_string(),
+                        );
+                    }
+                    continue;
+                }
+
+                let mut merged_entry: Entry = Entry::default();
+                let mut entry_merge_log: MergeLog = MergeLog::default();
+
+                if destination_last_modification > source_last_modification {
+                    (merged_entry, entry_merge_log) = existing_entry.merge(other_entry)?;
+                } else {
+                    (merged_entry, entry_merge_log) = other_entry.clone().merge(&existing_entry)?;
+                }
+
+                if existing_entry.eq(&merged_entry) {
+                    continue;
+                }
+
+                self.root.replace_entry(&merged_entry);
+                log.events.push(MergeEvent {
+                    event_type: MergeEventType::EntryUpdated,
+                    node_uuid: merged_entry.uuid,
+                });
+                log = log.merge_with(&entry_merge_log);
                 continue;
             }
 

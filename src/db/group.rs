@@ -316,7 +316,7 @@ impl Group {
         response
     }
 
-    fn replace_entry(&mut self, entry: &Entry) {
+    pub(crate) fn replace_entry(&mut self, entry: &Entry) {
         for node in &mut self.children {
             match node {
                 Node::Group(g) => {
@@ -1130,9 +1130,7 @@ mod group_tests {
 
         let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
-        println!("destination_group.uuid: {}", destination_group.uuid);
         let mut destination_sub_group = Group::new("subgroup1");
-        println!("destination_sub_group.uuid: {}", destination_sub_group.uuid);
         destination_sub_group.add_node(entry.clone());
         destination_group.add_node(destination_sub_group);
         destination_db.root = destination_group.clone();
@@ -1151,7 +1149,7 @@ mod group_tests {
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 2);
+        assert_eq!(merge_result.events.len(), 3);
 
         let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
@@ -1258,7 +1256,6 @@ mod group_tests {
     }
 
     #[test]
-    #[ignore]
     fn test_update_in_source_no_conflict() {
         let mut destination_db = Database::new(Default::default());
         let mut destination_group = Group::new("group1");
