@@ -873,25 +873,21 @@ mod merge_tests {
 
     #[test]
     fn test_group_relocation() {
-        let mut destination_db = Database::new(Default::default());
+        let mut destination_db = create_test_database();
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        destination_db.root = Group::new("root");
-        let mut destination_group_1 = Group::new("group1");
-        let mut destination_group_2 = Group::new("group2");
-        let group_2_uuid = destination_group_2.uuid.clone();
-        let mut destination_sub_group_1 = Group::new("subgroup1");
-        let sub_group_1_uuid = destination_sub_group_1.uuid.clone();
-        let mut destination_sub_group_2 = Group::new("subgroup2");
-
-        destination_sub_group_1.add_child(entry.clone());
-        destination_group_1.add_child(destination_sub_group_1);
-        destination_group_2.add_child(destination_sub_group_2);
-        destination_db.root.add_child(destination_group_1);
-        destination_db.root.add_child(destination_group_2);
+        let mut destination_sub_group1 = match destination_db
+            .root
+            .get_mut(&["group1", "subgroup1"])
+            .unwrap()
+        {
+            crate::db::NodeRefMut::Group(g) => g,
+            _ => panic!("This should never happen."),
+        };
+        destination_sub_group1.add_child(entry.clone());
 
         let mut source_db = destination_db.clone();
 
@@ -899,7 +895,10 @@ mod merge_tests {
             crate::db::NodeRefMut::Group(g) => g,
             _ => panic!("This should never happen."),
         };
-        let mut source_sub_group_1 = match source_group_1.remove_node(&sub_group_1_uuid).unwrap() {
+        let mut source_sub_group_1 = match source_group_1
+            .remove_node(&Uuid::parse_str(SUBGROUP1_ID).unwrap())
+            .unwrap()
+        {
             Node::Group(g) => g,
             _ => panic!("This should not happen."),
         };
@@ -923,8 +922,14 @@ mod merge_tests {
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 3);
         assert_eq!(created_entry_location[0], destination_db.root.uuid);
-        assert_eq!(created_entry_location[1], group_2_uuid);
-        assert_eq!(created_entry_location[2], sub_group_1_uuid);
+        assert_eq!(
+            created_entry_location[1],
+            Uuid::parse_str(GROUP2_ID).unwrap()
+        );
+        assert_eq!(
+            created_entry_location[2],
+            Uuid::parse_str(SUBGROUP1_ID).unwrap()
+        );
     }
 
     #[test]
