@@ -788,28 +788,15 @@ mod merge_tests {
         entry.set_field_and_commit("Title", "entry1");
 
         let mut destination_db = create_test_database();
-        let mut destination_sub_group1 = match destination_db
-            .root
-            .get_mut(&["group1", "subgroup1"])
-            .unwrap()
-        {
-            crate::db::NodeRefMut::Group(g) => g,
-            _ => panic!("This should never happen."),
-        };
+        let mut destination_sub_group1 =
+            get_group_mut(&mut destination_db, &["group1", "subgroup1"]);
 
         destination_sub_group1.add_child(entry.clone());
 
         let mut source_db = destination_db.clone();
         assert!(source_db.root.get_all_entries(&vec![]).len() == 1);
 
-        let mut relocated_entry = match source_db
-            .root
-            .get_mut(&["group1", "subgroup1", "entry1"])
-            .unwrap()
-        {
-            crate::db::NodeRefMut::Entry(e) => e,
-            crate::db::NodeRefMut::Group(g) => panic!("This should never happen"),
-        };
+        let mut relocated_entry = get_entry_mut(&mut source_db, &["group1", "subgroup1", "entry1"]);
         relocated_entry.times.set_location_changed(Times::now());
         // FIXME we should not have to update the history here. We should
         // have a better compare function in the merge function instead.
