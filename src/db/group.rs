@@ -731,13 +731,9 @@ mod merge_tests {
 
     #[test]
     fn test_add_new_non_root_entry() {
-        let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("root");
-        let mut destination_sub_group = Group::new("subgroup1");
-        destination_group.add_child(destination_sub_group);
-        destination_db.root = destination_group.clone();
-
+        let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
+
         let mut source_sub_group = &mut source_db.root.groups_mut()[0];
 
         let mut entry = Entry::new();
@@ -756,11 +752,7 @@ mod merge_tests {
 
     #[test]
     fn test_add_new_entry_new_group() {
-        let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("root");
-        let mut destination_sub_group = Group::new("subgroup1");
-        destination_db.root = destination_group.clone();
-
+        let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
         let mut source_group = Group::new("group2");
@@ -788,19 +780,26 @@ mod merge_tests {
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("root");
-        let mut destination_sub_group1 = Group::new("subgroup1");
-        let mut destination_sub_group2 = Group::new("subgroup2");
+        let mut destination_db = create_test_database();
+        let mut destination_sub_group1 = match destination_db
+            .root
+            .get_mut(&["group1", "subgroup1"])
+            .unwrap()
+        {
+            crate::db::NodeRefMut::Group(g) => g,
+            _ => panic!("This should never happen."),
+        };
+
         destination_sub_group1.add_child(entry.clone());
-        destination_group.add_child(destination_sub_group1.clone());
-        destination_group.add_child(destination_sub_group2.clone());
-        destination_db.root = destination_group.clone();
 
         let mut source_db = destination_db.clone();
         assert!(source_db.root.get_all_entries(&vec![]).len() == 1);
 
-        let mut relocated_entry = match source_db.root.get_mut(&["subgroup1", "entry1"]).unwrap() {
+        let mut relocated_entry = match source_db
+            .root
+            .get_mut(&["group1", "subgroup1", "entry1"])
+            .unwrap()
+        {
             crate::db::NodeRefMut::Entry(e) => e,
             crate::db::NodeRefMut::Group(g) => panic!("This should never happen"),
         };
@@ -813,8 +812,12 @@ mod merge_tests {
         source_db
             .relocate_node(
                 &entry_uuid,
-                &vec![destination_group.uuid, destination_sub_group1.uuid],
-                &vec![destination_sub_group2.uuid],
+                &vec![
+                    Uuid::parse_str(ROOT_GROUP_ID).unwrap(),
+                    Uuid::parse_str(GROUP1_ID).unwrap(),
+                    Uuid::parse_str(SUBGROUP1_ID).unwrap(),
+                ],
+                &vec![Uuid::parse_str(GROUP2_ID).unwrap()],
             )
             .unwrap();
 
@@ -826,8 +829,11 @@ mod merge_tests {
         assert_eq!(destination_entries.len(), 1);
         let (moved_entry, moved_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(moved_entry_location.len(), 2);
-        assert_eq!(moved_entry_location[0], destination_group.uuid);
-        assert_eq!(moved_entry_location[1], destination_sub_group2.uuid);
+        assert_eq!(
+            moved_entry_location[0],
+            Uuid::parse_str(ROOT_GROUP_ID).unwrap()
+        );
+        assert_eq!(moved_entry_location[1], Uuid::parse_str(GROUP2_ID).unwrap());
     }
 
     #[test]
