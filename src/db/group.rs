@@ -604,11 +604,32 @@ mod merge_tests {
     use super::{Entry, Group, Node, Times};
     use crate::Database;
 
-    // const ROOT_GROUP_ID = Uuid::new_v4();
+    const ROOT_GROUP_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6a";
+    const GROUP1_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6b";
+    const GROUP2_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6c";
+    const SUBGROUP1_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+    const SUBGROUP2_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e";
 
     fn create_test_database() -> Database {
         let mut db = Database::new(Default::default());
         let mut root_group = Group::new("root");
+        root_group.uuid = Uuid::parse_str(ROOT_GROUP_ID).unwrap();
+
+        let mut group1 = Group::new("group1");
+        group1.uuid = Uuid::parse_str(GROUP1_ID).unwrap();
+        let mut group2 = Group::new("group2");
+        group2.uuid = Uuid::parse_str(GROUP2_ID).unwrap();
+
+        let mut subgroup1 = Group::new("subgroup1");
+        subgroup1.uuid = Uuid::parse_str(SUBGROUP1_ID).unwrap();
+        let mut subgroup2 = Group::new("subgroup2");
+        subgroup2.uuid = Uuid::parse_str(SUBGROUP2_ID).unwrap();
+
+        group1.add_child(subgroup1);
+        group2.add_child(subgroup2);
+
+        root_group.add_child(group1);
+        root_group.add_child(group2);
 
         db.root = root_group;
         db
@@ -616,20 +637,18 @@ mod merge_tests {
 
     #[test]
     fn test_idempotence() {
-        let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("root");
+        let mut destination_db = create_test_database();
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        destination_group.add_child(entry);
-        destination_db.root = destination_group.clone();
+        destination_db.root.add_child(entry);
 
         let mut source_db = destination_db.clone();
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
-        assert_eq!(destination_group.children.len(), 1);
+        assert_eq!(destination_db.root.children.len(), 3);
         // The 2 groups should be exactly the same after merging, since
         // nothing was performed during the merge.
         assert_eq!(destination_db, source_db);
