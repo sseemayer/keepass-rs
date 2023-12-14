@@ -492,13 +492,9 @@ impl<'a> IntoIterator for &'a Group {
 
 #[cfg(test)]
 mod group_tests {
-    use std::{fs::File, path::Path};
-    use std::{thread, time};
-
     use super::NodePathElement;
-    use super::{Entry, Group, Node, Times, Value};
-    use crate::db::NodeRef;
-    use crate::{Database, DatabaseKey};
+    use super::{Entry, Group, Value};
+    use crate::Database;
 
     #[test]
     fn get() {
@@ -597,6 +593,17 @@ mod group_tests {
         assert!(db.root.get_mut_internal(&invalid_path).is_none());
         assert!(db.root.get_mut_internal(&vec![]).is_some());
     }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use std::{fs::File, path::Path};
+    use std::{thread, time};
+
+    use super::NodePathElement;
+    use super::{Entry, Group, Node, Times, Value};
+    use crate::db::NodeRef;
+    use crate::{Database, DatabaseKey};
 
     #[test]
     fn test_merge_idempotence() {
