@@ -915,15 +915,13 @@ mod merge_tests {
 
     #[test]
     fn test_update_in_destination_no_conflict() {
-        let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("root");
+        let mut destination_db = create_test_database();
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        destination_group.add_child(entry);
-        destination_db.root = destination_group.clone();
+        destination_db.root.add_child(entry);
 
         let mut source_db = destination_db.clone();
 
