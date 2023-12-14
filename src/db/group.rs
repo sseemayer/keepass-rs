@@ -607,6 +607,20 @@ mod merge_tests {
     const SUBGROUP1_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
     const SUBGROUP2_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e";
 
+    fn get_entry_mut<'a>(db: &'a mut Database, path: &[&str]) -> &'a mut Entry {
+        match db.root.get_mut(path).unwrap() {
+            crate::db::NodeRefMut::Entry(e) => e,
+            crate::db::NodeRefMut::Group(g) => panic!("An entry was expected."),
+        }
+    }
+
+    fn get_group_mut<'a>(db: &'a mut Database, path: &[&str]) -> &'a mut Group {
+        match db.root.get_mut(path).unwrap() {
+            crate::db::NodeRefMut::Group(g) => g,
+            crate::db::NodeRefMut::Entry(e) => panic!("A group was expected."),
+        }
+    }
+
     fn create_test_database() -> Database {
         let mut db = Database::new(Default::default());
         let mut root_group = Group::new("root");
@@ -671,15 +685,11 @@ mod merge_tests {
         let mut destination_db = create_test_database();
 
         let mut source_db = destination_db.clone();
-        let mut source_group = match source_db.root.get_mut(&[]).unwrap() {
-            crate::db::NodeRefMut::Group(g) => g,
-            _ => panic!("This should never happen."),
-        };
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_group.add_child(entry);
+        source_db.root.add_child(entry);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
