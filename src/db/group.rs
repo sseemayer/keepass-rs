@@ -838,39 +838,37 @@ mod merge_tests {
 
     #[test]
     fn test_entry_relocation_new_group() {
+        let mut destination_db = create_test_database();
+
+        let mut source_db = destination_db.clone();
+        let mut new_group = Group::new("subgroup3");
+        let new_group_uuid = new_group.uuid.clone();
+
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("root");
-        let mut destination_sub_group = Group::new("subgroup1");
-        destination_sub_group.add_child(entry.clone());
-        destination_group.add_child(destination_sub_group);
-        destination_db.root = destination_group.clone();
-
-        let mut source_db = destination_db.clone();
-        let mut source_sub_group = Group::new("subgroup2");
-        let source_sub_group_uuid = source_sub_group.uuid.clone();
         thread::sleep(time::Duration::from_secs(1));
         entry.times.set_location_changed(Times::now());
         // FIXME we should not have to update the history here. We should
         // have a better compare function in the merge function instead.
         entry.update_history();
-        source_sub_group.add_child(entry.clone());
-        source_db.root.children = vec![];
-        source_db.root.add_child(source_sub_group);
+        new_group.add_child(entry.clone());
+        source_db.root.add_child(new_group);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 3);
+        assert_eq!(merge_result.events.len(), 2);
 
         let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 2);
-        assert_eq!(created_entry_location[0], destination_group.uuid);
-        assert_eq!(created_entry_location[1], source_sub_group_uuid);
+        assert_eq!(
+            created_entry_location[0],
+            Uuid::parse_str(ROOT_GROUP_ID).unwrap()
+        );
+        assert_eq!(created_entry_location[1], new_group_uuid);
     }
 
     #[test]
