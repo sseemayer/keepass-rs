@@ -599,14 +599,25 @@ mod group_tests {
 mod merge_tests {
     use std::{fs::File, path::Path};
     use std::{thread, time};
+    use uuid::Uuid;
 
     use super::{Entry, Group, Node, Times};
     use crate::Database;
 
+    // const ROOT_GROUP_ID = Uuid::new_v4();
+
+    fn create_test_database() -> Database {
+        let mut db = Database::new(Default::default());
+        let mut root_group = Group::new("root");
+
+        db.root = root_group;
+        db
+    }
+
     #[test]
     fn test_idempotence() {
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
@@ -642,7 +653,7 @@ mod merge_tests {
     #[test]
     fn test_add_new_entry() {
         let mut destination_db = Database::new(Default::default());
-        destination_db.root = Group::new("group1");
+        destination_db.root = Group::new("root");
 
         let mut source_db = destination_db.clone();
         let mut source_group = match source_db.root.get_mut(&[]).unwrap() {
@@ -676,7 +687,7 @@ mod merge_tests {
     #[test]
     fn test_deleted_entry_in_destination() {
         let mut destination_db = Database::new(Default::default());
-        destination_db.root = Group::new("group1");
+        destination_db.root = Group::new("root");
 
         let mut source_db = destination_db.clone();
 
@@ -709,7 +720,7 @@ mod merge_tests {
     #[test]
     fn test_add_new_non_root_entry() {
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
         let mut destination_sub_group = Group::new("subgroup1");
         destination_group.add_child(destination_sub_group);
         destination_db.root = destination_group.clone();
@@ -734,7 +745,7 @@ mod merge_tests {
     #[test]
     fn test_add_new_entry_new_group() {
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
         let mut destination_sub_group = Group::new("subgroup1");
         destination_db.root = destination_group.clone();
 
@@ -766,7 +777,7 @@ mod merge_tests {
         entry.set_field_and_commit("Title", "entry1");
 
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
         let mut destination_sub_group1 = Group::new("subgroup1");
         let mut destination_sub_group2 = Group::new("subgroup2");
         destination_sub_group1.add_child(entry.clone());
@@ -814,7 +825,7 @@ mod merge_tests {
         entry.set_field_and_commit("Title", "entry1");
 
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
         let mut destination_sub_group = Group::new("subgroup1");
         destination_sub_group.add_child(entry.clone());
         destination_group.add_child(destination_sub_group);
@@ -903,7 +914,7 @@ mod merge_tests {
     #[test]
     fn test_update_in_destination_no_conflict() {
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
@@ -928,7 +939,7 @@ mod merge_tests {
     #[test]
     fn test_update_in_source_no_conflict() {
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
@@ -952,7 +963,7 @@ mod merge_tests {
     #[test]
     fn test_update_with_conflicts() {
         let mut destination_db = Database::new(Default::default());
-        let mut destination_group = Group::new("group1");
+        let mut destination_group = Group::new("root");
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
