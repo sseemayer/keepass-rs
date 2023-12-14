@@ -873,22 +873,13 @@ mod merge_tests {
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
 
-        let mut destination_sub_group1 = match destination_db
-            .root
-            .get_mut(&["group1", "subgroup1"])
-            .unwrap()
-        {
-            crate::db::NodeRefMut::Group(g) => g,
-            _ => panic!("This should never happen."),
-        };
+        let mut destination_sub_group1 =
+            get_group_mut(&mut destination_db, &["group1", "subgroup1"]);
         destination_sub_group1.add_child(entry.clone());
 
         let mut source_db = destination_db.clone();
 
-        let mut source_group_1 = match source_db.root.get_mut(&["group1"]).unwrap() {
-            crate::db::NodeRefMut::Group(g) => g,
-            _ => panic!("This should never happen."),
-        };
+        let mut source_group_1 = get_group_mut(&mut source_db, &["group1"]);
         let mut source_sub_group_1 = match source_group_1
             .remove_node(&Uuid::parse_str(SUBGROUP1_ID).unwrap())
             .unwrap()
@@ -900,11 +891,7 @@ mod merge_tests {
         source_sub_group_1.times.set_location_changed(Times::now());
 
         drop(source_group_1);
-        let mut source_group_2 = match source_db.root.get_mut(&["group2"]).unwrap() {
-            crate::db::NodeRefMut::Group(g) => g,
-            _ => panic!("This should never happen."),
-        };
-
+        let mut source_group_2 = get_group_mut(&mut source_db, &["group2"]);
         source_group_2.add_child(source_sub_group_1);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
