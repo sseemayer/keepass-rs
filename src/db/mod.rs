@@ -309,10 +309,7 @@ impl Database {
                 // The group already exists but is not at the right location. We might have to
                 // relocate it.
                 // FIXME use the location to get the group!
-                let existing_group = self
-                    .root
-                    .find_group(other_group.uuid.clone(), true)
-                    .unwrap();
+                let existing_group = self.root.find_group(other_group.uuid.clone()).unwrap();
                 let existing_group_location_changed =
                     match existing_group.times.get_location_changed() {
                         Some(t) => *t,

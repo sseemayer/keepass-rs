@@ -397,17 +397,14 @@ impl Group {
         None
     }
 
-    pub fn find_group(&self, id: Uuid, recursive: bool) -> Option<&Group> {
+    pub fn find_group(&self, id: Uuid) -> Option<&Group> {
         for node in &self.children {
             match node {
                 Node::Group(g) => {
                     if g.uuid == id {
                         return Some(g);
                     }
-                    if !recursive {
-                        continue;
-                    }
-                    if let Some(g) = g.find_group(id, true) {
+                    if let Some(g) = g.find_group(id) {
                         return Some(g);
                     }
                 }
