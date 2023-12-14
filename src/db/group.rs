@@ -671,8 +671,7 @@ mod merge_tests {
 
     #[test]
     fn test_add_new_entry() {
-        let mut destination_db = Database::new(Default::default());
-        destination_db.root = Group::new("root");
+        let mut destination_db = create_test_database();
 
         let mut source_db = destination_db.clone();
         let mut source_group = match source_db.root.get_mut(&[]).unwrap() {
@@ -688,7 +687,7 @@ mod merge_tests {
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
-        assert_eq!(destination_db.root.children.len(), 1);
+        assert_eq!(destination_db.root.children.len(), 3);
         let new_entry = destination_db.root.find_entry_by_uuid(entry_uuid);
         assert!(new_entry.is_some());
         assert_eq!(
@@ -700,25 +699,19 @@ mod merge_tests {
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
-        assert_eq!(destination_db.root.children.len(), 1);
+        assert_eq!(destination_db.root.children.len(), 3);
     }
 
     #[test]
     fn test_deleted_entry_in_destination() {
-        let mut destination_db = Database::new(Default::default());
-        destination_db.root = Group::new("root");
+        let mut destination_db = create_test_database();
 
         let mut source_db = destination_db.clone();
-
-        let mut source_group = match source_db.root.get_mut(&[]).unwrap() {
-            crate::db::NodeRefMut::Group(g) => g,
-            _ => panic!("This should never happen."),
-        };
 
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-        source_group.add_child(entry);
+        source_db.root.add_child(entry);
 
         destination_db
             .deleted_objects
@@ -731,7 +724,7 @@ mod merge_tests {
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
-        assert_eq!(destination_db.root.children.len(), 0);
+        assert_eq!(destination_db.root.children.len(), 2);
         let new_entry = destination_db.root.find_entry_by_uuid(entry_uuid);
         assert!(new_entry.is_none());
     }
