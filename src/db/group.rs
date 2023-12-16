@@ -401,24 +401,6 @@ impl Group {
         None
     }
 
-    pub fn find_entry_by_uuid(&self, id: Uuid) -> Option<&Entry> {
-        for node in &self.children {
-            match node {
-                Node::Group(g) => {
-                    if let Some(e) = g.find_entry_by_uuid(id) {
-                        return Some(e);
-                    }
-                }
-                Node::Entry(e) => {
-                    if e.uuid == id {
-                        return Some(e);
-                    }
-                }
-            }
-        }
-        None
-    }
-
     pub(crate) fn add_group_or_entry(
         &mut self,
         node: impl Into<Node> + Clone,
@@ -740,7 +722,7 @@ mod merge_tests {
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
         assert_eq!(destination_db.root.children.len(), 2);
-        let new_entry = destination_db.root.find_entry_by_uuid(entry_uuid);
+        let new_entry = destination_db.root.find_node_location(entry_uuid);
         assert!(new_entry.is_none());
     }
 
