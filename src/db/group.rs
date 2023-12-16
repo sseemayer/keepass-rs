@@ -411,30 +411,6 @@ impl Group {
         }
         None
     }
-
-    // Recursively get all the entries in the group, along with their
-    // location.
-    pub(crate) fn get_all_entries(
-        &self,
-        current_location: &NodeLocation,
-    ) -> Vec<(&Entry, NodeLocation)> {
-        let mut response: Vec<(&Entry, NodeLocation)> = vec![];
-        let mut new_location = current_location.clone();
-        new_location.push(self.uuid.clone());
-
-        for node in &self.children {
-            match node {
-                Node::Entry(e) => {
-                    response.push((&e, new_location.clone()));
-                }
-                Node::Group(g) => {
-                    let mut new_entries = g.get_all_entries(&new_location);
-                    response.append(&mut new_entries);
-                }
-            }
-        }
-        response
-    }
 }
 
 impl<'a> Group {
@@ -898,6 +874,9 @@ mod merge_tests {
             get_group_mut(&mut destination_db, &["group1", "subgroup1"]);
         destination_sub_group1.add_child(entry.clone());
 
+        let entry_count_before = get_all_entries(&destination_db.root).len();
+        let group_count_before = get_all_groups(&destination_db.root).len();
+
         let mut source_db = destination_db.clone();
 
         let mut source_group_1 = get_group_mut(&mut source_db, &["group1"]);
@@ -919,9 +898,12 @@ mod merge_tests {
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let destination_entries = destination_db.root.get_all_entries(&vec![]);
-        assert_eq!(destination_entries.len(), 1);
-        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+        let entry_count_after = get_all_entries(&destination_db.root).len();
+        let group_count_after = get_all_groups(&destination_db.root).len();
+        assert_eq!(entry_count_after, entry_count_before);
+        assert_eq!(group_count_after, group_count_before);
+
+        let created_entry_location = destination_db.root.find_node_location(entry_uuid).unwrap();
         assert_eq!(created_entry_location.len(), 3);
         assert_eq!(created_entry_location[0], destination_db.root.uuid);
         assert_eq!(&created_entry_location[1].to_string(), GROUP2_ID);
