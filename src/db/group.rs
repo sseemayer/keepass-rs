@@ -802,7 +802,7 @@ mod merge_tests {
         destination_sub_group1.add_child(entry.clone());
 
         let mut source_db = destination_db.clone();
-        assert!(source_db.root.get_all_entries(&vec![]).len() == 1);
+        assert!(get_all_entries(&source_db.root).len() == 1);
 
         let mut relocated_entry = get_entry_mut(&mut source_db, &["group1", "subgroup1", "entry1"]);
         relocated_entry.times.set_location_changed(Times::now());
