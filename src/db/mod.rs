@@ -148,7 +148,7 @@ impl Database {
     ) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
-        let destination_group = match self.root.find_group(&current_group_path) {
+        let destination_group = match self.root.find_group_mut(&current_group_path) {
             Some(g) => g,
             None => {
                 return Err(format!(
@@ -157,6 +157,9 @@ impl Database {
                 ))
             }
         };
+
+        let group_update_merge_events = destination_group.merge_with(&current_group)?;
+        log.append(&group_update_merge_events);
 
         // We don't need the original group here, only a copy so that we can do some
         // queries on it.

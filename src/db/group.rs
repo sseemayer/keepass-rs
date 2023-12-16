@@ -13,8 +13,10 @@ pub enum MergeEventType {
     EntryCreated,
     EntryLocationUpdated,
     EntryUpdated,
+
     GroupCreated,
     GroupLocationUpdated,
+    GroupUpdated,
 }
 
 #[derive(Debug, Clone)]
@@ -411,6 +413,78 @@ impl Group {
             }
         }
         None
+    }
+
+    pub(crate) fn merge_with(&mut self, other: &Group) -> Result<MergeLog, String> {
+        let mut log = MergeLog::default();
+
+        let source_last_modification = match other.times.get_last_modification() {
+            Some(t) => *t,
+            None => {
+                log.warnings.push(format!(
+                    "Group {} did not have a last modification timestamp",
+                    self.uuid
+                ));
+                Times::epoch()
+            }
+        };
+        let destination_last_modification = match self.times.get_last_modification() {
+            Some(t) => *t,
+            None => {
+                log.warnings.push(format!(
+                    "Group {} did not have a last modification timestamp",
+                    self.uuid
+                ));
+                Times::now()
+            }
+        };
+
+        if destination_last_modification == source_last_modification {
+            if self.has_diverged_from(&other) {
+                // This should never happen.
+                // This means that an entry was updated without updating the last modification
+                // timestamp.
+                return Err(
+                    "Groups have the same modification time but are not the same!".to_string(),
+                );
+            }
+            return Ok(log);
+        }
+
+        if destination_last_modification > source_last_modification {
+            return Ok(log);
+        }
+
+        self.name = other.name.clone();
+        self.notes = other.notes.clone();
+        self.icon_id = other.icon_id.clone();
+        self.custom_icon_uuid = other.custom_icon_uuid.clone();
+        self.custom_data = other.custom_data.clone();
+        self.times = other.times.clone();
+        self.is_expanded = other.is_expanded;
+        self.default_autotype_sequence = other.default_autotype_sequence.clone();
+        self.enable_autotype = other.enable_autotype.clone();
+        self.enable_searching = other.enable_searching.clone();
+        self.last_top_visible_entry = other.last_top_visible_entry.clone();
+
+        log.events.push(MergeEvent {
+            event_type: MergeEventType::GroupUpdated,
+            node_uuid: self.uuid,
+        });
+
+        Ok(log)
+    }
+
+    pub(crate) fn has_diverged_from(&self, other: &Group) -> bool {
+        let new_times = Times::new();
+        let mut self_purged = self.clone();
+        self_purged.times = new_times.clone();
+        self_purged.children = vec![];
+
+        let mut other_purged = other.clone();
+        other_purged.times = new_times.clone();
+        other_purged.children = vec![];
+        !self_purged.eq(&other_purged)
     }
 }
 
