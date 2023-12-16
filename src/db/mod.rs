@@ -288,8 +288,12 @@ impl Database {
             }
             // The entry doesn't exist in the destination, we create it
             let mut new_entry = other_entry.clone().to_owned();
-            self.root
-                .add_group_or_entry(new_entry.clone(), &current_group_path);
+
+            let mut new_entry_parent_group = match self.root.find_group_mut(&current_group_path) {
+                Some(g) => g,
+                None => return Err(format!("Could not find group {:?}", current_group_path)),
+            };
+            new_entry_parent_group.add_child(new_entry.clone());
 
             // TODO should we update the time info for the entry?
             log.events.push(MergeEvent {
@@ -375,7 +379,12 @@ impl Database {
                 event_type: MergeEventType::GroupCreated,
                 node_uuid: new_group.uuid.clone(),
             });
-            self.root.add_group_or_entry(new_group, &current_group_path);
+            let mut new_group_parent_group = match self.root.find_group_mut(&current_group_path) {
+                Some(g) => g,
+                None => return Err(format!("Could not find group at {:?}", current_group_path)),
+            };
+            new_group_parent_group.add_child(new_group.clone());
+
             let new_merge_log = self.merge_group(new_group_location, other_group)?;
             log = log.merge_with(&new_merge_log);
         }

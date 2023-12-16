@@ -412,16 +412,6 @@ impl Group {
         None
     }
 
-    pub(crate) fn add_group_or_entry(
-        &mut self,
-        node: impl Into<Node> + Clone,
-        path: &NodeLocation,
-    ) {
-        // FIXME handle this error.
-        let mut parent_group = self.find_group_mut(path).unwrap();
-        parent_group.add_child(node.clone());
-    }
-
     // Recursively get all the entries in the group, along with their
     // location.
     pub(crate) fn get_all_entries(
@@ -599,6 +589,37 @@ mod merge_tests {
         }
     }
 
+    fn get_all_groups(group: &Group) -> Vec<&Group> {
+        let mut response: Vec<&Group> = vec![];
+        for node in &group.children {
+            match node {
+                Node::Group(g) => {
+                    let mut new_groups = get_all_groups(&g);
+                    response.append(&mut new_groups);
+                    response.push(&g);
+                }
+                _ => continue,
+            }
+        }
+        response
+    }
+
+    fn get_all_entries(group: &Group) -> Vec<&Entry> {
+        let mut response: Vec<&Entry> = vec![];
+        for node in &group.children {
+            match node {
+                Node::Group(g) => {
+                    let mut new_entries = get_all_entries(&g);
+                    response.append(&mut new_entries);
+                }
+                Node::Entry(e) => {
+                    response.push(&e);
+                }
+            }
+        }
+        response
+    }
+
     fn create_test_database() -> Database {
         let mut db = Database::new(Default::default());
         let mut root_group = Group::new("root");
@@ -743,6 +764,8 @@ mod merge_tests {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
+        let group_count_before = get_all_groups(&destination_db.root).len();
+
         let mut source_group = Group::new("group2");
         let mut source_sub_group = Group::new("subgroup2");
 
@@ -756,6 +779,10 @@ mod merge_tests {
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 3);
+
+        let group_count_after = get_all_groups(&destination_db.root).len();
+        assert_eq!(group_count_after, group_count_before + 2);
+
         let destination_entries = destination_db.root.get_all_entries(&vec![]);
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
