@@ -148,10 +148,16 @@ impl Database {
     ) -> Result<MergeLog, String> {
         let mut log = MergeLog::default();
 
-        let destination_group = match self.root.find(&current_group_path).unwrap() {
-            crate::db::NodeRef::Group(g) => g,
-            _ => return Err("".to_string()),
+        let destination_group = match self.root.find_group(&current_group_path) {
+            Some(g) => g,
+            None => {
+                return Err(format!(
+                    "Could not find group at location {:?}",
+                    current_group_path
+                ))
+            }
         };
+
         // We don't need the original group here, only a copy so that we can do some
         // queries on it.
         let destination_group = destination_group.clone();
