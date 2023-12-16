@@ -566,6 +566,13 @@ mod merge_tests {
         }
     }
 
+    fn get_group<'a>(db: &'a mut Database, path: &[&str]) -> &'a Group {
+        match db.root.get(path).unwrap() {
+            crate::db::NodeRef::Group(g) => g,
+            crate::db::NodeRef::Entry(e) => panic!("A group was expected."),
+        }
+    }
+
     fn get_all_groups(group: &Group) -> Vec<&Group> {
         let mut response: Vec<&Group> = vec![];
         for node in &group.children {
@@ -954,6 +961,39 @@ mod merge_tests {
 
         let entry = destination_db.root.entries()[0];
         assert_eq!(entry.get_title(), Some("entry1_updated"));
+    }
+
+    #[test]
+    fn test_group_update_in_source() {
+        let mut destination_db = create_test_database();
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.set_field_and_commit("Title", "entry1");
+        destination_db.root.add_child(entry);
+
+        let mut source_db = destination_db.clone();
+
+        let mut group = get_group_mut(&mut source_db, &["group1", "subgroup1"]);
+        group.name = "subgroup1_updated_name".to_string();
+        // Making sure to wait 1 sec before update the timestamp, to make
+        // sure that we get a different modification timestamp.
+        thread::sleep(time::Duration::from_secs(1));
+        let new_modification_timestamp = Times::now();
+        group
+            .times
+            .set_last_modification(new_modification_timestamp);
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 1);
+
+        let mut modified_group = get_group(&mut source_db, &["group1", "subgroup1_updated_name"]);
+        assert_eq!(modified_group.name, "subgroup1_updated_name");
+        assert_eq!(
+            modified_group.times.get_last_modification(),
+            Some(new_modification_timestamp).as_ref(),
+        );
     }
 
     #[test]
