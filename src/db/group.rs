@@ -700,7 +700,10 @@ mod merge_tests {
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
         assert_eq!(destination_db.root.children.len(), 3);
-        let new_entry = destination_db.root.find_entry_by_uuid(entry_uuid);
+
+        let root_entries = destination_db.root.entries();
+        assert_eq!(root_entries.len(), 1);
+        let new_entry = root_entries.get(0);
         assert!(new_entry.is_some());
         assert_eq!(
             new_entry.unwrap().get_title().unwrap(),
