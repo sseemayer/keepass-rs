@@ -242,6 +242,17 @@ impl Group {
         }
     }
 
+    pub(crate) fn find_group_mut<'a>(&'a mut self, path: &Vec<Uuid>) -> Option<&mut Group> {
+        let node_ref = match self.find_mut(path) {
+            Some(n) => n,
+            None => return None,
+        };
+        match node_ref {
+            NodeRefMut::Group(g) => Some(g),
+            NodeRefMut::Entry(_) => None,
+        }
+    }
+
     pub(crate) fn find_mut<'a>(&'a mut self, path: &Vec<Uuid>) -> Option<NodeRefMut<'a>> {
         if path.is_empty() {
             Some(NodeRefMut::Group(self))
@@ -406,29 +417,9 @@ impl Group {
         node: impl Into<Node> + Clone,
         path: &NodeLocation,
     ) {
-        if path.len() == 0 {
-            self.add_child(node.clone());
-            return;
-        }
-        println!("Searching for {:?}", path);
-
-        let next_path_uuid = &path[0];
-
-        let mut remaining_path = path.clone();
-        remaining_path.remove(0);
-
-        println!("Searching for group {}", next_path_uuid);
-        for n in &mut self.children {
-            if let Node::Group(g) = n {
-                if &g.uuid != next_path_uuid {
-                    continue;
-                }
-                g.add_group_or_entry(node, &remaining_path);
-                return;
-            }
-        }
-
-        panic!("TODO handle this with a response");
+        // FIXME handle this error.
+        let mut parent_group = self.find_group_mut(path).unwrap();
+        parent_group.add_child(node.clone());
     }
 
     // Recursively get all the entries in the group, along with their
