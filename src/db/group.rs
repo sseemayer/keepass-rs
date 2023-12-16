@@ -743,6 +743,9 @@ mod merge_tests {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
+        let entry_count_before = get_all_entries(&destination_db.root).len();
+        let group_count_before = get_all_groups(&destination_db.root).len();
+
         let mut source_sub_group = &mut source_db.root.groups_mut()[0];
 
         let mut entry = Entry::new();
@@ -753,9 +756,13 @@ mod merge_tests {
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
-        let destination_entries = destination_db.root.get_all_entries(&vec![]);
-        assert_eq!(destination_entries.len(), 1);
-        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+
+        let entry_count_after = get_all_entries(&destination_db.root).len();
+        let group_count_after = get_all_groups(&destination_db.root).len();
+        assert_eq!(entry_count_after, entry_count_before + 1);
+        assert_eq!(group_count_after, group_count_before);
+
+        let created_entry_location = destination_db.root.find_node_location(entry_uuid).unwrap();
         assert_eq!(created_entry_location.len(), 2);
     }
 
