@@ -620,12 +620,6 @@ mod merge_tests {
     use super::{Entry, Group, Node, Times};
     use crate::Database;
 
-    const ROOT_GROUP_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6a";
-    const GROUP1_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6b";
-    const GROUP2_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6c";
-    const SUBGROUP1_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
-    const SUBGROUP2_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e";
-
     fn get_entry_mut<'a>(db: &'a mut Database, path: &[&str]) -> &'a mut Entry {
         match db.root.get_mut(path).unwrap() {
             crate::db::NodeRefMut::Entry(e) => e,
@@ -677,6 +671,12 @@ mod merge_tests {
         }
         response
     }
+
+    const ROOT_GROUP_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6a";
+    const GROUP1_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6b";
+    const GROUP2_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6c";
+    const SUBGROUP1_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+    const SUBGROUP2_ID: &str = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e";
 
     fn create_test_database() -> Database {
         let mut db = Database::new(Default::default());
@@ -1038,6 +1038,45 @@ mod merge_tests {
     }
 
     #[test]
+    fn test_update_with_conflicts() {
+        let mut destination_db = create_test_database();
+
+        let mut entry = Entry::new();
+        let entry_uuid = entry.uuid.clone();
+        entry.set_field_and_commit("Title", "entry1");
+        destination_db.root.add_child(entry);
+
+        let mut source_db = destination_db.clone();
+
+        let mut entry = &mut destination_db.root.entries_mut()[0];
+        entry.set_field_and_commit("Title", "entry1_updated_from_destination");
+
+        let mut entry = &mut source_db.root.entries_mut()[0];
+        entry.set_field_and_commit("Title", "entry1_updated_from_source");
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 1);
+
+        let entry = destination_db.root.entries()[0];
+        assert_eq!(entry.get_title(), Some("entry1_updated_from_source"));
+
+        let merged_history = entry.history.clone().unwrap();
+        assert!(merged_history.is_ordered());
+        assert_eq!(merged_history.entries.len(), 3);
+        let merged_entry = &merged_history.entries[1];
+        assert_eq!(
+            merged_entry.get_title(),
+            Some("entry1_updated_from_destination")
+        );
+
+        // Merging again should not result in any additional change.
+        let merge_result = destination_db.merge(&destination_db.clone()).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 0);
+    }
+
+    #[test]
     fn test_group_update_in_source() {
         let mut destination_db = create_test_database();
 
@@ -1106,7 +1145,7 @@ mod merge_tests {
     }
 
     #[test]
-    fn test_update_with_conflicts() {
+    fn test_group_update_and_relocation() {
         let mut destination_db = create_test_database();
 
         let mut entry = Entry::new();
@@ -1116,31 +1155,42 @@ mod merge_tests {
 
         let mut source_db = destination_db.clone();
 
-        let mut entry = &mut destination_db.root.entries_mut()[0];
-        entry.set_field_and_commit("Title", "entry1_updated_from_destination");
+        let mut group = get_group_mut(&mut source_db, &["group1", "subgroup1"]);
+        group.name = "subgroup1_updated_name".to_string();
+        // Making sure to wait 1 sec before update the timestamp, to make
+        // sure that we get a different modification timestamp.
+        thread::sleep(time::Duration::from_secs(1));
+        let new_modification_timestamp = Times::now();
+        group
+            .times
+            .set_last_modification(new_modification_timestamp);
+        group
+            .times
+            .set_location_changed(new_modification_timestamp);
 
-        let mut entry = &mut source_db.root.entries_mut()[0];
-        entry.set_field_and_commit("Title", "entry1_updated_from_source");
+        source_db
+            .relocate_node(
+                &Uuid::parse_str(SUBGROUP1_ID).unwrap(),
+                &vec![
+                    Uuid::parse_str(ROOT_GROUP_ID).unwrap(),
+                    Uuid::parse_str(GROUP1_ID).unwrap(),
+                ],
+                &vec![Uuid::parse_str(GROUP2_ID).unwrap()],
+            )
+            .unwrap();
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 1);
+        assert_eq!(merge_result.events.len(), 2);
 
-        let entry = destination_db.root.entries()[0];
-        assert_eq!(entry.get_title(), Some("entry1_updated_from_source"));
-
-        let merged_history = entry.history.clone().unwrap();
-        assert!(merged_history.is_ordered());
-        assert_eq!(merged_history.entries.len(), 3);
-        let merged_entry = &merged_history.entries[1];
+        let mut modified_group =
+            get_group(&mut destination_db, &["group2", "subgroup1_updated_name"]);
+        assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
-            merged_entry.get_title(),
-            Some("entry1_updated_from_destination")
+            modified_group.times.get_last_modification(),
+            Some(new_modification_timestamp).as_ref(),
         );
 
-        // Merging again should not result in any additional change.
-        let merge_result = destination_db.merge(&destination_db.clone()).unwrap();
-        assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 0);
+
     }
 }
