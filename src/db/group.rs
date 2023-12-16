@@ -42,6 +42,11 @@ impl MergeLog {
         response.events.append(other.events.clone().as_mut());
         response
     }
+
+    pub fn append(&mut self, other: &MergeLog) {
+        self.warnings.append(other.warnings.clone().as_mut());
+        self.events.append(other.events.clone().as_mut());
+    }
 }
 
 pub(crate) type NodeLocation = Vec<Uuid>;

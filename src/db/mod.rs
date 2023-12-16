@@ -284,7 +284,7 @@ impl Database {
                     event_type: MergeEventType::EntryUpdated,
                     node_uuid: merged_entry.uuid,
                 });
-                log = log.merge_with(&entry_merge_log);
+                log.append(&entry_merge_log);
                 continue;
             }
 
@@ -321,7 +321,7 @@ impl Database {
                 // the two groups.
                 if parent_group_uuid == &other_group_uuid {
                     let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                    log = log.merge_with(&new_merge_log);
+                    log.append(&new_merge_log);
                     continue;
                 }
 
@@ -368,12 +368,12 @@ impl Database {
                     });
 
                     let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                    log = log.merge_with(&new_merge_log);
+                    log.append(&new_merge_log);
                     continue;
                 }
 
                 let new_merge_log = self.merge_group(new_group_location, other_group)?;
-                log = log.merge_with(&new_merge_log);
+                log.append(&new_merge_log);
                 continue;
             }
 
@@ -391,7 +391,7 @@ impl Database {
             new_group_parent_group.add_child(new_group.clone());
 
             let new_merge_log = self.merge_group(new_group_location, other_group)?;
-            log = log.merge_with(&new_merge_log);
+            log.append(&new_merge_log);
         }
 
         Ok(log)
