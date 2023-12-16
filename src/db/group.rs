@@ -876,10 +876,7 @@ mod merge_tests {
         assert_eq!(destination_entries.len(), 1);
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 2);
-        assert_eq!(
-            created_entry_location[0],
-            Uuid::parse_str(ROOT_GROUP_ID).unwrap()
-        );
+        assert_eq!(&created_entry_location[0].to_string(), ROOT_GROUP_ID);
         assert_eq!(created_entry_location[1], new_group_uuid);
     }
 
@@ -921,14 +918,8 @@ mod merge_tests {
         let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
         assert_eq!(created_entry_location.len(), 3);
         assert_eq!(created_entry_location[0], destination_db.root.uuid);
-        assert_eq!(
-            created_entry_location[1],
-            Uuid::parse_str(GROUP2_ID).unwrap()
-        );
-        assert_eq!(
-            created_entry_location[2],
-            Uuid::parse_str(SUBGROUP1_ID).unwrap()
-        );
+        assert_eq!(&created_entry_location[1].to_string(), GROUP2_ID);
+        assert_eq!(&created_entry_location[2].to_string(), SUBGROUP1_ID);
     }
 
     #[test]
