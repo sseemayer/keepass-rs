@@ -242,6 +242,17 @@ impl Group {
         }
     }
 
+    pub(crate) fn find_entry_mut<'a>(&'a mut self, path: &Vec<Uuid>) -> Option<&mut Entry> {
+        let node_ref = match self.find_mut(path) {
+            Some(n) => n,
+            None => return None,
+        };
+        match node_ref {
+            NodeRefMut::Entry(e) => Some(e),
+            NodeRefMut::Group(_) => None,
+        }
+    }
+
     pub(crate) fn find_group_mut<'a>(&'a mut self, path: &Vec<Uuid>) -> Option<&mut Group> {
         let node_ref = match self.find_mut(path) {
             Some(n) => n,
@@ -339,21 +350,6 @@ impl Group {
             }
         }
         response
-    }
-
-    pub(crate) fn replace_entry(&mut self, entry: &Entry) {
-        for node in &mut self.children {
-            match node {
-                Node::Group(g) => {
-                    g.replace_entry(entry);
-                }
-                Node::Entry(e) => {
-                    if e.uuid == entry.uuid {
-                        *e = entry.clone();
-                    }
-                }
-            }
-        }
     }
 
     pub(crate) fn remove_node(&mut self, uuid: &Uuid) -> Result<Node, String> {

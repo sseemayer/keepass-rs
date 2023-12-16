@@ -274,7 +274,12 @@ impl Database {
                     continue;
                 }
 
-                self.root.replace_entry(&merged_entry);
+                // The entry already exists but is not at the right location. We might have to
+                // relocate it.
+                let mut existing_entry =
+                    self.root.find_entry_mut(&existing_entry_location).unwrap();
+                *existing_entry = merged_entry.clone();
+
                 log.events.push(MergeEvent {
                     event_type: MergeEventType::EntryUpdated,
                     node_uuid: merged_entry.uuid,
