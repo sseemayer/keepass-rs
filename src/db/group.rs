@@ -852,6 +852,9 @@ mod merge_tests {
     fn test_entry_relocation_new_group() {
         let mut destination_db = create_test_database();
 
+        let entry_count_before = get_all_entries(&destination_db.root).len();
+        let group_count_before = get_all_groups(&destination_db.root).len();
+
         let mut source_db = destination_db.clone();
         let mut new_group = Group::new("subgroup3");
         let new_group_uuid = new_group.uuid.clone();
@@ -872,9 +875,12 @@ mod merge_tests {
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 2);
 
-        let destination_entries = destination_db.root.get_all_entries(&vec![]);
-        assert_eq!(destination_entries.len(), 1);
-        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+        let entry_count_after = get_all_entries(&destination_db.root).len();
+        let group_count_after = get_all_groups(&destination_db.root).len();
+        assert_eq!(entry_count_after, entry_count_before + 1);
+        assert_eq!(group_count_after, group_count_before + 1);
+
+        let created_entry_location = destination_db.root.find_node_location(entry_uuid).unwrap();
         assert_eq!(created_entry_location.len(), 2);
         assert_eq!(&created_entry_location[0].to_string(), ROOT_GROUP_ID);
         assert_eq!(created_entry_location[1], new_group_uuid);
