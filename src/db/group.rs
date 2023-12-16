@@ -772,6 +772,7 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = get_all_entries(&destination_db.root).len();
 
         let mut source_group = Group::new("group2");
         let mut source_sub_group = Group::new("subgroup2");
@@ -788,24 +789,26 @@ mod merge_tests {
         assert_eq!(merge_result.events.len(), 3);
 
         let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = get_all_entries(&destination_db.root).len();
+        assert_eq!(entry_count_after, entry_count_before + 1);
         assert_eq!(group_count_after, group_count_before + 2);
 
-        let destination_entries = destination_db.root.get_all_entries(&vec![]);
-        assert_eq!(destination_entries.len(), 1);
-        let (created_entry, created_entry_location) = destination_entries.get(0).unwrap();
+        let created_entry_location = destination_db.root.find_node_location(entry_uuid).unwrap();
         assert_eq!(created_entry_location.len(), 3);
     }
 
     #[test]
     fn test_entry_relocation_existing_group() {
+        let mut destination_db = create_test_database();
+
+        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = get_all_entries(&destination_db.root).len();
+
         let mut entry = Entry::new();
         let entry_uuid = entry.uuid.clone();
         entry.set_field_and_commit("Title", "entry1");
-
-        let mut destination_db = create_test_database();
         let mut destination_sub_group1 =
             get_group_mut(&mut destination_db, &["group1", "subgroup1"]);
-
         destination_sub_group1.add_child(entry.clone());
 
         let mut source_db = destination_db.clone();
@@ -834,15 +837,15 @@ mod merge_tests {
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let destination_entries = destination_db.root.get_all_entries(&vec![]);
-        assert_eq!(destination_entries.len(), 1);
-        let (moved_entry, moved_entry_location) = destination_entries.get(0).unwrap();
+        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = get_all_entries(&destination_db.root).len();
+        assert_eq!(group_count_after, group_count_before);
+        assert_eq!(entry_count_after, entry_count_before + 1);
+
+        let moved_entry_location = destination_db.root.find_node_location(entry_uuid).unwrap();
         assert_eq!(moved_entry_location.len(), 2);
-        assert_eq!(
-            moved_entry_location[0],
-            Uuid::parse_str(ROOT_GROUP_ID).unwrap()
-        );
-        assert_eq!(moved_entry_location[1], Uuid::parse_str(GROUP2_ID).unwrap());
+        assert_eq!(&moved_entry_location[0].to_string(), ROOT_GROUP_ID);
+        assert_eq!(&moved_entry_location[1].to_string(), GROUP2_ID);
     }
 
     #[test]
