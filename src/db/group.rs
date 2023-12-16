@@ -194,6 +194,28 @@ impl Group {
         }
     }
 
+    pub(crate) fn find_group<'a>(&'a self, path: &Vec<Uuid>) -> Option<&Group> {
+        let node_ref = match self.find(path) {
+            Some(n) => n,
+            None => return None,
+        };
+        match node_ref {
+            NodeRef::Group(g) => Some(g),
+            NodeRef::Entry(_) => None,
+        }
+    }
+
+    pub(crate) fn find_entry<'a>(&'a self, path: &Vec<Uuid>) -> Option<&Entry> {
+        let node_ref = match self.find(path) {
+            Some(n) => n,
+            None => return None,
+        };
+        match node_ref {
+            NodeRef::Entry(e) => Some(e),
+            NodeRef::Group(_) => None,
+        }
+    }
+
     pub(crate) fn find<'a>(&'a self, path: &Vec<Uuid>) -> Option<NodeRef<'a>> {
         if path.is_empty() {
             Some(NodeRef::Group(self))
@@ -392,23 +414,6 @@ impl Group {
                         return Some(e);
                     }
                 }
-            }
-        }
-        None
-    }
-
-    pub fn find_group(&self, id: Uuid) -> Option<&Group> {
-        for node in &self.children {
-            match node {
-                Node::Group(g) => {
-                    if g.uuid == id {
-                        return Some(g);
-                    }
-                    if let Some(g) = g.find_group(id) {
-                        return Some(g);
-                    }
-                }
-                Node::Entry(e) => continue,
             }
         }
         None

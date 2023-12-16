@@ -165,13 +165,18 @@ impl Database {
             if let Some(destination_entry_location) = destination_entry_location {
                 let parent_group_uuid = destination_entry_location.last().unwrap();
 
+                let mut existing_entry_location = destination_entry_location.clone();
+                // FIXME we shouldn't have to remove the root group.
+                existing_entry_location.remove(0);
+                existing_entry_location.push(other_entry.uuid);
+
                 // The entry already exists but is not at the right location. We might have to
                 // relocate it.
-                // FIXME use the location to get the entry!
                 let existing_entry = self
                     .root
-                    .find_entry_by_uuid(other_entry.uuid.clone())
-                    .unwrap().clone();
+                    .find_entry(&existing_entry_location)
+                    .unwrap()
+                    .clone();
 
                 // The entry already exists and is at the right location, so we can proceed and merge
                 // the two groups.
@@ -277,7 +282,6 @@ impl Database {
             }
             // The entry doesn't exist in the destination, we create it
             let mut new_entry = other_entry.clone().to_owned();
-            println!("Adding entry at {:?}", current_group_path);
             self.root
                 .add_group_or_entry(new_entry.clone(), &current_group_path);
 
@@ -306,10 +310,14 @@ impl Database {
                     continue;
                 }
 
+                let mut existing_group_location = destination_group_location.clone();
+                // FIXME we shouldn't have to remove the root group.
+                existing_group_location.remove(0);
+                existing_group_location.push(other_group_uuid);
+
                 // The group already exists but is not at the right location. We might have to
                 // relocate it.
-                // FIXME use the location to get the group!
-                let existing_group = self.root.find_group(other_group.uuid.clone()).unwrap();
+                let existing_group = self.root.find_group(&existing_group_location).unwrap();
                 let existing_group_location_changed =
                     match existing_group.times.get_location_changed() {
                         Some(t) => *t,
@@ -357,7 +365,6 @@ impl Database {
             // The group doesn't exist in the destination, we create it
             let mut new_group = other_group.clone().to_owned();
             new_group.children = vec![];
-            println!("Adding new group {}", new_group.name);
             log.events.push(MergeEvent {
                 event_type: MergeEventType::GroupCreated,
                 node_uuid: new_group.uuid.clone(),
