@@ -85,9 +85,7 @@ impl OuterCipherConfig {
         match self {
             OuterCipherConfig::AES256 => Ok(Box::new(ciphers::AES256Cipher::new(key, iv)?)),
             OuterCipherConfig::Twofish => Ok(Box::new(ciphers::TwofishCipher::new(key, iv)?)),
-            OuterCipherConfig::ChaCha20 => {
-                Ok(Box::new(ciphers::ChaCha20Cipher::new_key_iv(key, iv)?))
-            }
+            OuterCipherConfig::ChaCha20 => Ok(Box::new(ciphers::ChaCha20Cipher::new_key_iv(key, iv)?)),
         }
     }
 
@@ -133,10 +131,7 @@ pub enum InnerCipherConfig {
 }
 
 impl InnerCipherConfig {
-    pub(crate) fn get_cipher(
-        &self,
-        key: &[u8],
-    ) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
+    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
         match self {
             InnerCipherConfig::Plain => Ok(Box::new(ciphers::PlainCipher::new(key)?)),
             InnerCipherConfig::Salsa20 => Ok(Box::new(ciphers::Salsa20Cipher::new(key)?)),
@@ -198,10 +193,7 @@ pub enum KdfConfig {
         memory: u64,
         parallelism: u32,
 
-        #[cfg_attr(
-            feature = "serialization",
-            serde(serialize_with = "serialize_argon2_version")
-        )]
+        #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
     /// Derive keys with Argon2id
@@ -210,10 +202,7 @@ pub enum KdfConfig {
         memory: u64,
         parallelism: u32,
 
-        #[cfg_attr(
-            feature = "serialization",
-            serde(serialize_with = "serialize_argon2_version")
-        )]
+        #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
 }
@@ -237,9 +226,7 @@ impl KdfConfig {
 
     /// For writing out a database, generate a new KDF seed from the config and return the KDF
     /// and the generated seed
-    pub(crate) fn get_kdf_and_seed(
-        &self,
-    ) -> Result<(Box<dyn kdf::Kdf>, Vec<u8>), getrandom::Error> {
+    pub(crate) fn get_kdf_and_seed(&self) -> Result<(Box<dyn kdf::Kdf>, Vec<u8>), getrandom::Error> {
         let mut kdf_seed = vec![0; self.seed_size()];
         getrandom::getrandom(&mut kdf_seed)?;
 

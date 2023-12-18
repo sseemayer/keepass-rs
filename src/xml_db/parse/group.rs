@@ -34,12 +34,10 @@ impl FromXml for Group {
                         out.name = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Notes" => {
-                        out.notes =
-                            SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
+                        out.notes = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "IconID" => {
-                        out.icon_id =
-                            SimpleTag::<Option<usize>>::from_xml(iterator, inner_cipher)?.value;
+                        out.icon_id = SimpleTag::<Option<usize>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "CustomIconUUID" => {
                         out.custom_icon_uuid =
@@ -49,8 +47,7 @@ impl FromXml for Group {
                         out.times = Times::from_xml(iterator, inner_cipher)?;
                     }
                     "IsExpanded" => {
-                        out.is_expanded =
-                            SimpleTag::<bool>::from_xml(iterator, inner_cipher)?.value;
+                        out.is_expanded = SimpleTag::<bool>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "DefaultAutoTypeSequence" => {
                         out.default_autotype_sequence =

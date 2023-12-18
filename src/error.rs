@@ -64,15 +64,8 @@ pub enum DatabaseIntegrityError {
     #[error("Missing group level")]
     MissingKDBGroupLevel,
 
-    #[error(
-        "Invalid group level {} (current level {})",
-        group_level,
-        current_level
-    )]
-    InvalidKDBGroupLevel {
-        group_level: u16,
-        current_level: u16,
-    },
+    #[error("Invalid group level {} (current level {})", group_level, current_level)]
+    InvalidKDBGroupLevel { group_level: u16, current_level: u16 },
 
     #[error("Missing group ID")]
     MissingKDBGroupId,

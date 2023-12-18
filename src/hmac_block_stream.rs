@@ -32,11 +32,8 @@ pub(crate) fn read_hmac_block_stream(
         LittleEndian::write_u64(&mut block_index_buf, block_index as u64);
 
         if hmac
-            != crate::crypt::calculate_hmac(
-                &[&block_index_buf, size_bytes, &block],
-                &hmac_block_key,
-            )?
-            .as_slice()
+            != crate::crypt::calculate_hmac(&[&block_index_buf, size_bytes, &block], &hmac_block_key)?
+                .as_slice()
         {
             return Err(BlockStreamError::BlockHashMismatch { block_index }.into());
         }
@@ -78,10 +75,7 @@ pub(crate) fn write_hmac_block_stream(
         let mut block_index_buf = [0u8; 8];
         LittleEndian::write_u64(&mut block_index_buf, block_index as u64);
 
-        let hmac = crate::crypt::calculate_hmac(
-            &[&block_index_buf, &size_bytes, &block],
-            &hmac_block_key,
-        )?;
+        let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, &block], &hmac_block_key)?;
 
         pos += 36 + size;
         block_index += 1;
@@ -97,8 +91,7 @@ pub(crate) fn write_hmac_block_stream(
     LittleEndian::write_u64(&mut block_index_buf, block_index as u64);
 
     let size_bytes = vec![0; 4];
-    let hmac =
-        crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, &[]], &hmac_block_key)?;
+    let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, &[]], &hmac_block_key)?;
 
     out.extend_from_slice(&hmac);
     out.extend_from_slice(&size_bytes);

@@ -8,10 +8,10 @@ use crate::{
     error::DatabaseSaveError,
     format::{
         kdbx4::{
-            KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV,
-            HEADER_END, HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_MASTER_SEED_SIZE,
-            HEADER_OUTER_ENCRYPTION_ID, INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END,
-            INNER_HEADER_RANDOM_STREAM_ID, INNER_HEADER_RANDOM_STREAM_KEY,
+            KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
+            HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_MASTER_SEED_SIZE, HEADER_OUTER_ENCRYPTION_ID,
+            INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END, INNER_HEADER_RANDOM_STREAM_ID,
+            INNER_HEADER_RANDOM_STREAM_KEY,
         },
         DatabaseVersion,
     },
@@ -73,11 +73,8 @@ pub fn dump_kdbx4(
     let master_key = crypt::calculate_sha256(&[&master_seed, &transformed_key])?;
 
     // verify credentials
-    let hmac_key = crypt::calculate_sha512(&[
-        &master_seed,
-        &transformed_key,
-        &hmac_block_stream::HMAC_KEY_END,
-    ])?;
+    let hmac_key =
+        crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END])?;
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::max_value(), &hmac_key)?;
     let header_hmac = crypt::calculate_hmac(&[&header_data], &header_hmac_key)?;
 

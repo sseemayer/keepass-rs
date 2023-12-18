@@ -47,9 +47,7 @@ fn parse_header(data: &[u8]) -> Result<KDBHeader, DatabaseIntegrityError> {
 }
 
 fn from_utf8(data: &[u8]) -> String {
-    String::from_utf8_lossy(data)
-        .trim_end_matches('\0')
-        .to_owned()
+    String::from_utf8_lossy(data).trim_end_matches('\0').to_owned()
 }
 
 fn ensure_length(
@@ -144,8 +142,7 @@ fn parse_groups(
             0xffff => {
                 ensure_length(field_type, field_size, 0)?;
 
-                let level =
-                    level.ok_or_else(|| DatabaseIntegrityError::MissingKDBGroupLevel)? as usize;
+                let level = level.ok_or_else(|| DatabaseIntegrityError::MissingKDBGroupLevel)? as usize;
 
                 // Update the current group tree branch (collapse previous sub-branch, initiate
                 // current sub-branch)
@@ -239,10 +236,9 @@ fn parse_entries(
             }
             0x000e => {
                 // BinaryData
-                entry.fields.insert(
-                    String::from("BinaryData"),
-                    Value::Bytes(field_value.to_vec()),
-                );
+                entry
+                    .fields
+                    .insert(String::from("BinaryData"), Value::Bytes(field_value.to_vec()));
             }
             0xffff => {
                 ensure_length(field_type, field_size, 0)?;

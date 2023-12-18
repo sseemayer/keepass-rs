@@ -74,8 +74,7 @@ impl ChallengeResponseKey {
                     return DatabaseKeyError::ChallengeResponseKeyError(e.to_string());
                 })?;
 
-                let response =
-                    crate::crypt::calculate_hmac_sha1(&[&challenge], &secret_bytes)?.to_vec();
+                let response = crate::crypt::calculate_hmac_sha1(&[&challenge], &secret_bytes)?.to_vec();
                 Ok(response)
             }
         }
@@ -100,10 +99,7 @@ impl DatabaseKey {
     }
 
     #[cfg(feature = "utilities")]
-    pub fn with_password_from_prompt(
-        mut self,
-        prompt_message: &str,
-    ) -> Result<Self, std::io::Error> {
+    pub fn with_password_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
         self.password = Some(rpassword::prompt_password(prompt_message)?);
         // FIXME This prevents using an empty password when using the password prompt.
         if self.password == Some("".to_string()) {
@@ -122,10 +118,7 @@ impl DatabaseKey {
     }
 
     #[cfg(feature = "challenge_response")]
-    pub fn with_challenge_response_key(
-        mut self,
-        challenge_response_key: ChallengeResponseKey,
-    ) -> Self {
+    pub fn with_challenge_response_key(mut self, challenge_response_key: ChallengeResponseKey) -> Self {
         self.challenge_response_key = Some(challenge_response_key);
         self
     }
@@ -181,9 +174,7 @@ mod key_tests {
 
     #[test]
     fn test_key() -> Result<(), DatabaseKeyError> {
-        let ke = DatabaseKey::new()
-            .with_password("asdf")
-            .get_key_elements()?;
+        let ke = DatabaseKey::new().with_password("asdf").get_key_elements()?;
         assert_eq!(ke.len(), 1);
 
         let ke = DatabaseKey::new()
@@ -204,16 +195,17 @@ mod key_tests {
 
         let ke = DatabaseKey::new()
             .with_keyfile(
-                &mut "<KeyFile><Key><Data>0!23456789ABCDEF0123456789ABCDEF</Data></Key></KeyFile>"
-                    .as_bytes(),
+                &mut "<KeyFile><Key><Data>0!23456789ABCDEF0123456789ABCDEF</Data></Key></KeyFile>".as_bytes(),
             )?
             .get_key_elements()?;
         assert_eq!(ke.len(), 1);
 
-        let ke = DatabaseKey::new().with_keyfile(
-            &mut "<KeyFile><Key><Data>NXyYiJMHg3ls+eBmjbAjWec9lcOToJiofbhNiFMTJMw=</Data></Key></KeyFile>".as_bytes(),
-        )?
-        .get_key_elements()?;
+        let ke = DatabaseKey::new()
+            .with_keyfile(
+                &mut "<KeyFile><Key><Data>NXyYiJMHg3ls+eBmjbAjWec9lcOToJiofbhNiFMTJMw=</Data></Key></KeyFile>"
+                    .as_bytes(),
+            )?
+            .get_key_elements()?;
         assert_eq!(ke.len(), 1);
 
         // other XML files will just be hashed as a "bare" keyfile
