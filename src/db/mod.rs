@@ -57,10 +57,7 @@ pub struct Database {
 
 impl Database {
     /// Parse a database from a std::io::Read
-    pub fn open(
-        source: &mut dyn std::io::Read,
-        key: DatabaseKey,
-    ) -> Result<Database, DatabaseOpenError> {
+    pub fn open(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Database, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
@@ -97,10 +94,7 @@ impl Database {
     }
 
     /// Helper function to load a database into its internal XML chunks
-    pub fn get_xml(
-        source: &mut dyn std::io::Read,
-        key: DatabaseKey,
-    ) -> Result<Vec<u8>, DatabaseOpenError> {
+    pub fn get_xml(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Vec<u8>, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
@@ -117,9 +111,7 @@ impl Database {
     }
 
     /// Get the version of a database without decrypting it
-    pub fn get_version(
-        source: &mut dyn std::io::Read,
-    ) -> Result<DatabaseVersion, DatabaseIntegrityError> {
+    pub fn get_version(source: &mut dyn std::io::Read) -> Result<DatabaseVersion, DatabaseIntegrityError> {
         let mut data = Vec::new();
         data.resize(DatabaseVersion::get_version_header_size(), 0);
         source.read(&mut data)?;
@@ -196,8 +188,7 @@ impl Times {
     }
 
     pub fn set_last_access(&mut self, time: NaiveDateTime) {
-        self.times
-            .insert(LAST_ACCESS_TIME_TAG_NAME.to_string(), time);
+        self.times.insert(LAST_ACCESS_TIME_TAG_NAME.to_string(), time);
     }
 
     pub fn get_location_changed(&self) -> Option<&NaiveDateTime> {
@@ -205,8 +196,7 @@ impl Times {
     }
 
     pub fn set_location_changed(&mut self, time: NaiveDateTime) {
-        self.times
-            .insert(LOCATION_CHANGED_TAG_NAME.to_string(), time);
+        self.times.insert(LOCATION_CHANGED_TAG_NAME.to_string(), time);
     }
 
     // Returns the current time, without the nanoseconds since
@@ -301,8 +291,8 @@ impl FromStr for Color {
             return Err(ParseColorError(s.to_string()));
         }
 
-        let v = u64::from_str_radix(s.trim_start_matches('#'), 16)
-            .map_err(|_e| ParseColorError(s.to_string()))?;
+        let v =
+            u64::from_str_radix(s.trim_start_matches('#'), 16).map_err(|_e| ParseColorError(s.to_string()))?;
 
         let r = ((v >> 16) & 0xff) as u8;
         let g = ((v >> 8) & 0xff) as u8;

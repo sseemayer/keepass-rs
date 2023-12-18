@@ -285,10 +285,7 @@ mod file_read_tests {
     #[test]
     fn open_kdb_with_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdb_with_password.kdb");
-        let db = Database::open(
-            &mut File::open(path)?,
-            DatabaseKey::new().with_password("foobar"),
-        )?;
+        let db = Database::open(&mut File::open(path)?, DatabaseKey::new().with_password("foobar"))?;
 
         println!("{:?} DB Opened", db);
         assert_eq!(db.root.name, "Root");

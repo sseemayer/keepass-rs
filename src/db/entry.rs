@@ -195,9 +195,7 @@ impl serde::Serialize for Value {
         match self {
             Value::Bytes(b) => serializer.serialize_bytes(b),
             Value::Unprotected(u) => serializer.serialize_str(u),
-            Value::Protected(p) => {
-                serializer.serialize_str(String::from_utf8_lossy(p.unsecure()).as_ref())
-            }
+            Value::Protected(p) => serializer.serialize_str(String::from_utf8_lossy(p.unsecure()).as_ref()),
         }
     }
 }
@@ -279,10 +277,9 @@ mod entry_tests {
         let mut entry = Entry::new();
         let mut last_modification_time = entry.times.get_last_modification().unwrap().clone();
 
-        entry.fields.insert(
-            "Username".to_string(),
-            Value::Unprotected("user".to_string()),
-        );
+        entry
+            .fields
+            .insert("Username".to_string(), Value::Unprotected("user".to_string()));
         // Making sure to wait 1 sec before update the history, to make
         // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
@@ -307,10 +304,9 @@ mod entry_tests {
             &last_modification_time
         );
 
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("first title".to_string()),
-        );
+        entry
+            .fields
+            .insert("Title".to_string(), Value::Unprotected("first title".to_string()));
 
         assert!(entry.update_history());
         assert!(entry.history.is_some());
@@ -384,8 +380,7 @@ mod entry_tests {
         );
 
         assert_eq!(
-            serde_json::to_string(&Value::Protected(SecStr::new("ABC".as_bytes().to_vec())))
-                .unwrap(),
+            serde_json::to_string(&Value::Protected(SecStr::new("ABC".as_bytes().to_vec()))).unwrap(),
             "\"ABC\"".to_string()
         );
     }

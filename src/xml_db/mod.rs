@@ -46,10 +46,9 @@ mod tests {
         entry
             .fields
             .insert("Title".to_string(), Value::Unprotected("ASDF".to_string()));
-        entry.fields.insert(
-            "UserName".to_string(),
-            Value::Unprotected("ghj".to_string()),
-        );
+        entry
+            .fields
+            .insert("UserName".to_string(), Value::Unprotected("ghj".to_string()));
         entry.fields.insert(
             "Password".to_string(),
             Value::Protected(std::str::from_utf8(b"klmno").unwrap().into()),
@@ -262,9 +261,7 @@ mod tests {
                     (
                         "custom-data-protected-key".to_string(),
                         CustomDataItem {
-                            value: Some(Value::Protected(SecStr::new(
-                                b"custom-data-value".to_vec(),
-                            ))),
+                            value: Some(Value::Protected(SecStr::new(b"custom-data-value".to_vec()))),
                             last_modification_time: Some("2000-12-31T12:35:03".parse().unwrap()),
                         },
                     ),

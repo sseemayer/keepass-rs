@@ -29,9 +29,7 @@ pub(crate) fn dump(
     inner_cipher: &mut dyn Cipher,
     writer: &mut dyn Write,
 ) -> Result<(), xml::writer::Error> {
-    let mut xml_writer = EmitterConfig::new()
-        .perform_indent(false)
-        .create_writer(writer);
+    let mut xml_writer = EmitterConfig::new().perform_indent(false).create_writer(writer);
 
     db.dump_xml(&mut xml_writer, inner_cipher)?;
 
@@ -66,11 +64,7 @@ impl DumpXml for bool {
         writer: &mut EventWriter<E>,
         _inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error> {
-        writer.write(WriterEvent::characters(if *self {
-            "True"
-        } else {
-            "False"
-        }))
+        writer.write(WriterEvent::characters(if *self { "True" } else { "False" }))
     }
 }
 

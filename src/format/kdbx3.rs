@@ -73,8 +73,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
             //            should be used to encrypt the payload
             2 => {
                 outer_cipher = Some(
-                    OuterCipherConfig::try_from(entry_buffer)
-                        .map_err(|e| DatabaseIntegrityError::from(e))?,
+                    OuterCipherConfig::try_from(entry_buffer).map_err(|e| DatabaseIntegrityError::from(e))?,
                 );
             }
 
@@ -161,10 +160,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
 }
 
 /// Open, decrypt and parse a KeePass database from a source and a password
-pub(crate) fn parse_kdbx3(
-    data: &[u8],
-    db_key: &DatabaseKey,
-) -> Result<Database, DatabaseOpenError> {
+pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database, DatabaseOpenError> {
     let (config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
 
     // Parse XML data blocks

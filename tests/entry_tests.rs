@@ -26,9 +26,7 @@ mod entry_tests {
             assert_eq!(e.get("URL"), Some("http://keepass.info/"));
             assert_eq!(e.times.expires, false);
 
-            let et =
-                chrono::NaiveDateTime::parse_from_str("2016-01-06 09:43:01", "%Y-%m-%d %H:%M:%S")
-                    .unwrap();
+            let et = chrono::NaiveDateTime::parse_from_str("2016-01-06 09:43:01", "%Y-%m-%d %H:%M:%S").unwrap();
             assert_eq!(e.get_expiry_time(), Some(&et));
             assert_eq!(e.get_time("ExpiryTime"), Some(&et));
 

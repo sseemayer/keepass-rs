@@ -119,8 +119,8 @@ impl std::str::FromStr for TOTP {
         let secret = secret.ok_or(TOTPError::MissingField("secret"))?;
         let issuer = issuer.ok_or(TOTPError::MissingField("issuer"))?;
 
-        let secret = base32::decode(base32::Alphabet::RFC4648 { padding: true }, &secret)
-            .ok_or(TOTPError::Base32)?;
+        let secret =
+            base32::decode(base32::Alphabet::RFC4648 { padding: true }, &secret).ok_or(TOTPError::Base32)?;
 
         Ok(TOTP {
             label,
@@ -137,15 +137,9 @@ impl TOTP {
     /// Get the one-time code for a specific unix timestamp
     pub fn value_at(&self, time: u64) -> OTPCode {
         let code = match self.algorithm {
-            TOTPAlgorithm::Sha1 => {
-                totp_custom::<Sha1>(self.period, self.digits, &self.secret, time)
-            }
-            TOTPAlgorithm::Sha256 => {
-                totp_custom::<Sha256>(self.period, self.digits, &self.secret, time)
-            }
-            TOTPAlgorithm::Sha512 => {
-                totp_custom::<Sha512>(self.period, self.digits, &self.secret, time)
-            }
+            TOTPAlgorithm::Sha1 => totp_custom::<Sha1>(self.period, self.digits, &self.secret, time),
+            TOTPAlgorithm::Sha256 => totp_custom::<Sha256>(self.period, self.digits, &self.secret, time),
+            TOTPAlgorithm::Sha512 => totp_custom::<Sha512>(self.period, self.digits, &self.secret, time),
         };
 
         let valid_for = Duration::from_secs(self.period - (time % self.period));
@@ -177,12 +171,10 @@ mod kdbx4_otp_tests {
     fn kdbx4_entry() -> Result<(), Box<dyn std::error::Error>> {
         // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
         let path = Path::new("tests/resources/test_db_kdbx4_with_totp_entry.kdbx");
-        let db = Database::open(
-            &mut File::open(path)?,
-            DatabaseKey::new().with_password("test"),
-        )?;
+        let db = Database::open(&mut File::open(path)?, DatabaseKey::new().with_password("test"))?;
 
-        let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
+        let otp_str =
+            "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
         // get an entry on the root node
         if let Some(NodeRef::Entry(e)) = db.root.get(&["this entry has totp"]) {
@@ -197,7 +189,8 @@ mod kdbx4_otp_tests {
 
     #[test]
     fn totp_default() -> Result<(), TOTPError> {
-        let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
+        let otp_str =
+            "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
         let expected = TOTP {
             label: "KeePassXC:none".to_string(),
