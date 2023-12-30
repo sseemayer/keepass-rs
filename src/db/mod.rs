@@ -5,9 +5,14 @@ pub(crate) mod group;
 pub(crate) mod meta;
 pub(crate) mod node;
 
+#[cfg(feature = "merge")]
+pub(crate) mod merge;
+
 #[cfg(feature = "totp")]
 pub(crate) mod otp;
 
+#[cfg(feature = "merge")]
+use std::collections::VecDeque;
 use std::{collections::HashMap, str::FromStr};
 
 use chrono::NaiveDateTime;
@@ -20,9 +25,14 @@ pub use crate::db::{
     node::{Node, NodeIter, NodeRef, NodeRefMut},
 };
 
+#[cfg(feature = "merge")]
+use crate::db::merge::{MergeError, MergeEvent, MergeEventType, MergeLog};
+
 #[cfg(feature = "totp")]
 pub use crate::db::otp::{TOTPAlgorithm, TOTP};
 
+#[cfg(feature = "merge")]
+use crate::db::group::NodeLocation;
 use crate::{
     config::DatabaseConfig,
     error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
@@ -128,6 +138,430 @@ impl Database {
             meta: Default::default(),
         }
     }
+
+    /// Merge this database with another version of this same database.
+    /// This function will use the UUIDs to detect that entries and groups are
+    /// the same.
+    #[cfg(feature = "merge")]
+    pub fn merge(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
+        let mut log = MergeLog::default();
+        log.append(&self.merge_group(vec![], &other.root, false)?);
+        log.append(&self.merge_deletions(&other)?);
+        Ok(log)
+    }
+
+    #[cfg(feature = "merge")]
+    fn merge_deletions(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
+        // Utility function to search for a UUID in the VecDeque of deleted objects.
+        let is_in_deleted_queue = |uuid: Uuid, deleted_groups_queue: &VecDeque<DeletedObject>| -> bool {
+            for deleted_object in deleted_groups_queue {
+                // This group still has a child group, but it is not going to be deleted.
+                if deleted_object.uuid == uuid {
+                    return true;
+                }
+            }
+            false
+        };
+
+        let mut log = MergeLog::default();
+
+        let mut new_deleted_objects = self.deleted_objects.clone();
+
+        // We start by deleting the entries, since we will only remove groups if they are empty.
+        for deleted_object in &other.deleted_objects.objects {
+            if new_deleted_objects.contains(deleted_object.uuid) {
+                continue;
+            }
+            let entry_location = match self.find_node_location(deleted_object.uuid) {
+                Some(l) => l,
+                None => continue,
+            };
+
+            let parent_group = match self.root.find_group_mut(&entry_location) {
+                Some(g) => g,
+                None => return Err(MergeError::FindGroupError(entry_location)),
+            };
+
+            let entry = match parent_group.find_entry(&vec![deleted_object.uuid]) {
+                Some(e) => e,
+                // This uuid might refer to a group, which will be handled later.
+                None => continue,
+            };
+
+            let entry_last_modification = match entry.times.get_last_modification() {
+                Some(t) => *t,
+                None => {
+                    log.warnings.push(format!(
+                        "Entry {} did not have a last modification timestamp",
+                        entry.uuid
+                    ));
+                    Times::now()
+                }
+            };
+
+            if entry_last_modification < deleted_object.deletion_time {
+                parent_group.remove_node(&deleted_object.uuid)?;
+                log.events.push(MergeEvent {
+                    event_type: MergeEventType::EntryDeleted,
+                    node_uuid: deleted_object.uuid,
+                });
+
+                new_deleted_objects.objects.push(deleted_object.clone());
+            }
+        }
+
+        let mut deleted_groups_queue: VecDeque<DeletedObject> = vec![].into();
+        for deleted_object in &other.deleted_objects.objects {
+            if new_deleted_objects.contains(deleted_object.uuid) {
+                continue;
+            }
+            deleted_groups_queue.push_back(deleted_object.clone());
+        }
+
+        while !deleted_groups_queue.is_empty() {
+            let deleted_object = deleted_groups_queue.pop_front().unwrap();
+            if new_deleted_objects.contains(deleted_object.uuid) {
+                continue;
+            }
+            let group_location = match self.find_node_location(deleted_object.uuid) {
+                Some(l) => l,
+                None => continue,
+            };
+
+            let parent_group = match self.root.find_group_mut(&group_location) {
+                Some(g) => g,
+                None => return Err(MergeError::FindGroupError(group_location)),
+            };
+
+            let group = match parent_group.find_group(&vec![deleted_object.uuid]) {
+                Some(e) => e,
+                None => {
+                    // The node might be an entry, since we didn't necessarily removed all the
+                    // entries that were in the deleted objects of the source database.
+                    continue;
+                }
+            };
+
+            // Not deleting a group if it still has entries.
+            if !group.entries().is_empty() {
+                continue;
+            }
+
+            // This group still has a child group that might get deleted in the future, so we delay
+            // decision to delete it or not.
+            if group
+                .groups()
+                .iter()
+                .filter(|g| !is_in_deleted_queue(g.uuid, &deleted_groups_queue))
+                .collect::<Vec<_>>()
+                .len()
+                != 0
+            {
+                deleted_groups_queue.push_back(deleted_object.clone());
+                continue;
+            }
+
+            // This group still a groups that won't be deleted, so we don't delete it.
+            if group.groups().len() != 0 {
+                continue;
+            }
+
+            let group_last_modification = match group.times.get_last_modification() {
+                Some(t) => *t,
+                None => {
+                    log.warnings.push(format!(
+                        "Group {} did not have a last modification timestamp",
+                        group.uuid
+                    ));
+                    Times::now()
+                }
+            };
+
+            if group_last_modification < deleted_object.deletion_time {
+                parent_group.remove_node(&deleted_object.uuid)?;
+                log.events.push(MergeEvent {
+                    event_type: MergeEventType::GroupDeleted,
+                    node_uuid: deleted_object.uuid,
+                });
+
+                new_deleted_objects.objects.push(deleted_object.clone());
+            }
+        }
+
+        self.deleted_objects = new_deleted_objects;
+        Ok(log)
+    }
+
+    #[cfg(feature = "merge")]
+    pub(crate) fn find_node_location(&self, id: Uuid) -> Option<NodeLocation> {
+        for node in &self.root.children {
+            match node {
+                Node::Entry(e) => {
+                    if e.uuid == id {
+                        return Some(vec![]);
+                    }
+                }
+                Node::Group(g) => {
+                    if g.uuid == id {
+                        return Some(vec![]);
+                    }
+                    if let Some(location) = g.find_node_location(id) {
+                        return Some(location);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    #[cfg(feature = "merge")]
+    fn merge_group(
+        &mut self,
+        current_group_path: NodeLocation,
+        current_group: &Group,
+        is_in_deleted_group: bool,
+    ) -> Result<MergeLog, MergeError> {
+        let mut log = MergeLog::default();
+
+        if let Some(destination_group_location) = self.find_node_location(current_group.uuid) {
+            let mut destination_group_path = destination_group_location.clone();
+            destination_group_path.push(current_group.uuid);
+            let destination_group = match self.root.find_group_mut(&destination_group_path) {
+                Some(g) => g,
+                None => return Err(MergeError::FindGroupError(destination_group_path)),
+            };
+            let group_update_merge_events = destination_group.merge_with(&current_group)?;
+            log.append(&group_update_merge_events);
+        }
+
+        for other_entry in &current_group.entries() {
+            // find the existing location
+            let destination_entry_location = self.find_node_location(other_entry.uuid);
+
+            // The group already exists in the destination database.
+            if let Some(destination_entry_location) = destination_entry_location {
+                let mut existing_entry_location = destination_entry_location.clone();
+                existing_entry_location.push(other_entry.uuid);
+
+                // The entry already exists but is not at the right location. We might have to
+                // relocate it.
+                let mut existing_entry = self.root.find_entry(&existing_entry_location).unwrap().clone();
+
+                // The entry already exists but is not at the right location. We might have to
+                // relocate it.
+                if current_group_path.last() != destination_entry_location.last() && !is_in_deleted_group {
+                    let source_location_changed_time = match other_entry.times.get_location_changed() {
+                        Some(t) => *t,
+                        None => {
+                            log.warnings.push(format!(
+                                "Entry {} did not have a location updated timestamp",
+                                other_entry.uuid
+                            ));
+                            Times::epoch()
+                        }
+                    };
+                    let destination_location_changed = match existing_entry.times.get_location_changed() {
+                        Some(t) => *t,
+                        None => {
+                            log.warnings.push(format!(
+                                "Entry {} did not have a location updated timestamp",
+                                other_entry.uuid
+                            ));
+                            Times::now()
+                        }
+                    };
+                    if source_location_changed_time > destination_location_changed {
+                        log.events.push(MergeEvent {
+                            event_type: MergeEventType::EntryLocationUpdated,
+                            node_uuid: other_entry.uuid,
+                        });
+                        self.relocate_node(
+                            &other_entry.uuid,
+                            &destination_entry_location,
+                            &current_group_path,
+                            source_location_changed_time,
+                        )?;
+                        // Update the location of the current entry in case we have to update it
+                        // after.
+                        existing_entry_location = current_group_path.clone();
+                        existing_entry_location.push(other_entry.uuid);
+                        existing_entry
+                            .times
+                            .set_location_changed(source_location_changed_time);
+                    }
+                }
+
+                if !existing_entry.has_diverged_from(other_entry) {
+                    continue;
+                }
+
+                // The entry already exists and is at the right location, so we can proceed and merge
+                // the two entries.
+                let (merged_entry, entry_merge_log) = existing_entry.merge(other_entry)?;
+                let merged_entry = match merged_entry {
+                    Some(m) => m,
+                    None => continue,
+                };
+
+                if existing_entry.eq(&merged_entry) {
+                    continue;
+                }
+
+                let existing_entry = match self.root.find_entry_mut(&existing_entry_location) {
+                    Some(e) => e,
+                    None => return Err(MergeError::FindEntryError(existing_entry_location)),
+                };
+                *existing_entry = merged_entry.clone();
+
+                log.events.push(MergeEvent {
+                    event_type: MergeEventType::EntryUpdated,
+                    node_uuid: merged_entry.uuid,
+                });
+                log.append(&entry_merge_log);
+                continue;
+            }
+
+            if self.deleted_objects.contains(other_entry.uuid) {
+                continue;
+            }
+
+            // We don't create new entries that exist under a deleted group.
+            if is_in_deleted_group {
+                continue;
+            }
+
+            // The entry doesn't exist in the destination, we create it
+            let new_entry = other_entry.to_owned().clone();
+
+            let new_entry_parent_group = match self.root.find_group_mut(&current_group_path) {
+                Some(g) => g,
+                None => return Err(MergeError::FindGroupError(current_group_path)),
+            };
+            new_entry_parent_group.add_child(new_entry.clone());
+
+            // TODO should we update the time info for the entry?
+            log.events.push(MergeEvent {
+                event_type: MergeEventType::EntryCreated,
+                node_uuid: new_entry.uuid,
+            });
+        }
+
+        for other_group in &current_group.groups() {
+            let mut new_group_location = current_group_path.clone();
+            let other_group_uuid = other_group.uuid;
+            new_group_location.push(other_group_uuid);
+
+            if self.deleted_objects.contains(other_group.uuid) || is_in_deleted_group {
+                let new_merge_log = self.merge_group(new_group_location, other_group, true)?;
+                log.append(&new_merge_log);
+                continue;
+            }
+
+            let destination_group_location = self.find_node_location(other_group.uuid);
+
+            // The group already exists in the destination database.
+            if let Some(destination_group_location) = destination_group_location {
+                if current_group_path != destination_group_location {
+                    let mut existing_group_location = destination_group_location.clone();
+                    existing_group_location.push(other_group_uuid);
+
+                    // The group already exists but is not at the right location. We might have to
+                    // relocate it.
+                    let existing_group = self.root.find_group(&existing_group_location).unwrap();
+                    let existing_group_location_changed = match existing_group.times.get_location_changed() {
+                        Some(t) => *t,
+                        None => {
+                            log.warnings.push(format!(
+                                "Entry {} did not have a location changed timestamp",
+                                existing_group.uuid
+                            ));
+                            Times::now()
+                        }
+                    };
+                    let other_group_location_changed = match other_group.times.get_location_changed() {
+                        Some(t) => *t,
+                        None => {
+                            log.warnings.push(format!(
+                                "Entry {} did not have a location changed timestamp",
+                                other_group.uuid
+                            ));
+                            Times::epoch()
+                        }
+                    };
+                    // The other group was moved after the current group, so we have to relocate it.
+                    if existing_group_location_changed < other_group_location_changed {
+                        self.relocate_node(
+                            &other_group.uuid,
+                            &destination_group_location,
+                            &current_group_path,
+                            other_group_location_changed,
+                        )?;
+
+                        log.events.push(MergeEvent {
+                            event_type: MergeEventType::GroupLocationUpdated,
+                            node_uuid: other_group.uuid,
+                        });
+
+                        let new_merge_log =
+                            self.merge_group(new_group_location, other_group, is_in_deleted_group)?;
+                        log.append(&new_merge_log);
+                        continue;
+                    }
+                }
+
+                // The group already exists and is at the right location, so we can proceed and merge
+                // the two groups.
+                let new_merge_log = self.merge_group(new_group_location, other_group, is_in_deleted_group)?;
+                log.append(&new_merge_log);
+                continue;
+            }
+
+            // The group doesn't exist in the destination, we create it
+            let mut new_group = other_group.to_owned().clone();
+            new_group.children = vec![];
+            log.events.push(MergeEvent {
+                event_type: MergeEventType::GroupCreated,
+                node_uuid: new_group.uuid.clone(),
+            });
+            let new_group_parent_group = match self.root.find_group_mut(&current_group_path) {
+                Some(g) => g,
+                None => return Err(MergeError::FindGroupError(current_group_path)),
+            };
+            new_group_parent_group.add_child(new_group.clone());
+
+            let new_merge_log = self.merge_group(new_group_location, other_group, is_in_deleted_group)?;
+            log.append(&new_merge_log);
+        }
+
+        Ok(log)
+    }
+
+    #[cfg(feature = "merge")]
+    fn relocate_node(
+        &mut self,
+        node_uuid: &Uuid,
+        from: &NodeLocation,
+        to: &NodeLocation,
+        new_location_changed_timestamp: NaiveDateTime,
+    ) -> Result<(), MergeError> {
+        let source_group = match self.root.find_group_mut(&from) {
+            Some(g) => g,
+            None => return Err(MergeError::FindGroupError(from.to_vec())),
+        };
+
+        let mut relocated_node = source_group.remove_node(&node_uuid)?;
+        match relocated_node {
+            Node::Group(ref mut g) => g.times.set_location_changed(new_location_changed_timestamp),
+            Node::Entry(ref mut e) => e.times.set_location_changed(new_location_changed_timestamp),
+        };
+
+        let destination_group = match self.root.find_group_mut(&to) {
+            Some(g) => g,
+            None => return Err(MergeError::FindGroupError(to.to_vec())),
+        };
+        destination_group.children.push(relocated_node);
+        Ok(())
+    }
 }
 
 /// Timestamps for a Group or Entry
@@ -206,6 +640,10 @@ impl Times {
         chrono::DateTime::from_timestamp(now, 0).unwrap().naive_utc()
     }
 
+    pub fn epoch() -> NaiveDateTime {
+        chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
+    }
+
     pub fn new() -> Times {
         let mut response = Times::default();
         let now = Times::now();
@@ -255,6 +693,17 @@ pub struct HeaderAttachment {
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct DeletedObjects {
     pub objects: Vec<DeletedObject>,
+}
+
+impl DeletedObjects {
+    pub fn contains(&self, uuid: Uuid) -> bool {
+        for deleted_object in &self.objects {
+            if deleted_object.uuid == uuid {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 /// A reference to a deleted element
