@@ -31,12 +31,13 @@ impl std::str::FromStr for TOTPAlgorithm {
 /// Time-based one time password settings
 #[derive(Debug, PartialEq, Eq)]
 pub struct TOTP {
-    label: String,
+    pub label: String,
+    pub issuer: String,
+    pub period: u64,
+    pub digits: u32,
+    pub algorithm: TOTPAlgorithm,
+
     secret: Vec<u8>,
-    issuer: String,
-    period: u64,
-    digits: u32,
-    algorithm: TOTPAlgorithm,
 }
 
 /// A generated one time password
@@ -156,6 +157,10 @@ impl TOTP {
         let time: u64 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         Ok(self.value_at(time))
     }
+
+    pub fn get_secret(&self) -> String {
+        base32::encode(base32::Alphabet::RFC4648 { padding: true }, &self.secret)
+    }
 }
 
 #[cfg(test)]
@@ -202,6 +207,18 @@ mod kdbx4_otp_tests {
         };
 
         assert_eq!(otp_str.parse::<TOTP>()?, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn totp_get_secret() -> Result<(), TOTPError> {
+        let otp_str =
+            "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
+
+        let otp = otp_str.parse::<TOTP>()?;
+
+        assert_eq!(otp.get_secret(), "JBSWY3DPEHPK3PXP".to_string());
 
         Ok(())
     }
