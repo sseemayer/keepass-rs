@@ -271,6 +271,17 @@ impl DatabaseKey {
 
         Ok(out)
     }
+
+    pub fn is_empty(&self) -> bool {
+        if self.password.is_some() || self.keyfile.is_some() {
+            return false;
+        }
+        #[cfg(feature = "challenge_response")]
+        if self.challenge_response_key.is_some() {
+            return false;
+        }
+        true
+    }
 }
 
 #[cfg(test)]
