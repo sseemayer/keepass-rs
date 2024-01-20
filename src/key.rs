@@ -75,13 +75,13 @@ fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
 }
 
 #[cfg(feature = "challenge_response")]
-#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum ChallengeResponseKey {
     LocalChallenge(String),
     YubikeyChallenge(Yubikey, String),
 }
 
-#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Yubikey {
     pub serial_number: u32,
     pub name: Option<String>,
@@ -182,7 +182,7 @@ impl ChallengeResponseKey {
 }
 
 /// A KeePass key, which might consist of a password and/or a keyfile
-#[derive(Debug, Clone, Default, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, Default, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct DatabaseKey {
     password: Option<String>,
     keyfile: Option<Vec<u8>>,
