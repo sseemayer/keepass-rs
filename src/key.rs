@@ -101,10 +101,6 @@ impl DatabaseKey {
     #[cfg(feature = "utilities")]
     pub fn with_password_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
         self.password = Some(rpassword::prompt_password(prompt_message)?);
-        // FIXME This prevents using an empty password when using the password prompt.
-        if self.password == Some("".to_string()) {
-            self.password = None;
-        }
         Ok(self)
     }
 
@@ -162,6 +158,18 @@ impl DatabaseKey {
         }
 
         Ok(out)
+    }
+
+    /// Returns true if the database key is not associated with any key component.
+    pub fn is_empty(&self) -> bool {
+        if self.password.is_some() || self.keyfile.is_some() {
+            return false;
+        }
+        #[cfg(feature = "challenge_response")]
+        if self.challenge_response_key.is_some() {
+            return false;
+        }
+        true
     }
 }
 
