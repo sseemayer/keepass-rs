@@ -44,11 +44,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: paulhatch/semantic-version@976ff820fcdca81ffc95e385a07b7eff05ddccc3
+      - uses: paulhatch/semantic-version@e528d273e7da55ef59a0987c2ad7b8bcbc09698e
         id: semantic-version
         with:
           tag_prefix: "v"
-          major_pattern: "/^breaking change:/"
+          major_pattern: "/breaking change:/"
           major_regexp_flags: "ig"
           minor_pattern: "/^feat:/"
           minor_regexp_flags: "ig"
