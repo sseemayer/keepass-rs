@@ -103,6 +103,8 @@ fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
 }
 
 #[cfg(feature = "challenge_response")]
+#[no_mangle]
+#[repr(C)]
 #[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum ChallengeResponseKey {
     LocalChallenge(String),
@@ -110,6 +112,8 @@ pub enum ChallengeResponseKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
+#[no_mangle]
+#[repr(C)]
 pub struct Yubikey {
     pub serial_number: u32,
     pub name: Option<String>,

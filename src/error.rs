@@ -6,6 +6,8 @@ use thiserror::Error;
 pub use crate::db::otp::TOTPError;
 
 /// Errors upon reading a Database
+#[no_mangle]
+#[repr(C)]
 #[derive(Debug, Error)]
 pub enum DatabaseOpenError {
     /// An I/O error has occurred while reading the database
@@ -189,6 +191,8 @@ pub enum DatabaseKeyError {
 
 /// Errors with the configuration of the outer encryption
 #[derive(Debug, Error)]
+#[no_mangle]
+#[repr(C)]
 pub enum OuterCipherConfigError {
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
@@ -199,6 +203,8 @@ pub enum OuterCipherConfigError {
 
 /// Errors with the configuration of the inner encryption
 #[derive(Debug, Error)]
+#[no_mangle]
+#[repr(C)]
 pub enum InnerCipherConfigError {
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
@@ -209,6 +215,8 @@ pub enum InnerCipherConfigError {
 
 /// Errors with the configuration of the compression algorithm
 #[derive(Debug, Error)]
+#[no_mangle]
+#[repr(C)]
 pub enum CompressionConfigError {
     /// The identifier for the compression algorithm specified in the database is invalid
     #[error("Invalid compression algorithm: {}", cid)]
@@ -217,6 +225,8 @@ pub enum CompressionConfigError {
 
 /// Errors with the configuration of the Key Derivation Function
 #[derive(Debug, Error)]
+#[no_mangle]
+#[repr(C)]
 pub enum KdfConfigError {
     #[error("Invalid KDF version: {}", version)]
     InvalidKDFVersion { version: u32 },

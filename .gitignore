@@ -39,3 +39,6 @@ Session.vim
 ####=== Coverage ===#####
 cobertura.xml
 tarpaulin-report.html
+
+# Generated C and C++ headers
+keepass.h

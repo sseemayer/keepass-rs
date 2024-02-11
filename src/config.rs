@@ -34,6 +34,8 @@ const CHA_CHA_20: u32 = 3;
 /// Configuration of how a database should be stored
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[no_mangle]
+#[repr(C)]
 pub struct DatabaseConfig {
     /// Version of the outer database file
     pub version: DatabaseVersion,
@@ -390,6 +392,8 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
 /// Choices of compression algorithm
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[no_mangle]
+#[repr(C)]
 pub enum CompressionConfig {
     None,
     GZip,

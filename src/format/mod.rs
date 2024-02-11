@@ -29,6 +29,8 @@ pub const KDBX4_CURRENT_MINOR_VERSION: u16 = 0;
 /// minor version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[no_mangle]
+#[repr(C)]
 pub enum DatabaseVersion {
     KDB(u16),
     KDB2(u16),
@@ -37,7 +39,8 @@ pub enum DatabaseVersion {
 }
 
 impl DatabaseVersion {
-    pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseIntegrityError> {
+    #[no_mangle]
+    pub extern "C" fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseIntegrityError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
             return Err(DatabaseIntegrityError::InvalidKDBXIdentifier.into());
         }

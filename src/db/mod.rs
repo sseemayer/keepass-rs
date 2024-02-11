@@ -47,6 +47,8 @@ use crate::{
 
 /// A decrypted KeePass database
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[no_mangle]
+#[repr(C)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Database {
     /// Configuration settings of the database such as encryption and compression algorithms
@@ -67,7 +69,11 @@ pub struct Database {
 
 impl Database {
     /// Parse a database from a std::io::Read
-    pub fn open(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Database, DatabaseOpenError> {
+    #[no_mangle]
+    pub extern "C" fn open(
+        source: &mut dyn std::io::Read,
+        key: DatabaseKey,
+    ) -> Result<Database, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
@@ -104,7 +110,10 @@ impl Database {
     }
 
     /// Helper function to load a database into its internal XML chunks
-    pub fn get_xml(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Vec<u8>, DatabaseOpenError> {
+    pub extern "C" fn get_xml(
+        source: &mut dyn std::io::Read,
+        key: DatabaseKey,
+    ) -> Result<Vec<u8>, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
@@ -121,7 +130,9 @@ impl Database {
     }
 
     /// Get the version of a database without decrypting it
-    pub fn get_version(source: &mut dyn std::io::Read) -> Result<DatabaseVersion, DatabaseIntegrityError> {
+    pub extern "C" fn get_version(
+        source: &mut dyn std::io::Read,
+    ) -> Result<DatabaseVersion, DatabaseIntegrityError> {
         let mut data = Vec::new();
         data.resize(DatabaseVersion::get_version_header_size(), 0);
         source.read(&mut data)?;
