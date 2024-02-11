@@ -100,7 +100,12 @@ impl ChallengeResponseKey {
                 Ok(response)
             }
             ChallengeResponseKey::YubikeyChallenge(yubikey, slot_number) => {
-                let mut yubikey_client = Yubico::new();
+                let mut yubikey_client = Yubico::new().map_err(|e| {
+                    DatabaseKeyError::ChallengeResponseKeyError(format!(
+                        "Could not search for yubikey: {}",
+                        e.to_string()
+                    ))
+                })?;
                 let slot = parse_yubikey_slot(slot_number)?;
 
                 let yubikey_device = match yubikey_client.find_yubikey_from_serial(yubikey.serial_number) {
@@ -128,13 +133,22 @@ impl ChallengeResponseKey {
         }
     }
 
-    pub fn get_available_yubikeys() -> Vec<Yubikey> {
-        let mut yubikey_client = Yubico::new();
+    pub fn get_available_yubikeys() -> Result<Vec<Yubikey>, DatabaseKeyError> {
+        let mut yubikey_client = Yubico::new().map_err(|e| {
+            DatabaseKeyError::ChallengeResponseKeyError(format!(
+                "Could not search for yubikey: {}",
+                e.to_string()
+            ))
+        })?;
         let mut response: Vec<Yubikey> = vec![];
         let yubikeys = match yubikey_client.find_all_yubikeys() {
             Ok(y) => y,
-            // FIXME we should probably return this error to the user.
-            Err(_) => return vec![],
+            Err(e) => {
+                return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
+                    "Could not search for yubikeys: {}",
+                    e.to_string()
+                )))
+            }
         };
         for yubikey in yubikeys {
             let serial_number = match yubikey.serial {
@@ -146,11 +160,11 @@ impl ChallengeResponseKey {
                 name: yubikey.name,
             });
         }
-        return response;
+        return Ok(response);
     }
 
     pub fn get_yubikey(serial_number: Option<u32>) -> Result<Yubikey, DatabaseKeyError> {
-        let all_yubikeys = ChallengeResponseKey::get_available_yubikeys();
+        let all_yubikeys = ChallengeResponseKey::get_available_yubikeys()?;
         if all_yubikeys.len() == 0 {
             return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
                 "No yubikey connected to the system",
