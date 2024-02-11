@@ -6,6 +6,7 @@ pub mod config;
 pub(crate) mod crypt;
 pub mod db;
 pub mod error;
+pub mod ffi;
 pub(crate) mod format;
 pub(crate) mod hmac_block_stream;
 mod io;

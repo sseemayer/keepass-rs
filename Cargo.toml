@@ -19,6 +19,8 @@ include = [
   "LICENSE",
 ]
 
+build = "src/build.rs"
+
 [features]
 utilities = ["anyhow", "clap", "rpassword", "serialization", "totp"]
 serialization = ["serde", "serde_json", "chrono/serde"]
@@ -27,6 +29,10 @@ save_kdbx4 = []
 challenge_response = ["sha1", "hex", "dep:challenge_response"]
 
 default = []
+
+
+[build-dependencies]
+cbindgen = "0.24.0"
 
 [dependencies]
 thiserror = "1"
@@ -127,3 +133,6 @@ required-features = ["utilities", "save_kdbx4", "challenge_response"]
 [[bin]]
 name = "kp-yk-recover"
 required-features = ["utilities", "save_kdbx4", "challenge_response"]
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
