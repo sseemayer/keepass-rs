@@ -57,7 +57,7 @@ cipher = { version = "0.4", features = ["std"] }
 twofish = "0.7"
 cbc = "0.1"
 
-challenge_response = { version = "0.3", optional = true }
+challenge_response = { version = "0.4", optional = true }
 
 uuid = { version = "1.2", features = ["v4", "serde"] }
 hex = { version = "0.4", optional = true }
