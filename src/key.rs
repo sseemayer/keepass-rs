@@ -8,7 +8,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[cfg(feature = "challenge_response")]
 use challenge_response::{
     config::{Config, Mode, Slot},
-    Yubico,
+    ChallengeResponse,
 };
 
 use crate::{crypt::calculate_sha256, error::DatabaseKeyError};
@@ -100,7 +100,7 @@ impl ChallengeResponseKey {
                 Ok(response)
             }
             ChallengeResponseKey::YubikeyChallenge(yubikey, slot_number) => {
-                let mut yubikey_client = Yubico::new().map_err(|e| {
+                let mut challenge_response_client = ChallengeResponse::new().map_err(|e| {
                     DatabaseKeyError::ChallengeResponseKeyError(format!(
                         "Could not search for yubikey: {}",
                         e.to_string()
@@ -108,21 +108,22 @@ impl ChallengeResponseKey {
                 })?;
                 let slot = parse_yubikey_slot(slot_number)?;
 
-                let yubikey_device = match yubikey_client.find_yubikey_from_serial(yubikey.serial_number) {
-                    Ok(d) => d,
-                    Err(_e) => {
-                        return Err(DatabaseKeyError::ChallengeResponseKeyError(
-                            "Yubikey not found".to_string(),
-                        ))
-                    }
-                };
+                let yubikey_device =
+                    match challenge_response_client.find_device_from_serial(yubikey.serial_number) {
+                        Ok(d) => d,
+                        Err(_e) => {
+                            return Err(DatabaseKeyError::ChallengeResponseKeyError(
+                                "Yubikey not found".to_string(),
+                            ))
+                        }
+                    };
 
                 let mut config = Config::new_from(yubikey_device);
                 config = config.set_variable_size(true);
                 config = config.set_mode(Mode::Sha1);
                 config = config.set_slot(slot);
 
-                match yubikey_client.challenge_response_hmac(challenge, config) {
+                match challenge_response_client.challenge_response_hmac(challenge, config) {
                     Ok(hmac_result) => Ok(hmac_result.to_vec()),
                     Err(e) => Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
                         "Could not perform challenge response: {}",
@@ -134,14 +135,14 @@ impl ChallengeResponseKey {
     }
 
     pub fn get_available_yubikeys() -> Result<Vec<Yubikey>, DatabaseKeyError> {
-        let mut yubikey_client = Yubico::new().map_err(|e| {
+        let mut challenge_response_client = ChallengeResponse::new().map_err(|e| {
             DatabaseKeyError::ChallengeResponseKeyError(format!(
                 "Could not search for yubikey: {}",
                 e.to_string()
             ))
         })?;
         let mut response: Vec<Yubikey> = vec![];
-        let yubikeys = match yubikey_client.find_all_yubikeys() {
+        let yubikeys = match challenge_response_client.find_all_devices() {
             Ok(y) => y,
             Err(e) => {
                 return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
