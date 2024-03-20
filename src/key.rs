@@ -31,6 +31,9 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
 
     let mut tag_stack = Vec::new();
 
+    let mut key_version: Option<String> = None;
+    let mut key_value: Option<String> = None;
+
     for ev in parser {
         match ev? {
             XmlEvent::StartElement {
@@ -43,23 +46,44 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
                 tag_stack.pop();
             }
             XmlEvent::Characters(s) => {
-                // Check if we are at KeyFile/Key/Data
-                if tag_stack == ["KeyFile", "Key", "Data"] {
-                    let key_base64 = s.as_bytes().to_vec();
+                if tag_stack == ["KeyFile", "Meta", "Version"] {
+                    key_version = Some(s);
+                    continue;
+                }
 
-                    // Check if the key is base64-encoded. If yes, return decoded bytes
-                    return if let Ok(key) = base64_engine::STANDARD.decode(&key_base64) {
-                        Ok(key)
-                    } else {
-                        Ok(key_base64)
-                    };
+                if tag_stack == ["KeyFile", "Key", "Data"] {
+                    key_value = Some(s);
+                    continue;
                 }
             }
             _ => {}
         }
     }
 
-    Err(DatabaseKeyError::InvalidKeyFile)
+    let key_value = match key_value {
+        Some(k) => k,
+        None => return Err(DatabaseKeyError::InvalidKeyFile),
+    };
+    let key_bytes = key_value.as_bytes().to_vec();
+
+    if key_version == Some("2.0".to_string()) {
+        // TODO we should also validate the integrity of a v2 keyfile using the hash value
+
+        let trimmed_key = key_value.trim().replace(" ", "").replace("\n", "");
+
+        return if let Ok(key) = hex::decode(&trimmed_key) {
+            Ok(key)
+        } else {
+            Ok(key_bytes)
+        };
+    }
+
+    // Check if the key is base64-encoded. If yes, return decoded bytes
+    return if let Ok(key) = base64_engine::STANDARD.decode(&key_bytes) {
+        Ok(key)
+    } else {
+        Ok(key_bytes)
+    };
 }
 
 fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
@@ -336,6 +360,25 @@ mod key_tests {
                 &mut "<KeyFile><Key><Data>NXyYiJMHg3ls+eBmjbAjWec9lcOToJiofbhNiFMTJMw=</Data></Key></KeyFile>"
                     .as_bytes(),
             )?
+            .get_key_elements()?;
+        assert_eq!(ke.len(), 1);
+
+        let xml_keyfile_v2 = r###"
+            <?xml version="1.0" encoding="utf-8"?>
+            <KeyFile>
+                <Meta>
+                    <Version>2.0</Version>
+                </Meta>
+                <Key>
+                    <Data Hash="A65F0C2D">
+                        36057B1C 35037FD9 62257893 C0A22403
+                        EE3F8FBB 504D9981 08B821CB 00D28F89
+                    </Data>
+                </Key>
+            </KeyFile>
+        "###;
+        let ke = DatabaseKey::new()
+            .with_keyfile(&mut xml_keyfile_v2.trim().as_bytes())?
             .get_key_elements()?;
         assert_eq!(ke.len(), 1);
 

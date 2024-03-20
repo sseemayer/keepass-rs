@@ -261,6 +261,26 @@ mod file_read_tests {
     }
 
     #[test]
+    fn open_kdbx4_with_keyfile_v2() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_keyfile_v2.kdbx");
+        let kf_path = Path::new("tests/resources/test_db_kdbx4_with_keyfile_v2.keyx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new()
+                .with_password("demopass")
+                .with_keyfile(&mut File::open(kf_path)?)?,
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root.children.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
     #[should_panic(expected = r#"InvalidKDBXIdentifier"#)]
     fn open_broken_random_data() {
         let path = Path::new("tests/resources/broken_random_data.kdbx");
