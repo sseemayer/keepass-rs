@@ -6,8 +6,6 @@ use crate::error::{BlockStreamError, CryptographyError};
 
 pub const HMAC_KEY_END: [u8; 1] = hex!("01");
 
-const DEFAULT_BLOCK_SIZE: u32 = 1024 * 1024;
-
 /// Read from a HMAC block stream into a raw buffer
 pub(crate) fn read_hmac_block_stream(
     data: &[u8],
@@ -62,7 +60,7 @@ pub(crate) fn write_hmac_block_stream(
     let mut block_index = 0;
 
     while pos < data.len() {
-        let size = std::cmp::min(DEFAULT_BLOCK_SIZE as usize, data.len() - pos);
+        let size = data.len() - pos;
 
         let block = &data[pos..(pos + size)];
 
