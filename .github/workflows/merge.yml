@@ -31,7 +31,9 @@ jobs:
           cargo tarpaulin --verbose --timeout 120
       - uses: codecov/codecov-action@v3
         with:
-          fail_ci_if_error: true
+          # FIXME Code coverage is broken at the moment. Change fail_ci_if_error to true
+          # once https://github.com/sseemayer/keepass-rs/issues/222 is fixed.
+          fail_ci_if_error: false
           verbose: true
 
   get-next-version:
