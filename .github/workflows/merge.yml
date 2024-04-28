@@ -44,7 +44,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: paulhatch/semantic-version@e528d273e7da55ef59a0987c2ad7b8bcbc09698e
+      - uses: paulhatch/semantic-version@c423ebb78413907bc5382d5a0e840be160a83981
         id: semantic-version
         with:
           tag_prefix: "v"
