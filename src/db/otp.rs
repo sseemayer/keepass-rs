@@ -3,12 +3,13 @@ use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
 use thiserror::Error;
 use totp_lite::{totp_custom, Sha1, Sha256, Sha512};
 use url::Url;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 const DEFAULT_PERIOD: u64 = 30;
 const DEFAULT_DIGITS: u32 = 8;
 
 /// Choices of hash algorithm for TOTP
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum TOTPAlgorithm {
     Sha1,
     Sha256,
@@ -29,7 +30,7 @@ impl std::str::FromStr for TOTPAlgorithm {
 }
 
 /// Time-based one time password settings
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct TOTP {
     pub label: String,
     pub issuer: String,
