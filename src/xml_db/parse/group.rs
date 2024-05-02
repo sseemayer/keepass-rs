@@ -2,10 +2,8 @@ use uuid::Uuid;
 
 use crate::{
     db::{CustomData, Entry, Group, Times},
-    xml_db::parse::{FromXml, SimpleTag, SimpleXmlEvent, XmlParseError},
+    xml_db::parse::{bad_event, FromXml, IgnoreSubfield, SimpleTag, SimpleXmlEvent, XmlParseError},
 };
-
-use super::IgnoreSubfield;
 
 impl FromXml for Group {
     type Parses = Self;
@@ -16,10 +14,7 @@ impl FromXml for Group {
     ) -> Result<Self::Parses, super::XmlParseError> {
         let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
         if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "Group") {
-            return Err(XmlParseError::BadEvent {
-                expected: "Open Group tag",
-                event: open_tag,
-            });
+            return Err(bad_event("Open Group tag", open_tag));
         }
 
         let mut out = Self::default();
@@ -76,17 +71,10 @@ impl FromXml for Group {
                     "CustomData" => {
                         out.custom_data = CustomData::from_xml(iterator, inner_cipher)?;
                     }
-                    _ => {
-                        IgnoreSubfield::from_xml(iterator, inner_cipher)?;
-                    }
+                    _ => IgnoreSubfield::from_xml(iterator, inner_cipher)?,
                 },
                 SimpleXmlEvent::End(name) if name == "Group" => break,
-                _ => {
-                    return Err(XmlParseError::BadEvent {
-                        expected: "start tag or close Group",
-                        event: event.clone(),
-                    })
-                }
+                _ => return Err(bad_event("start tag or close Group", event.clone())),
             }
         }
 

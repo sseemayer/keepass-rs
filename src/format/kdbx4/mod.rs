@@ -57,7 +57,7 @@ mod kdbx4_tests {
 
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-        db::{Database, Entry, Group, HeaderAttachment, Value},
+        db::{Database, Entry, Group, HeaderAttachment, NodeRef, Value},
         format::{kdbx4::dump::dump_kdbx4, KDBX4_CURRENT_MINOR_VERSION},
         key::DatabaseKey,
     };
@@ -99,7 +99,17 @@ mod kdbx4_tests {
         let mut db = Database::new(config);
 
         let mut root_group = Group::new("Root");
-        root_group.add_child(Entry::new());
+
+        let mut entry_with_password = Entry::new();
+        entry_with_password
+            .fields
+            .insert("Title".to_string(), Value::Unprotected("Demo Entry".into()));
+
+        entry_with_password
+            .fields
+            .insert("Password".to_string(), Value::Protected("secret".into()));
+
+        root_group.add_child(entry_with_password);
         root_group.add_child(Entry::new());
         root_group.add_child(Entry::new());
         db.root = root_group;
@@ -120,6 +130,12 @@ mod kdbx4_tests {
         let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 3);
+
+        if let Some(NodeRef::Entry(e)) = decrypted_db.root.get(&["Demo Entry"]) {
+            assert_eq!(e.get_password(), Some("secret"));
+        } else {
+            panic!("Could not get NodeRef")
+        }
     }
 
     #[test]
