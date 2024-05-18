@@ -203,7 +203,7 @@ impl Times {
     // the last leap second.
     pub fn now() -> NaiveDateTime {
         let now = chrono::Utc::now().naive_utc().timestamp();
-        chrono::NaiveDateTime::from_timestamp_opt(now, 0).unwrap()
+        chrono::NaiveDateTime::from_timestamp(now, 0)
     }
 
     pub fn new() -> Times {
