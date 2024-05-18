@@ -122,7 +122,7 @@ impl std::str::FromStr for TOTP {
         let issuer = issuer.ok_or(TOTPError::MissingField("issuer"))?;
 
         let secret =
-            base32::decode(base32::Alphabet::RFC4648 { padding: true }, &secret).ok_or(TOTPError::Base32)?;
+            base32::decode(base32::Alphabet::Rfc4648 { padding: true }, &secret).ok_or(TOTPError::Base32)?;
 
         Ok(TOTP {
             label,
@@ -160,7 +160,7 @@ impl TOTP {
     }
 
     pub fn get_secret(&self) -> String {
-        base32::encode(base32::Alphabet::RFC4648 { padding: true }, &self.secret)
+        base32::encode(base32::Alphabet::Rfc4648 { padding: true }, &self.secret)
     }
 }
 
