@@ -76,7 +76,7 @@ serde_json = { version = "1", optional = true }
 # dependencies for totp (enabled by "totp" feature)
 totp-lite = { version = "2.0.0", optional = true }
 url = { version = "2.2.2", optional = true }
-base32 = { version = "0.4.0", optional = true }
+base32 = { version = "0.5", optional = true }
 
 [dev-dependencies]
 rustfmt = "0.10.0"
