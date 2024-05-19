@@ -19,7 +19,7 @@ use crate::{
 
 /// Format a timestamp suitable for an XML database
 pub fn format_xml_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
-    let timestamp = timestamp.timestamp() - get_epoch_baseline().timestamp();
+    let timestamp = timestamp.and_utc().timestamp() - get_epoch_baseline().and_utc().timestamp();
     let timestamp_bytes = i64::to_le_bytes(timestamp);
     base64_engine::STANDARD.encode(timestamp_bytes)
 }
