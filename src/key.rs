@@ -69,7 +69,11 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     if key_version == Some("2.0".to_string()) {
         // TODO we should also validate the integrity of a v2 keyfile using the hash value
 
-        let trimmed_key = key_value.trim().replace(" ", "").replace("\n", "");
+        let trimmed_key = key_value
+            .trim()
+            .replace(" ", "")
+            .replace("\n", "")
+            .replace("\r", "");
 
         return if let Ok(key) = hex::decode(&trimmed_key) {
             Ok(key)
