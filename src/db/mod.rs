@@ -202,8 +202,8 @@ impl Times {
     // Returns the current time, without the nanoseconds since
     // the last leap second.
     pub fn now() -> NaiveDateTime {
-        let now = chrono::Utc::now().naive_utc().timestamp();
-        chrono::NaiveDateTime::from_timestamp(now, 0)
+        let now = chrono::Utc::now().timestamp();
+        chrono::DateTime::from_timestamp(now, 0).unwrap().naive_utc()
     }
 
     pub fn new() -> Times {
