@@ -1,5 +1,7 @@
+#[cfg(feature = "challenge_response")]
+use cipher::generic_array::typenum::U20;
 use cipher::generic_array::{
-    typenum::{U20, U32, U64},
+    typenum::{U32, U64},
     GenericArray,
 };
 
