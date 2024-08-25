@@ -115,6 +115,9 @@ mod parse_group_test {
         let value = parse_test_xml::<Group>("");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
+        let value = parse_test_xml::<Group>("<Group><Name></Name></Group>")?;
+        assert_eq!(value.name, "".to_string());
+
         let value = parse_test_xml::<Group>("<TestTag>SomeData</TestTag>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
