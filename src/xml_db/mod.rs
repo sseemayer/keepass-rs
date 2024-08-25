@@ -1,3 +1,4 @@
+#[cfg(feature = "save_kdbx4")]
 pub mod dump;
 pub mod parse;
 
@@ -7,6 +8,7 @@ pub fn get_epoch_baseline() -> chrono::NaiveDateTime {
     chrono::NaiveDateTime::parse_from_str("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S").unwrap()
 }
 
+#[cfg(feature = "save_kdbx4")]
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDateTime;
