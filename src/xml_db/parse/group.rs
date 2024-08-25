@@ -26,7 +26,9 @@ impl FromXml for Group {
                         out.uuid = SimpleTag::<Uuid>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Name" => {
-                        out.name = SimpleTag::<String>::from_xml(iterator, inner_cipher)?.value;
+                        out.name = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?
+                            .value
+                            .unwrap_or_default();
                     }
                     "Notes" => {
                         out.notes = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value;
