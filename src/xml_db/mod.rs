@@ -15,7 +15,7 @@ mod tests {
     use uuid::uuid;
 
     use crate::{
-        config::DatabaseConfig,
+        config::{DatabaseConfig, InnerCipherConfig},
         db::{
             entry::History,
             meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
@@ -24,6 +24,7 @@ mod tests {
         },
         format::kdbx4,
         key::DatabaseKey,
+        xml_db::dump::DumpXml,
     };
 
     fn make_key() -> DatabaseKey {
@@ -123,6 +124,13 @@ mod tests {
 
     #[test]
     pub fn test_group() {
+        let group = Group::new("");
+        let mut inner_cipher = InnerCipherConfig::Plain.get_cipher(&[]).unwrap();
+        let mut writer = xml::EventWriter::new(Vec::new());
+        let _v = group.dump_xml(&mut writer, &mut *inner_cipher).unwrap();
+        let xml = writer.into_inner();
+        assert!(String::from_utf8(xml).unwrap().contains("<Name />"));
+
         let mut root_group = Group::new("Root");
         let mut entry = Entry::new();
         let new_entry_uuid = entry.uuid.clone();

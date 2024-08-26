@@ -46,6 +46,10 @@ pub(crate) trait DumpXml {
         writer: &mut EventWriter<E>,
         inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error>;
+
+    fn normalize_empty_elements(&self) -> bool {
+        false
+    }
 }
 
 impl DumpXml for &chrono::NaiveDateTime {
@@ -96,6 +100,10 @@ impl DumpXml for &str {
     ) -> Result<(), xml::writer::Error> {
         writer.write(WriterEvent::characters(self))
     }
+
+    fn normalize_empty_elements(&self) -> bool {
+        self.is_empty()
+    }
 }
 
 impl DumpXml for &String {
@@ -105,6 +113,10 @@ impl DumpXml for &String {
         _inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error> {
         writer.write(WriterEvent::characters(self))
+    }
+
+    fn normalize_empty_elements(&self) -> bool {
+        self.is_empty()
     }
 }
 
@@ -139,7 +151,9 @@ impl<S: AsRef<str>, D: DumpXml> DumpXml for SimpleTag<S, D> {
         inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error> {
         writer.write(WriterEvent::start_element(self.0.as_ref()))?;
-        self.1.dump_xml(writer, inner_cipher)?;
+        if !self.1.normalize_empty_elements() {
+            self.1.dump_xml(writer, inner_cipher)?;
+        }
         writer.write(WriterEvent::end_element())?;
         Ok(())
     }
