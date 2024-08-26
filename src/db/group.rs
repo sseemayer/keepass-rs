@@ -8,27 +8,31 @@ use crate::db::{
 };
 
 pub enum SearchField {
+    #[cfg(test)]
     UUID,
     Title,
 }
 
 impl SearchField {
     pub(crate) fn matches(&self, node: &Node, field_value: &str) -> bool {
-        let uuid = match node {
-            Node::Entry(e) => e.uuid,
-            Node::Group(g) => g.uuid,
-        };
-        let title = match node {
-            Node::Entry(e) => e.get_title(),
-            Node::Group(g) => Some(g.get_name()),
-        };
         match self {
-            SearchField::UUID => uuid.to_string() == field_value,
+            #[cfg(test)]
+            SearchField::UUID => {
+                let uuid = match node {
+                    Node::Entry(e) => e.uuid,
+                    Node::Group(g) => g.uuid,
+                };
+                uuid.to_string() == field_value
+            }
             SearchField::Title => {
-                if let Some(title) = title {
-                    return title == field_value;
+                let title = match node {
+                    Node::Entry(e) => e.get_title(),
+                    Node::Group(g) => Some(g.get_name()),
+                };
+                match title {
+                    Some(t) => t == field_value,
+                    None => false,
                 }
-                return false;
             }
         }
     }
@@ -120,6 +124,7 @@ impl Group {
         self.get_internal(&path, SearchField::Title)
     }
 
+    #[cfg(test)]
     pub(crate) fn get_by_uuid<'a, T: AsRef<str>>(&'a self, path: &[T]) -> Option<NodeRef<'a>> {
         self.get_internal(&path, SearchField::UUID)
     }
@@ -156,6 +161,7 @@ impl Group {
         self.get_mut_internal(path, SearchField::Title)
     }
 
+    #[cfg(test)]
     pub(crate) fn get_by_uuid_mut<'a, T: AsRef<str>>(&'a mut self, path: &[T]) -> Option<NodeRefMut<'a>> {
         self.get_mut_internal(path, SearchField::UUID)
     }
