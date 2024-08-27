@@ -1,3 +1,4 @@
+#[cfg(feature = "save_kdbx4")]
 mod dump;
 mod parse;
 
@@ -6,9 +7,11 @@ use crate::{
     format::DatabaseVersion,
 };
 
+#[cfg(feature = "save_kdbx4")]
 pub(crate) use crate::format::kdbx4::dump::dump_kdbx4;
 pub(crate) use crate::format::kdbx4::parse::{decrypt_kdbx4, parse_kdbx4};
 
+#[cfg(feature = "save_kdbx4")]
 /// Size for a master seed in bytes
 pub const HEADER_MASTER_SEED_SIZE: usize = 32;
 
@@ -51,14 +54,16 @@ struct KDBX4InnerHeader {
     inner_random_stream_key: Vec<u8>,
 }
 
+#[cfg(feature = "save_kdbx4")]
 #[cfg(test)]
 mod kdbx4_tests {
     use super::*;
 
+    use crate::format::kdbx4::dump::dump_kdbx4;
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
         db::{Database, Entry, Group, HeaderAttachment, NodeRef, Value},
-        format::{kdbx4::dump::dump_kdbx4, KDBX4_CURRENT_MINOR_VERSION},
+        format::KDBX4_CURRENT_MINOR_VERSION,
         key::DatabaseKey,
     };
 

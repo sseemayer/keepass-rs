@@ -1,7 +1,13 @@
-use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
-use std::{collections::HashMap, io::Write};
+#[cfg(feature = "save_kdbx4")]
+use byteorder::WriteBytesExt;
+use byteorder::{ByteOrder, LittleEndian};
+use std::collections::HashMap;
+#[cfg(feature = "save_kdbx4")]
+use std::io::Write;
 
-use crate::{error::VariantDictionaryError, io::WriteLengthTaggedExt};
+use crate::error::VariantDictionaryError;
+#[cfg(feature = "save_kdbx4")]
+use crate::io::WriteLengthTaggedExt;
 
 pub const VARIANT_DICTIONARY_VERSION: u16 = 0x100;
 pub const VARIANT_DICTIONARY_END: u8 = 0x0;
@@ -20,6 +26,7 @@ pub(crate) struct VariantDictionary {
 }
 
 impl VariantDictionary {
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn new() -> Self {
         Self { data: HashMap::new() }
     }
@@ -78,6 +85,7 @@ impl VariantDictionary {
         Ok(VariantDictionary { data })
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
         writer.write_u16::<LittleEndian>(VARIANT_DICTIONARY_VERSION)?;
 
@@ -144,6 +152,7 @@ impl VariantDictionary {
             .ok_or_else(|| VariantDictionaryError::Mistyped { key: key.to_owned() })
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn set<T>(&mut self, key: &str, value: T)
     where
         T: Into<VariantDictionaryValue>,
@@ -303,6 +312,7 @@ mod variant_dictionary_tests {
     }
 
     #[test]
+    #[cfg(feature = "save_kdbx4")]
     fn variant_dictionary() {
         let mut vd = VariantDictionary::new();
 

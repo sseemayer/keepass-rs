@@ -5,10 +5,12 @@ use std::convert::TryFrom;
 
 pub use crate::format::DatabaseVersion;
 
+#[cfg(feature = "save_kdbx4")]
+use crate::crypt::ciphers::Cipher;
 use crate::{
     compression,
     crypt::{
-        ciphers::{self, Cipher},
+        ciphers::{self},
         kdf,
     },
     error::{
@@ -89,6 +91,7 @@ impl OuterCipherConfig {
         }
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn get_iv_size(&self) -> usize {
         match self {
             OuterCipherConfig::AES256 => ciphers::AES256Cipher::iv_size(),
@@ -97,6 +100,7 @@ impl OuterCipherConfig {
         }
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn dump(&self) -> [u8; 16] {
         match self {
             OuterCipherConfig::AES256 => CIPHERSUITE_AES256,
@@ -139,6 +143,7 @@ impl InnerCipherConfig {
         }
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn dump(&self) -> u32 {
         match self {
             InnerCipherConfig::Plain => PLAIN,
@@ -147,6 +152,7 @@ impl InnerCipherConfig {
         }
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn get_key_size(&self) -> usize {
         match self {
             InnerCipherConfig::Plain => ciphers::PlainCipher::key_size(),
@@ -216,6 +222,7 @@ fn serialize_argon2_version<S: serde::Serializer>(
 }
 
 impl KdfConfig {
+    #[cfg(feature = "save_kdbx4")]
     fn seed_size(&self) -> usize {
         match self {
             KdfConfig::Aes { .. } => 32,
@@ -226,6 +233,7 @@ impl KdfConfig {
 
     /// For writing out a database, generate a new KDF seed from the config and return the KDF
     /// and the generated seed
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn get_kdf_and_seed(&self) -> Result<(Box<dyn kdf::Kdf>, Vec<u8>), getrandom::Error> {
         let mut kdf_seed = vec![0; self.seed_size()];
         getrandom::getrandom(&mut kdf_seed)?;
@@ -271,6 +279,7 @@ impl KdfConfig {
         }
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn to_variant_dictionary(&self, seed: &[u8]) -> VariantDictionary {
         let mut vd = VariantDictionary::new();
 
@@ -394,6 +403,7 @@ impl CompressionConfig {
         }
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn dump(&self) -> [u8; 4] {
         match self {
             CompressionConfig::None => [0, 0, 0, 0],
