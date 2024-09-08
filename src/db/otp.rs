@@ -33,7 +33,7 @@ impl std::str::FromStr for TOTPAlgorithm {
 #[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct TOTP {
     pub label: String,
-    pub issuer: String,
+    pub issuer: Option<String>,
     pub period: u64,
     pub digits: u32,
     pub algorithm: TOTPAlgorithm,
@@ -119,7 +119,6 @@ impl std::str::FromStr for TOTP {
         }
 
         let secret = secret.ok_or(TOTPError::MissingField("secret"))?;
-        let issuer = issuer.ok_or(TOTPError::MissingField("issuer"))?;
 
         let secret =
             base32::decode(base32::Alphabet::Rfc4648 { padding: true }, &secret).ok_or(TOTPError::Base32)?;
@@ -201,7 +200,7 @@ mod kdbx4_otp_tests {
         let expected = TOTP {
             label: "KeePassXC:none".to_string(),
             secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
-            issuer: "KeePassXC".to_string(),
+            issuer: Some("KeePassXC".to_string()),
             period: 30,
             digits: 6,
             algorithm: TOTPAlgorithm::Sha1,
@@ -231,7 +230,7 @@ mod kdbx4_otp_tests {
         let expected = TOTP {
             label: "sha512%20totp:none".to_string(),
             secret: b"123456".to_vec(),
-            issuer: "sha512 totp".to_string(),
+            issuer: Some("sha512 totp".to_string()),
             period: 30,
             digits: 6,
             algorithm: TOTPAlgorithm::Sha512,
@@ -247,7 +246,7 @@ mod kdbx4_otp_tests {
         let totp = TOTP {
             label: "KeePassXC:none".to_string(),
             secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
-            issuer: "KeePassXC".to_string(),
+            issuer: Some("KeePassXC".to_string()),
             period: 30,
             digits: 6,
             algorithm: TOTPAlgorithm::Sha1,
@@ -277,5 +276,23 @@ mod kdbx4_otp_tests {
             "otpauth://missing_fields".parse::<TOTP>(),
             Err(TOTPError::MissingField("secret"))
         ));
+    }
+
+    #[test]
+    fn totp_minimal() -> Result<(), TOTPError> {
+        let otp_str = "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6";
+
+        let expected = TOTP {
+            label: "KeePassXC:none".to_string(),
+            secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
+            issuer: None,
+            period: 30,
+            digits: 6,
+            algorithm: TOTPAlgorithm::Sha1,
+        };
+
+        assert_eq!(otp_str.parse::<TOTP>()?, expected);
+
+        Ok(())
     }
 }
