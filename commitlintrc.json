@@ -1,0 +1,9 @@
+{
+  "extends": ["@commitlint/config-conventional"],
+
+  "helpUrl": "https://github.com/conventional-changelog/commitlint/#what-is-commitlint",
+
+  "rules": {
+    "body-max-line-length": [2, "always", 4096]
+  }
+}
