@@ -30,7 +30,7 @@ _merge = []
 default = []
 
 [dependencies]
-thiserror = "1"
+thiserror = "2"
 
 # encoding and parsing
 byteorder = "1"
