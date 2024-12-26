@@ -62,7 +62,7 @@ challenge_response = { version = "0.5", optional = true, default-features = fals
 
 uuid = { version = "1.2", features = ["v4", "serde"] }
 hex = { version = "0.4" }
-getrandom = { version = "0.2", features = ["std"] }
+getrandom = { version = "0.2", features = ["std", "js"] }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 
 # dependencies for command-line utilities
