@@ -350,7 +350,7 @@ mod parse_meta_test {
         xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
     };
 
-    use uuid::uuid;
+    use uuid::{uuid, Uuid};
 
     #[test]
     fn test_meta() -> Result<(), XmlParseError> {
@@ -453,7 +453,7 @@ mod parse_meta_test {
     #[test]
     fn test_custom_icon() -> Result<(), XmlParseError> {
         let value = parse_test_xml::<Icon>("<Icon></Icon>")?;
-        assert_eq!(value.uuid, Default::default());
+        assert_eq!(value.uuid, Uuid::default());
         assert_eq!(value.data.len(), 0);
 
         let value = parse_test_xml::<Icon>(
