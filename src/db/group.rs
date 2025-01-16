@@ -206,7 +206,7 @@ impl Group {
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_group<'a>(&'a self, path: &Vec<Uuid>) -> Option<&Group> {
+    pub(crate) fn find_group(&self, path: &Vec<Uuid>) -> Option<&Group> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
         let node_ref = match self.get_by_uuid(&path) {
             Some(n) => n,
@@ -219,7 +219,7 @@ impl Group {
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_entry<'a>(&'a self, path: &Vec<Uuid>) -> Option<&Entry> {
+    pub(crate) fn find_entry(&self, path: &Vec<Uuid>) -> Option<&Entry> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
         let node_ref = match self.get_by_uuid(&path) {
             Some(n) => n,
@@ -232,7 +232,7 @@ impl Group {
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_entry_mut<'a>(&'a mut self, path: &Vec<Uuid>) -> Option<&mut Entry> {
+    pub(crate) fn find_entry_mut(&mut self, path: &Vec<Uuid>) -> Option<&mut Entry> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
         let node_ref = match self.get_by_uuid_mut(&path) {
             Some(n) => n,
@@ -245,7 +245,7 @@ impl Group {
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_group_mut<'a>(&'a mut self, path: &Vec<Uuid>) -> Option<&mut Group> {
+    pub(crate) fn find_group_mut(&mut self, path: &Vec<Uuid>) -> Option<&mut Group> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
         let node_ref = match self.get_by_uuid_mut(&path) {
             Some(n) => n,
