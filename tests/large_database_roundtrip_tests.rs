@@ -1,3 +1,4 @@
+#[cfg(feature = "save_kdbx4")]
 mod large_file_roundtrip_tests {
     use std::fs::File;
 
@@ -39,10 +40,8 @@ mod large_file_roundtrip_tests {
 
         // Define database key.
         let key = DatabaseKey::new().with_password(TEST_DATABASE_PASSWORD);
-        #[cfg(feature = "save_kdbx4")]
-        {
-            db.save(&mut File::create(TEST_DATABASE_FILE_NAME)?, key.clone())?;
-        }
+        db.save(&mut File::create(TEST_DATABASE_FILE_NAME)?, key.clone())?;
+
         // Read the database that was written in the previous block.
         let db = Database::open(&mut File::open(TEST_DATABASE_FILE_NAME)?, key)?;
         // Validate that the data is what we expect.
