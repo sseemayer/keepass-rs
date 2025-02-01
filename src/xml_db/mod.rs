@@ -33,7 +33,7 @@ mod tests {
         let mut password_bytes: Vec<u8> = vec![];
         let mut password: String = "".to_string();
         password_bytes.resize(40, 0);
-        getrandom::getrandom(&mut password_bytes).unwrap();
+        getrandom::fill(&mut password_bytes).unwrap();
         for random_char in password_bytes {
             password += &std::char::from_u32(random_char as u32).unwrap().to_string();
         }
