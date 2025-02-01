@@ -236,7 +236,7 @@ impl KdfConfig {
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn get_kdf_and_seed(&self) -> Result<(Box<dyn kdf::Kdf>, Vec<u8>), getrandom::Error> {
         let mut kdf_seed = vec![0; self.seed_size()];
-        getrandom::getrandom(&mut kdf_seed)?;
+        getrandom::fill(&mut kdf_seed)?;
 
         let kdf = self.get_kdf_seeded(&kdf_seed);
 
