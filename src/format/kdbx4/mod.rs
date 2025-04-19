@@ -29,6 +29,8 @@ pub const HEADER_MASTER_SEED: u8 = 4;
 pub const HEADER_ENCRYPTION_IV: u8 = 7;
 /// Parameters for the key derivation function
 pub const HEADER_KDF_PARAMS: u8 = 11;
+/// Custom data of plugins/ports.
+pub const HEADER_PUBLIC_CUSTOM_DATA: u8 = 12;
 
 /// Inner header entry denoting the end of the inner header
 pub const INNER_HEADER_END: u8 = 0x00;
