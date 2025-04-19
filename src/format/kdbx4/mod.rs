@@ -5,6 +5,7 @@ mod parse;
 use crate::{
     config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     format::DatabaseVersion,
+    variant_dictionary::VariantDictionary,
 };
 
 #[cfg(feature = "save_kdbx4")]
@@ -49,6 +50,7 @@ struct KDBX4OuterHeader {
     outer_iv: Vec<u8>,
     kdf_config: KdfConfig,
     kdf_seed: Vec<u8>,
+    public_custom_data: Option<VariantDictionary>,
 }
 
 struct KDBX4InnerHeader {
@@ -187,6 +189,7 @@ mod kdbx4_tests {
                             compression_config: compression_config.clone(),
                             inner_cipher_config: inner_cipher_config.clone(),
                             kdf_config: kdf_config.clone(),
+                            public_custom_data: Default::default(),
                         };
 
                         println!("Testing with config: {config:?}");

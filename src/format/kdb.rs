@@ -349,6 +349,7 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
         compression_config: CompressionConfig::None,
         inner_cipher_config: InnerCipherConfig::Plain,
         kdf_config,
+        public_custom_data: Default::default(),
     };
 
     Ok(Database {
