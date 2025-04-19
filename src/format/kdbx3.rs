@@ -201,6 +201,7 @@ pub(crate) fn decrypt_kdbx3(
         compression_config: header.compression,
         inner_cipher_config: header.inner_cipher,
         kdf_config: header.kdf_config,
+        public_custom_data: Default::default(),
     };
 
     let mut pos = header.body_start;

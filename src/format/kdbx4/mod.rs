@@ -5,6 +5,7 @@ mod parse;
 use crate::{
     config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     format::DatabaseVersion,
+    variant_dictionary::VariantDictionary,
 };
 
 #[cfg(feature = "save_kdbx4")]
@@ -29,6 +30,8 @@ pub const HEADER_MASTER_SEED: u8 = 4;
 pub const HEADER_ENCRYPTION_IV: u8 = 7;
 /// Parameters for the key derivation function
 pub const HEADER_KDF_PARAMS: u8 = 11;
+/// Custom data of plugins/ports.
+pub const HEADER_PUBLIC_CUSTOM_DATA: u8 = 12;
 
 /// Inner header entry denoting the end of the inner header
 pub const INNER_HEADER_END: u8 = 0x00;
@@ -47,6 +50,7 @@ struct KDBX4OuterHeader {
     outer_iv: Vec<u8>,
     kdf_config: KdfConfig,
     kdf_seed: Vec<u8>,
+    public_custom_data: Option<VariantDictionary>,
 }
 
 struct KDBX4InnerHeader {
@@ -185,6 +189,7 @@ mod kdbx4_tests {
                             compression_config: compression_config.clone(),
                             inner_cipher_config: inner_cipher_config.clone(),
                             kdf_config: kdf_config.clone(),
+                            public_custom_data: Default::default(),
                         };
 
                         println!("Testing with config: {config:?}");
