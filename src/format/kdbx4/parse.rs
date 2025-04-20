@@ -10,8 +10,9 @@ use crate::{
     format::{
         kdbx4::{
             KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
-            HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_OUTER_ENCRYPTION_ID, INNER_HEADER_BINARY_ATTACHMENTS,
-            INNER_HEADER_END, INNER_HEADER_RANDOM_STREAM_ID, INNER_HEADER_RANDOM_STREAM_KEY,
+            HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_OUTER_ENCRYPTION_ID, HEADER_PUBLIC_CUSTOM_DATA,
+            INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END, INNER_HEADER_RANDOM_STREAM_ID,
+            INNER_HEADER_RANDOM_STREAM_KEY,
         },
         DatabaseVersion,
     },
@@ -126,6 +127,7 @@ pub(crate) fn decrypt_kdbx4(
         compression_config: outer_header.compression_config,
         inner_cipher_config: inner_header.inner_random_stream,
         kdf_config: outer_header.kdf_config,
+        public_custom_data: outer_header.public_custom_data,
     };
 
     Ok((config, header_attachments, inner_decryptor, xml.to_vec()))
@@ -143,6 +145,7 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
     let mut outer_iv: Option<Vec<u8>> = None;
     let mut kdf_config: Option<KdfConfig> = None;
     let mut kdf_seed: Option<Vec<u8>> = None;
+    let mut public_custom_data: Option<VariantDictionary> = None;
 
     // parse header
     loop {
@@ -190,6 +193,11 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
                 kdf_seed = Some(kseed)
             }
 
+            HEADER_PUBLIC_CUSTOM_DATA => {
+                let vd = VariantDictionary::parse(entry_buffer)?;
+                public_custom_data = Some(vd)
+            }
+
             _ => {
                 return Err(DatabaseIntegrityError::InvalidOuterHeaderEntry { entry_type }.into());
             }
@@ -224,6 +232,7 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
             outer_iv,
             kdf_config,
             kdf_seed,
+            public_custom_data,
         },
         pos,
     ))
