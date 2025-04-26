@@ -14,7 +14,7 @@ use crate::db::merge::{MergeError, MergeEvent, MergeEventType, MergeLog};
 #[cfg(feature = "_merge")]
 pub(crate) type NodeLocation = Vec<Uuid>;
 
-pub enum SearchField {
+pub(crate) enum SearchField {
     #[cfg(any(test, feature = "_merge"))]
     Uuid,
     Title,
