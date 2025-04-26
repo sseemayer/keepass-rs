@@ -16,7 +16,7 @@ pub(crate) type NodeLocation = Vec<Uuid>;
 
 pub enum SearchField {
     #[cfg(any(test, feature = "_merge"))]
-    UUID,
+    Uuid,
     Title,
 }
 
@@ -24,7 +24,7 @@ impl SearchField {
     pub(crate) fn matches(&self, node: &Node, field_value: &str) -> bool {
         match self {
             #[cfg(any(test, feature = "_merge"))]
-            SearchField::UUID => {
+            SearchField::Uuid => {
                 let uuid = match node {
                     Node::Entry(e) => e.uuid,
                     Node::Group(g) => g.uuid,
@@ -128,37 +128,35 @@ impl Group {
     /// }
     /// ```
     pub fn get<'a>(&'a self, path: &[&str]) -> Option<NodeRef<'a>> {
-        self.get_internal(&path, SearchField::Title)
+        self.get_internal(path, SearchField::Title)
     }
 
     #[cfg(any(test, feature = "_merge"))]
     pub(crate) fn get_by_uuid<'a, T: AsRef<str>>(&'a self, path: &[T]) -> Option<NodeRef<'a>> {
-        self.get_internal(&path, SearchField::UUID)
+        self.get_internal(path, SearchField::Uuid)
     }
 
     fn get_internal<'a, T: AsRef<str>>(&'a self, path: &[T], search_field: SearchField) -> Option<NodeRef<'a>> {
         if path.is_empty() {
             Some(NodeRef::Group(self))
+        } else if path.len() == 1 {
+            let head = &path[0];
+            self.children.iter().find_map(|n| {
+                if search_field.matches(n, head.as_ref()) {
+                    return Some(n.as_ref());
+                }
+                None
+            })
         } else {
-            if path.len() == 1 {
-                let head = &path[0];
-                self.children.iter().find_map(|n| {
-                    if search_field.matches(n, head.as_ref()) {
-                        return Some(n.as_ref());
-                    }
-                    return None;
-                })
-            } else {
-                let head = &path[0];
-                let tail = &path[1..path.len()];
+            let head = &path[0];
+            let tail = &path[1..path.len()];
 
-                let head_group = self.children.iter().find_map(|n| match n {
-                    Node::Group(g) if search_field.matches(n, head.as_ref()) => Some(g),
-                    _ => None,
-                })?;
+            let head_group = self.children.iter().find_map(|n| match n {
+                Node::Group(g) if search_field.matches(n, head.as_ref()) => Some(g),
+                _ => None,
+            })?;
 
-                head_group.get_internal(&tail, search_field)
-            }
+            head_group.get_internal(tail, search_field)
         }
     }
 
@@ -170,7 +168,7 @@ impl Group {
 
     #[cfg(any(test, feature = "_merge"))]
     pub(crate) fn get_by_uuid_mut<'a, T: AsRef<str>>(&'a mut self, path: &[T]) -> Option<NodeRefMut<'a>> {
-        self.get_mut_internal(path, SearchField::UUID)
+        self.get_mut_internal(path, SearchField::Uuid)
     }
 
     fn get_mut_internal<'a, T: AsRef<str>>(
@@ -180,38 +178,33 @@ impl Group {
     ) -> Option<NodeRefMut<'a>> {
         if path.is_empty() {
             Some(NodeRefMut::Group(self))
+        } else if path.len() == 1 {
+            let head = &path[0];
+            self.children
+                .iter_mut()
+                .filter(|n| search_field.matches(n, head.as_ref()))
+                .map(|t| t.as_mut())
+                .next()
         } else {
-            if path.len() == 1 {
-                let head = &path[0];
-                self.children
-                    .iter_mut()
-                    .filter(|n| search_field.matches(n, head.as_ref()))
-                    .map(|t| t.as_mut())
-                    .next()
-            } else {
-                let head = &path[0];
-                let tail = &path[1..path.len()];
+            let head = &path[0];
+            let tail = &path[1..path.len()];
 
-                let head_group: &mut Group = self.children.iter_mut().find_map(|n| {
-                    let node_matches = search_field.matches(n, head.as_ref());
-                    match n {
-                        Node::Group(g) if node_matches => Some(g),
-                        _ => None,
-                    }
-                })?;
+            let head_group: &mut Group = self.children.iter_mut().find_map(|n| {
+                let node_matches = search_field.matches(n, head.as_ref());
+                match n {
+                    Node::Group(g) if node_matches => Some(g),
+                    _ => None,
+                }
+            })?;
 
-                head_group.get_mut_internal(&tail, search_field)
-            }
+            head_group.get_mut_internal(tail, search_field)
         }
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_group(&self, path: &Vec<Uuid>) -> Option<&Group> {
+    pub(crate) fn find_group(&self, path: &[Uuid]) -> Option<&Group> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
-        let node_ref = match self.get_by_uuid(&path) {
-            Some(n) => n,
-            None => return None,
-        };
+        let node_ref = self.get_by_uuid(&path)?;
         match node_ref {
             NodeRef::Group(g) => Some(g),
             NodeRef::Entry(_) => None,
@@ -219,12 +212,9 @@ impl Group {
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_entry(&self, path: &Vec<Uuid>) -> Option<&Entry> {
+    pub(crate) fn find_entry(&self, path: &[Uuid]) -> Option<&Entry> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
-        let node_ref = match self.get_by_uuid(&path) {
-            Some(n) => n,
-            None => return None,
-        };
+        let node_ref = self.get_by_uuid(&path)?;
         match node_ref {
             NodeRef::Entry(e) => Some(e),
             NodeRef::Group(_) => None,
@@ -232,12 +222,9 @@ impl Group {
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_entry_mut(&mut self, path: &Vec<Uuid>) -> Option<&mut Entry> {
+    pub(crate) fn find_entry_mut(&mut self, path: &[Uuid]) -> Option<&mut Entry> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
-        let node_ref = match self.get_by_uuid_mut(&path) {
-            Some(n) => n,
-            None => return None,
-        };
+        let node_ref = self.get_by_uuid_mut(&path)?;
         match node_ref {
             NodeRefMut::Entry(e) => Some(e),
             NodeRefMut::Group(_) => None,
@@ -245,12 +232,9 @@ impl Group {
     }
 
     #[cfg(feature = "_merge")]
-    pub(crate) fn find_group_mut(&mut self, path: &Vec<Uuid>) -> Option<&mut Group> {
+    pub(crate) fn find_group_mut(&mut self, path: &[Uuid]) -> Option<&mut Group> {
         let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
-        let node_ref = match self.get_by_uuid_mut(&path) {
-            Some(n) => n,
-            None => return None,
-        };
+        let node_ref = self.get_by_uuid_mut(&path)?;
         match node_ref {
             NodeRefMut::Group(g) => Some(g),
             NodeRefMut::Entry(_) => None,
@@ -258,7 +242,7 @@ impl Group {
     }
 
     /// Convenience method for getting the name of the Group
-    pub fn get_name<'a>(&'a self) -> &'a str {
+    pub fn get_name(&self) -> &str {
         &self.name
     }
 
@@ -345,10 +329,10 @@ impl Group {
             return Ok(node);
         }
 
-        return Err(MergeError::GenericError(format!(
+        Err(MergeError::GenericError(format!(
             "Could not find node {} in group {}.",
             uuid, self.name
-        )));
+        )))
     }
 
     #[cfg(feature = "_merge")]
@@ -401,7 +385,7 @@ impl Group {
         };
 
         if destination_last_modification == source_last_modification {
-            if self.has_diverged_from(&other) {
+            if self.has_diverged_from(other) {
                 // This should never happen.
                 // This means that a group was updated without updating the last modification
                 // timestamp.
@@ -418,22 +402,22 @@ impl Group {
 
         self.name = other.name.clone();
         self.notes = other.notes.clone();
-        self.icon_id = other.icon_id.clone();
-        self.custom_icon_uuid = other.custom_icon_uuid.clone();
+        self.icon_id = other.icon_id;
+        self.custom_icon_uuid = other.custom_icon_uuid;
         self.custom_data = other.custom_data.clone();
 
         // The location changed timestamp is handled separately when merging two databases.
         let current_times = self.times.clone();
         self.times = other.times.clone();
         if let Some(t) = current_times.get_location_changed() {
-            self.times.set_location_changed(t.clone());
+            self.times.set_location_changed(*t);
         }
 
         self.is_expanded = other.is_expanded;
         self.default_autotype_sequence = other.default_autotype_sequence.clone();
         self.enable_autotype = other.enable_autotype.clone();
         self.enable_searching = other.enable_searching.clone();
-        self.last_top_visible_entry = other.last_top_visible_entry.clone();
+        self.last_top_visible_entry = other.last_top_visible_entry;
 
         log.events.push(MergeEvent {
             event_type: MergeEventType::GroupUpdated,
@@ -459,7 +443,7 @@ impl Group {
 
 impl<'a> Group {
     pub fn iter(&'a self) -> NodeIter<'a> {
-        (&self).into_iter()
+        self.into_iter()
     }
 }
 

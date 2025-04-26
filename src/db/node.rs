@@ -11,11 +11,11 @@ pub enum Node {
 }
 
 impl Node {
-    pub fn as_ref<'a>(&'a self) -> NodeRef<'a> {
+    pub fn as_ref(&self) -> NodeRef<'_> {
         self.into()
     }
 
-    pub fn as_mut<'a>(&'a mut self) -> NodeRefMut<'a> {
+    pub fn as_mut(&mut self) -> NodeRefMut<'_> {
         self.into()
     }
 }
@@ -81,7 +81,7 @@ impl<'a> Iterator for NodeIter<'a> {
     fn next(&mut self) -> Option<NodeRef<'a>> {
         let head = self.queue.pop_front()?;
 
-        if let NodeRef::Group(ref g) = head {
+        if let NodeRef::Group(g) = head {
             self.queue.extend(g.children.iter().map(|n| n.into()))
         }
 

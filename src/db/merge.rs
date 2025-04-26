@@ -103,9 +103,9 @@ mod merge_tests {
         for node in &group.children {
             match node {
                 Node::Group(g) => {
-                    let mut new_groups = get_all_groups(&g);
+                    let mut new_groups = get_all_groups(g);
                     response.append(&mut new_groups);
-                    response.push(&g);
+                    response.push(g);
                 }
                 _ => continue,
             }
@@ -118,11 +118,11 @@ mod merge_tests {
         for node in &group.children {
             match node {
                 Node::Group(g) => {
-                    let mut new_entries = get_all_entries(&g);
+                    let mut new_entries = get_all_entries(g);
                     response.append(&mut new_entries);
                 }
                 Node::Entry(e) => {
-                    response.push(&e);
+                    response.push(e);
                 }
             }
         }
@@ -259,7 +259,7 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         let mut deleted_entry = Entry::new();
-        let deleted_entry_uuid = deleted_entry.uuid.clone();
+        let deleted_entry_uuid = deleted_entry.uuid;
         deleted_entry.set_field_and_commit("Title", "deleted_entry");
         source_db.root.add_child(deleted_entry);
 
@@ -267,7 +267,7 @@ mod merge_tests {
             .deleted_objects
             .objects
             .push(crate::db::DeletedObject {
-                uuid: deleted_entry_uuid.clone(),
+                uuid: deleted_entry_uuid,
                 deletion_time: Times::now(),
             });
 
@@ -294,8 +294,8 @@ mod merge_tests {
         destination_db.root.add_child(modified_entry.clone());
 
         let mut deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid.clone();
-        let modified_entry_uuid = modified_entry.uuid.clone();
+        let deleted_group_uuid = deleted_group.uuid;
+        let modified_entry_uuid = modified_entry.uuid;
         modified_entry.set_field_and_commit("Title", "modified_title");
         deleted_group.add_child(modified_entry);
         source_db.root.add_child(deleted_group);
@@ -307,7 +307,7 @@ mod merge_tests {
             .deleted_objects
             .objects
             .push(crate::db::DeletedObject {
-                uuid: deleted_group_uuid.clone(),
+                uuid: deleted_group_uuid,
                 deletion_time: Times::now(),
             });
 
@@ -326,10 +326,7 @@ mod merge_tests {
         let modified_entry_location = destination_db.root.find_node_location(modified_entry_uuid);
         assert!(modified_entry_location.is_some());
 
-        let modified_entry = destination_db
-            .root
-            .find_entry(&vec![modified_entry_uuid])
-            .unwrap();
+        let modified_entry = destination_db.root.find_entry(&[modified_entry_uuid]).unwrap();
         assert_eq!(modified_entry.get_title(), Some("modified_title"));
     }
 
@@ -342,14 +339,14 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         let deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid.clone();
+        let deleted_group_uuid = deleted_group.uuid;
         source_db.root.add_child(deleted_group);
 
         destination_db
             .deleted_objects
             .objects
             .push(crate::db::DeletedObject {
-                uuid: deleted_group_uuid.clone(),
+                uuid: deleted_group_uuid,
                 deletion_time: Times::now(),
             });
 
@@ -372,7 +369,7 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         let mut deleted_entry = Entry::new();
-        let deleted_entry_uuid = deleted_entry.uuid.clone();
+        let deleted_entry_uuid = deleted_entry.uuid;
         deleted_entry.set_field_and_commit("Title", "deleted_entry");
         destination_db.root.add_child(deleted_entry);
 
@@ -381,7 +378,7 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid.clone(),
+            uuid: deleted_entry_uuid,
             deletion_time: Times::now(),
         });
 
@@ -406,7 +403,7 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         let deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid.clone();
+        let deleted_group_uuid = deleted_group.uuid;
         destination_db.root.add_child(deleted_group);
 
         let entry_count_before = get_all_entries(&destination_db.root).len();
@@ -414,7 +411,7 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid.clone(),
+            uuid: deleted_group_uuid,
             deletion_time: Times::now(),
         });
 
@@ -442,13 +439,13 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid.clone(),
+            uuid: deleted_entry_uuid,
             deletion_time: Times::now(),
         });
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_entry = Entry::new();
-        deleted_entry.uuid = deleted_entry_uuid.clone();
+        deleted_entry.uuid = deleted_entry_uuid;
         deleted_entry.set_field_and_commit("Title", "deleted_entry");
         destination_db.root.add_child(deleted_entry);
 
@@ -481,30 +478,30 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_entry = Entry::new();
-        deleted_entry.uuid = deleted_entry_uuid.clone();
+        deleted_entry.uuid = deleted_entry_uuid;
         deleted_entry.set_field_and_commit("Title", "deleted_entry");
 
         let mut deleted_subgroup = Group::new("deleted_subgroup");
-        deleted_subgroup.uuid = deleted_subgroup_uuid.clone();
+        deleted_subgroup.uuid = deleted_subgroup_uuid;
         deleted_subgroup.add_child(deleted_entry);
 
         let mut deleted_group = Group::new("deleted_group");
-        deleted_group.uuid = deleted_group_uuid.clone();
+        deleted_group.uuid = deleted_group_uuid;
         deleted_group.add_child(deleted_subgroup);
 
         destination_db.root.add_child(deleted_group);
 
         thread::sleep(time::Duration::from_secs(1));
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid.clone(),
+            uuid: deleted_entry_uuid,
             deletion_time: Times::now(),
         });
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_subgroup_uuid.clone(),
+            uuid: deleted_subgroup_uuid,
             deletion_time: Times::now(),
         });
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid.clone(),
+            uuid: deleted_group_uuid,
             deletion_time: Times::now(),
         });
 
@@ -543,30 +540,30 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_entry = Entry::new();
-        deleted_entry.uuid = deleted_entry_uuid.clone();
+        deleted_entry.uuid = deleted_entry_uuid;
         deleted_entry.set_field_and_commit("Title", "deleted_entry");
 
         let mut deleted_subgroup = Group::new("deleted_subgroup");
-        deleted_subgroup.uuid = deleted_subgroup_uuid.clone();
+        deleted_subgroup.uuid = deleted_subgroup_uuid;
         deleted_subgroup.add_child(deleted_entry);
 
         thread::sleep(time::Duration::from_secs(1));
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid.clone(),
+            uuid: deleted_entry_uuid,
             deletion_time: Times::now(),
         });
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_subgroup_uuid.clone(),
+            uuid: deleted_subgroup_uuid,
             deletion_time: Times::now(),
         });
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid.clone(),
+            uuid: deleted_group_uuid,
             deletion_time: Times::now(),
         });
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_group = Group::new("deleted_group");
-        deleted_group.uuid = deleted_group_uuid.clone();
+        deleted_group.uuid = deleted_group_uuid;
         deleted_group.add_child(deleted_subgroup);
 
         destination_db.root.add_child(deleted_group);
@@ -604,13 +601,13 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid.clone(),
+            uuid: deleted_group_uuid,
             deletion_time: Times::now(),
         });
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_group = Group::new("deleted_group");
-        deleted_group.uuid = deleted_group_uuid.clone();
+        deleted_group.uuid = deleted_group_uuid;
         destination_db.root.add_child(deleted_group);
 
         let entry_count_before = get_all_entries(&destination_db.root).len();
@@ -637,10 +634,10 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         let mut deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid.clone();
+        let deleted_group_uuid = deleted_group.uuid;
 
         let mut new_entry = Entry::new();
-        let new_entry_uuid = new_entry.uuid.clone();
+        let new_entry_uuid = new_entry.uuid;
         new_entry.set_field_and_commit("Title", "new_entry");
         deleted_group.add_child(new_entry);
         destination_db.root.add_child(deleted_group);
@@ -650,7 +647,7 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid.clone(),
+            uuid: deleted_group_uuid,
             deletion_time: Times::now(),
         });
 
@@ -683,7 +680,7 @@ mod merge_tests {
         let source_sub_group = &mut source_db.root.groups_mut()[0];
 
         let mut new_entry = Entry::new();
-        let new_entry_uuid = new_entry.uuid.clone();
+        let new_entry_uuid = new_entry.uuid;
         new_entry.set_field_and_commit("Title", "new_entry");
         source_sub_group.add_child(new_entry);
 
@@ -712,7 +709,7 @@ mod merge_tests {
         let mut source_sub_group = Group::new("new_subgroup");
 
         let mut new_entry = Entry::new();
-        let new_entry_uuid = new_entry.uuid.clone();
+        let new_entry_uuid = new_entry.uuid;
         new_entry.set_field_and_commit("Title", "new_entry");
         source_sub_group.add_child(new_entry);
         source_group.add_child(source_sub_group);
@@ -788,7 +785,7 @@ mod merge_tests {
 
         let entry2 = source_db
             .root
-            .find_entry_mut(&vec![
+            .find_entry_mut(&[
                 Uuid::parse_str(GROUP1_ID).unwrap(),
                 Uuid::parse_str(SUBGROUP1_ID).unwrap(),
                 Uuid::parse_str(ENTRY2_ID).unwrap(),
@@ -812,14 +809,14 @@ mod merge_tests {
 
         let entry2 = destination_db
             .root
-            .find_entry_mut(&vec![
+            .find_entry_mut(&[
                 Uuid::parse_str(GROUP1_ID).unwrap(),
                 Uuid::parse_str(SUBGROUP1_ID).unwrap(),
                 Uuid::parse_str(ENTRY2_ID).unwrap(),
             ])
             .unwrap();
         entry2.set_field_and_commit("Title", "entry2_modified_in_destination");
-        let entry_modified_timestamp = entry2.times.get_last_modification().unwrap().clone();
+        let entry_modified_timestamp = *entry2.times.get_last_modification().unwrap();
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -859,14 +856,14 @@ mod merge_tests {
 
         let entry2 = source_db
             .root
-            .find_entry_mut(&vec![
+            .find_entry_mut(&[
                 Uuid::parse_str(GROUP1_ID).unwrap(),
                 Uuid::parse_str(SUBGROUP1_ID).unwrap(),
                 Uuid::parse_str(ENTRY2_ID).unwrap(),
             ])
             .unwrap();
         entry2.set_field_and_commit("Title", "entry2_modified_in_source");
-        let entry_modified_timestamp = entry2.times.get_last_modification().unwrap().clone();
+        let entry_modified_timestamp = *entry2.times.get_last_modification().unwrap();
 
         thread::sleep(time::Duration::from_secs(1));
         let new_location_changed_timestamp = Times::now();
@@ -919,10 +916,10 @@ mod merge_tests {
 
         let mut source_db = destination_db.clone();
         let mut new_group = Group::new("new_group");
-        let new_group_uuid = new_group.uuid.clone();
+        let new_group_uuid = new_group.uuid;
 
         let mut new_entry = Entry::new();
-        let entry_uuid = new_entry.uuid.clone();
+        let entry_uuid = new_entry.uuid;
         new_entry.set_field_and_commit("Title", "entry1");
 
         thread::sleep(time::Duration::from_secs(1));
@@ -1123,7 +1120,7 @@ mod merge_tests {
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&mut destination_db, &["group1", "subgroup1_updated_name"]);
+        let modified_group = get_group(&destination_db, &["group1", "subgroup1_updated_name"]);
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
             modified_group.times.get_last_modification(),
@@ -1156,7 +1153,7 @@ mod merge_tests {
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&mut destination_db, &["group1", "subgroup1_updated_name"]);
+        let modified_group = get_group(&destination_db, &["group1", "subgroup1_updated_name"]);
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
             modified_group.times.get_last_modification(),
@@ -1198,7 +1195,7 @@ mod merge_tests {
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&mut destination_db, &["group2", "subgroup1_updated_name"]);
+        let modified_group = get_group(&destination_db, &["group2", "subgroup1_updated_name"]);
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
             modified_group.times.get_last_modification(),
@@ -1242,7 +1239,7 @@ mod merge_tests {
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&mut destination_db, &["group2", "subgroup1_updated_name"]);
+        let modified_group = get_group(&destination_db, &["group2", "subgroup1_updated_name"]);
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
             modified_group.times.get_last_modification(),

@@ -72,7 +72,7 @@ impl Entry {
         };
 
         if destination_last_modification == source_last_modification {
-            if !self.has_diverged_from(&other) {
+            if !self.has_diverged_from(other) {
                 // This should never happen.
                 // This means that an entry was updated without updating the last modification
                 // timestamp.
@@ -86,7 +86,7 @@ impl Entry {
         let (mut merged_entry, entry_merge_log) = match destination_last_modification > source_last_modification
         {
             true => self.merge_history(other)?,
-            false => other.clone().merge_history(&self)?,
+            false => other.clone().merge_history(self)?,
         };
 
         // The location changed timestamp is handled separately when merging two databases.
@@ -96,7 +96,7 @@ impl Entry {
                 .set_location_changed(*location_changed_timestamp);
         }
 
-        return Ok((Some(merged_entry), entry_merge_log));
+        Ok((Some(merged_entry), entry_merge_log))
     }
 
     #[cfg(feature = "_merge")]
@@ -177,8 +177,8 @@ impl<'a> Entry {
     pub fn get(&'a self, key: &str) -> Option<&'a str> {
         match self.fields.get(key) {
             Some(&Value::Bytes(_)) => None,
-            Some(&Value::Protected(ref pv)) => std::str::from_utf8(pv.unsecure()).ok(),
-            Some(&Value::Unprotected(ref uv)) => Some(&uv),
+            Some(Value::Protected(pv)) => std::str::from_utf8(pv.unsecure()).ok(),
+            Some(Value::Unprotected(uv)) => Some(uv),
             None => None,
         }
     }
@@ -186,7 +186,7 @@ impl<'a> Entry {
     /// Get a bytes field by name
     pub fn get_bytes(&'a self, key: &str) -> Option<&'a [u8]> {
         match self.fields.get(key) {
-            Some(&Value::Bytes(ref b)) => Some(&b),
+            Some(Value::Bytes(b)) => Some(b),
             _ => None,
         }
     }
@@ -273,7 +273,7 @@ impl<'a> Entry {
     /// history update.
     fn has_uncommitted_changes(&self) -> bool {
         if let Some(history) = self.history.as_ref() {
-            if history.entries.len() == 0 {
+            if history.entries.is_empty() {
                 return true;
             }
 
@@ -283,7 +283,7 @@ impl<'a> Entry {
             sanitized_entry.times = new_times.clone();
             sanitized_entry.history.take();
 
-            let mut last_history_entry = history.entries.get(0).unwrap().clone();
+            let mut last_history_entry = history.entries.first().unwrap().clone();
             last_history_entry.times = new_times.clone();
             last_history_entry.history.take();
 
@@ -400,21 +400,21 @@ impl History {
                     history_entry.uuid.to_string(),
                 ));
             }
-            new_history_entries.insert(modification_time.clone(), history_entry.clone());
+            new_history_entries.insert(*modification_time, history_entry.clone());
         }
 
         for history_entry in &other.entries {
             let modification_time = history_entry.times.get_last_modification().unwrap();
             let existing_history_entry = new_history_entries.get(modification_time);
             if let Some(existing_history_entry) = existing_history_entry {
-                if existing_history_entry.has_diverged_from(&history_entry) {
+                if existing_history_entry.has_diverged_from(history_entry) {
                     log.warnings.push(format!(
                         "History entries for {} have the same modification timestamp but were not the same.",
                         existing_history_entry.uuid
                     ));
                 }
             } else {
-                new_history_entries.insert(modification_time.clone(), history_entry.clone());
+                new_history_entries.insert(*modification_time, history_entry.clone());
             }
         }
 
@@ -423,7 +423,7 @@ impl History {
         all_modification_times.reverse();
         let mut new_entries: Vec<Entry> = vec![];
         for modification_time in &all_modification_times {
-            new_entries.push(new_history_entries.get(&modification_time).unwrap().clone());
+            new_entries.push(new_history_entries.get(modification_time).unwrap().clone());
         }
 
         self.entries = new_entries;
@@ -462,13 +462,13 @@ mod entry_tests {
 
         assert_eq!(entry.get("a-bytes"), None);
 
-        assert_eq!(entry.fields["a-bytes"].is_empty(), false);
+        assert!(!entry.fields["a-bytes"].is_empty());
     }
 
     #[test]
     fn update_history() {
         let mut entry = Entry::new();
-        let mut last_modification_time = entry.times.get_last_modification().unwrap().clone();
+        let mut last_modification_time = *entry.times.get_last_modification().unwrap();
 
         entry
             .fields
@@ -484,7 +484,7 @@ mod entry_tests {
             entry.times.get_last_modification().unwrap(),
             &last_modification_time
         );
-        last_modification_time = entry.times.get_last_modification().unwrap().clone();
+        last_modification_time = *entry.times.get_last_modification().unwrap();
         thread::sleep(time::Duration::from_secs(1));
 
         // Updating the history without making any changes
@@ -508,7 +508,7 @@ mod entry_tests {
             entry.times.get_last_modification().unwrap(),
             &last_modification_time
         );
-        last_modification_time = entry.times.get_last_modification().unwrap().clone();
+        last_modification_time = *entry.times.get_last_modification().unwrap();
         thread::sleep(time::Duration::from_secs(1));
 
         assert!(!entry.update_history());
@@ -531,7 +531,7 @@ mod entry_tests {
             entry.times.get_last_modification().unwrap(),
             &last_modification_time
         );
-        last_modification_time = entry.times.get_last_modification().unwrap().clone();
+        last_modification_time = *entry.times.get_last_modification().unwrap();
         thread::sleep(time::Duration::from_secs(1));
 
         assert!(!entry.update_history());
@@ -542,7 +542,7 @@ mod entry_tests {
             &last_modification_time
         );
 
-        let last_history_entry = entry.history.as_ref().unwrap().entries.get(0).unwrap();
+        let last_history_entry = entry.history.as_ref().unwrap().entries.first().unwrap();
         assert_eq!(last_history_entry.get_title().unwrap(), "second title");
 
         for history_entry in &entry.history.unwrap().entries {

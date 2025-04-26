@@ -79,7 +79,7 @@ impl Database {
 
         match database_version {
             DatabaseVersion::KDB(_) => parse_kdb(data, &key),
-            DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion.into()),
+            DatabaseVersion::KDB2(_) => Err(DatabaseOpenError::UnsupportedVersion),
             DatabaseVersion::KDB3(_) => parse_kdbx3(data, &key),
             DatabaseVersion::KDB4(_) => parse_kdbx4(data, &key),
         }
@@ -96,9 +96,9 @@ impl Database {
         use crate::format::kdbx4::dump_kdbx4;
 
         match self.config.version {
-            DatabaseVersion::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB2(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
-            DatabaseVersion::KDB3(_) => Err(DatabaseSaveError::UnsupportedVersion.into()),
+            DatabaseVersion::KDB(_) => Err(DatabaseSaveError::UnsupportedVersion),
+            DatabaseVersion::KDB2(_) => Err(DatabaseSaveError::UnsupportedVersion),
+            DatabaseVersion::KDB3(_) => Err(DatabaseSaveError::UnsupportedVersion),
             DatabaseVersion::KDB4(_) => dump_kdbx4(self, &key, destination),
         }
     }
@@ -122,9 +122,8 @@ impl Database {
 
     /// Get the version of a database without decrypting it
     pub fn get_version(source: &mut dyn std::io::Read) -> Result<DatabaseVersion, DatabaseIntegrityError> {
-        let mut data = Vec::new();
-        data.resize(DatabaseVersion::get_version_header_size(), 0);
-        source.read(&mut data)?;
+        let mut data = vec![0; DatabaseVersion::get_version_header_size()];
+        source.read_exact(&mut data)?;
         DatabaseVersion::parse(data.as_ref())
     }
 
@@ -146,7 +145,7 @@ impl Database {
     pub fn merge(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
         let mut log = MergeLog::default();
         log.append(&self.merge_group(vec![], &other.root, false)?);
-        log.append(&self.merge_deletions(&other)?);
+        log.append(&self.merge_deletions(other)?);
         Ok(log)
     }
 
@@ -182,7 +181,7 @@ impl Database {
                 None => return Err(MergeError::FindGroupError(entry_location)),
             };
 
-            let entry = match parent_group.find_entry(&vec![deleted_object.uuid]) {
+            let entry = match parent_group.find_entry(&[deleted_object.uuid]) {
                 Some(e) => e,
                 // This uuid might refer to a group, which will be handled later.
                 None => continue,
@@ -233,7 +232,7 @@ impl Database {
                 None => return Err(MergeError::FindGroupError(group_location)),
             };
 
-            let group = match parent_group.find_group(&vec![deleted_object.uuid]) {
+            let group = match parent_group.find_group(&[deleted_object.uuid]) {
                 Some(e) => e,
                 None => {
                     // The node might be an entry, since we didn't necessarily removed all the
@@ -249,20 +248,19 @@ impl Database {
 
             // This group still has a child group that might get deleted in the future, so we delay
             // decision to delete it or not.
-            if group
+            if !group
                 .groups()
                 .iter()
                 .filter(|g| !is_in_deleted_queue(g.uuid, &deleted_groups_queue))
                 .collect::<Vec<_>>()
-                .len()
-                != 0
+                .is_empty()
             {
                 deleted_groups_queue.push_back(deleted_object.clone());
                 continue;
             }
 
             // This group still a groups that won't be deleted, so we don't delete it.
-            if group.groups().len() != 0 {
+            if !group.groups().is_empty() {
                 continue;
             }
 
@@ -330,7 +328,7 @@ impl Database {
                 Some(g) => g,
                 None => return Err(MergeError::FindGroupError(destination_group_path)),
             };
-            let group_update_merge_events = destination_group.merge_with(&current_group)?;
+            let group_update_merge_events = destination_group.merge_with(current_group)?;
             log.append(&group_update_merge_events);
         }
 
@@ -521,7 +519,7 @@ impl Database {
             new_group.children = vec![];
             log.events.push(MergeEvent {
                 event_type: MergeEventType::GroupCreated,
-                node_uuid: new_group.uuid.clone(),
+                node_uuid: new_group.uuid,
             });
             let new_group_parent_group = match self.root.find_group_mut(&current_group_path) {
                 Some(g) => g,
@@ -544,18 +542,18 @@ impl Database {
         to: &NodeLocation,
         new_location_changed_timestamp: NaiveDateTime,
     ) -> Result<(), MergeError> {
-        let source_group = match self.root.find_group_mut(&from) {
+        let source_group = match self.root.find_group_mut(from) {
             Some(g) => g,
             None => return Err(MergeError::FindGroupError(from.to_vec())),
         };
 
-        let mut relocated_node = source_group.remove_node(&node_uuid)?;
+        let mut relocated_node = source_group.remove_node(node_uuid)?;
         match relocated_node {
             Node::Group(ref mut g) => g.times.set_location_changed(new_location_changed_timestamp),
             Node::Entry(ref mut e) => e.times.set_location_changed(new_location_changed_timestamp),
         };
 
-        let destination_group = match self.root.find_group_mut(&to) {
+        let destination_group = match self.root.find_group_mut(to) {
             Some(g) => g,
             None => return Err(MergeError::FindGroupError(to.to_vec())),
         };
@@ -751,9 +749,9 @@ impl FromStr for Color {
     }
 }
 
-impl Color {
-    pub fn to_string(&self) -> String {
-        format!("#{:0x}{:0x}{:0x}", self.r, self.g, self.b)
+impl std::fmt::Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 }
 

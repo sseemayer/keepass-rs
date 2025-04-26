@@ -17,6 +17,6 @@ pub fn main() -> Result<()> {
     let mut source = File::open(args.in_kdbx)?;
 
     let version = keepass::Database::get_version(&mut source)?;
-    println!("{}", version.to_string());
+    println!("{}", version);
     Ok(())
 }
