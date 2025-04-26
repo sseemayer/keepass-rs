@@ -72,16 +72,15 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
             // CIPHERID - a UUID specifying which cipher suite
             //            should be used to encrypt the payload
             2 => {
-                outer_cipher = Some(
-                    OuterCipherConfig::try_from(entry_buffer).map_err(|e| DatabaseIntegrityError::from(e))?,
-                );
+                outer_cipher =
+                    Some(OuterCipherConfig::try_from(entry_buffer).map_err(DatabaseIntegrityError::from)?);
             }
 
             // COMPRESSIONFLAGS - first byte determines compression of payload
             3 => {
                 compression = Some(
-                    CompressionConfig::try_from(LittleEndian::read_u32(&entry_buffer))
-                        .map_err(|e| DatabaseIntegrityError::from(e))?,
+                    CompressionConfig::try_from(LittleEndian::read_u32(entry_buffer))
+                        .map_err(DatabaseIntegrityError::from)?,
                 );
             }
 
@@ -108,7 +107,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
             10 => {
                 inner_cipher = Some(
                     InnerCipherConfig::try_from(LittleEndian::read_u32(entry_buffer))
-                        .map_err(|e| DatabaseIntegrityError::from(e))?,
+                        .map_err(DatabaseIntegrityError::from)?,
                 );
             }
 
@@ -122,11 +121,8 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
     // something is missing
 
     fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T, DatabaseIntegrityError> {
-        v.ok_or_else(|| {
-            DatabaseIntegrityError::IncompleteOuterHeader {
-                missing_field: err.into(),
-            }
-            .into()
+        v.ok_or_else(|| DatabaseIntegrityError::IncompleteOuterHeader {
+            missing_field: err.into(),
         })
     }
 
@@ -164,8 +160,8 @@ pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
     let (config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
 
     // Parse XML data blocks
-    let database_content = crate::xml_db::parse::parse(&xml, &mut *inner_decryptor)
-        .map_err(|e| DatabaseIntegrityError::from(e))?;
+    let database_content =
+        crate::xml_db::parse::parse(&xml, &mut *inner_decryptor).map_err(DatabaseIntegrityError::from)?;
 
     let db = Database {
         config,
@@ -179,6 +175,7 @@ pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
 }
 
 /// Open and decrypt a KeePass KDBX3 database from a source and a password
+#[allow(clippy::type_complexity)]
 pub(crate) fn decrypt_kdbx3(
     data: &[u8],
     db_key: &DatabaseKey,
@@ -187,13 +184,13 @@ pub(crate) fn decrypt_kdbx3(
     let header = parse_outer_header(data)?;
 
     // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = calculate_sha256(&[header.protected_stream_key.as_ref()])
-        .map_err(|e| DatabaseIntegrityError::from(e))?;
+    let stream_key =
+        calculate_sha256(&[header.protected_stream_key.as_ref()]).map_err(DatabaseIntegrityError::from)?;
 
     let inner_decryptor = header
         .inner_cipher
         .get_cipher(&stream_key)
-        .map_err(|e| DatabaseIntegrityError::from(e))?;
+        .map_err(DatabaseIntegrityError::from)?;
 
     let config = DatabaseConfig {
         version,
@@ -264,7 +261,7 @@ pub(crate) fn decrypt_kdbx3(
         let block_buffer_compressed = &payload[(pos + 40)..(pos + 40 + block_size)];
 
         // Test block hash
-        let block_hash_check = calculate_sha256(&[&block_buffer_compressed])?;
+        let block_hash_check = calculate_sha256(&[block_buffer_compressed])?;
         if block_hash != block_hash_check.as_slice() {
             return Err(BlockStreamError::BlockHashMismatch { block_index }.into());
         }

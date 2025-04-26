@@ -24,7 +24,7 @@ mod entry_tests {
             assert_eq!(e.get_url(), Some("http://keepass.info/"));
             assert_eq!(e.get("custom attribute"), Some("data for custom attribute"));
             assert_eq!(e.get("URL"), Some("http://keepass.info/"));
-            assert_eq!(e.times.expires, false);
+            assert!(!e.times.expires);
 
             let et = chrono::NaiveDateTime::parse_from_str("2016-01-06 09:43:01", "%Y-%m-%d %H:%M:%S").unwrap();
             assert_eq!(e.get_expiry_time(), Some(&et));
@@ -49,7 +49,7 @@ mod entry_tests {
             assert_eq!(e.get_username(), Some("jdoe"));
             assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
             assert_eq!(e.get_url(), None);
-            assert_eq!(e.times.expires, false);
+            assert!(!e.times.expires);
             if let Some(t) = e.get_time("ExpiryTime") {
                 assert_eq!(format!("{}", t), "2016-01-28 12:25:36");
             } else {
@@ -79,7 +79,7 @@ mod entry_tests {
             assert_eq!(e.get_password(), Some("klmno"));
             assert_eq!(e.get_url(), Some("https://example.com"));
             assert_eq!(e.tags, vec!["keepass-rs".to_string(), "test".to_string()]);
-            assert_eq!(e.times.expires, true);
+            assert!(e.times.expires);
             if let Some(t) = e.get_time("ExpiryTime") {
                 assert_eq!(format!("{}", t), "2021-04-10 16:53:18");
             } else {

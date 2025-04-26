@@ -134,7 +134,7 @@ impl Salsa20Cipher {
         let iv = GenericArray::from([0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A]);
 
         Ok(Salsa20Cipher {
-            cipher: Salsa20::new(&key, &iv),
+            cipher: Salsa20::new(key, &iv),
         })
     }
 }
@@ -177,14 +177,14 @@ impl ChaCha20Cipher {
         let nonce = GenericArray::from_slice(&iv[32..44]);
 
         Ok(ChaCha20Cipher {
-            cipher: chacha20::ChaCha20::new(&key, &nonce),
+            cipher: chacha20::ChaCha20::new(key, nonce),
         })
     }
 
     /// Create as an outer cipher by separately-specified key and iv
     pub(crate) fn new_key_iv(key: &[u8], iv: &[u8]) -> Result<Self, CryptographyError> {
         Ok(ChaCha20Cipher {
-            cipher: chacha20::ChaCha20::new_from_slices(&key, &iv)?,
+            cipher: chacha20::ChaCha20::new_from_slices(key, iv)?,
         })
     }
 }

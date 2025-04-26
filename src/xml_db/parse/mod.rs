@@ -94,7 +94,7 @@ pub(crate) fn parse_from_bytes<P: FromXml>(
                     name: OwnedName { local_name, .. },
                 }) => Some(SimpleXmlEvent::End(local_name)),
                 Ok(XmlEvent::Characters(c)) => Some(SimpleXmlEvent::Characters(c)),
-                Err(e) => Some(SimpleXmlEvent::Err(e.into())),
+                Err(e) => Some(SimpleXmlEvent::Err(e)),
 
                 // ignore whitespace, comments, ...
                 _ => None,
@@ -125,7 +125,7 @@ impl<T: FromXmlCharacters> FromXml for T {
         if let SimpleXmlEvent::Characters(text) = event {
             T::from_xml_characters(&text)
         } else {
-            return Err(bad_event("text containing a value", event));
+            Err(bad_event("text containing a value", event))
         }
     }
 }
@@ -217,7 +217,7 @@ impl<V: FromXml> FromXml for SimpleTag<V> {
 
             Ok(SimpleTag { name, value })
         } else {
-            return Err(bad_event("Open tag", open_tag));
+            Err(bad_event("Open tag", open_tag))
         }
     }
 }
@@ -514,7 +514,7 @@ impl FromXml for IgnoreSubfield {
         if let SimpleXmlEvent::Start(_, _) = open_tag {
             let mut stack = Vec::new();
 
-            while let Some(event) = iterator.next() {
+            for event in iterator.by_ref() {
                 match event {
                     SimpleXmlEvent::Start(t, _) => stack.push(t),
                     SimpleXmlEvent::End(_) => {
@@ -596,7 +596,7 @@ mod parse_test {
         // bool tag
         let value = parse_test_xml::<SimpleTag<bool>>("<TestTag attribute=\"SomeValue\">True</TestTag>")?;
         assert_eq!(value.name, "TestTag");
-        assert_eq!(value.value, true);
+        assert!(value.value);
 
         // usize tag
         let value = parse_test_xml::<SimpleTag<usize>>("<TestTag attribute=\"SomeValue\">42</TestTag>")?;
@@ -756,9 +756,8 @@ mod parse_test {
 
     #[test]
     fn test_ignore_subfield() -> Result<(), XmlParseError> {
-        let _value = parse_test_xml::<IgnoreSubfield>("<TestTag>SomeData</TestTag>")?;
-        let _value =
-            parse_test_xml::<IgnoreSubfield>("<TestTag>SomeData<More-Content></More-Content></TestTag>")?;
+        parse_test_xml::<IgnoreSubfield>("<TestTag>SomeData</TestTag>")?;
+        parse_test_xml::<IgnoreSubfield>("<TestTag>SomeData<More-Content></More-Content></TestTag>")?;
 
         let value = parse_test_xml::<IgnoreSubfield>("<Item></TestTag>");
         assert!(matches!(value, Err(XmlParseError::Xml(_))));
@@ -839,7 +838,7 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<StringField>("<String><StrangeTag>Data</StrangeTag></String>");
-        assert!(matches!(value, Ok(_)));
+        assert!(value.is_ok());
 
         Ok(())
     }
@@ -870,10 +869,10 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<AutoType>("<AutoType></AutoType>");
-        assert!(matches!(value, Ok(_)));
+        assert!(value.is_ok());
 
         let value = parse_test_xml::<AutoType>("<AutoType><Enabled>True</Enabled><DefaultSequence>ASDF</DefaultSequence><DataTransferObfuscation>42</DataTransferObfuscation></AutoType>")?;
-        assert_eq!(value.enabled, true);
+        assert!(value.enabled);
         assert_eq!(value.sequence, Some("ASDF".to_string()));
         assert_eq!(value.associations.len(), 0);
 
@@ -884,7 +883,7 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<AutoType>("<AutoType><StrangeTag>Data</StrangeTag></AutoType>");
-        assert!(matches!(value, Ok(_)));
+        assert!(value.is_ok());
 
         Ok(())
     }
@@ -895,7 +894,7 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<AutoTypeAssociation>("<Association></Association>");
-        assert!(matches!(value, Ok(_)));
+        assert!(value.is_ok());
 
         let value = parse_test_xml::<AutoTypeAssociation>(
             "<Association><Window>MyApp</Window><KeystrokeSequence>ASDF</KeystrokeSequence></Association>",
@@ -911,7 +910,7 @@ mod parse_test {
 
         let value =
             parse_test_xml::<AutoTypeAssociation>("<Association><StrangeTag>Data</StrangeTag></Association>");
-        assert!(matches!(value, Ok(_)));
+        assert!(value.is_ok());
 
         Ok(())
     }
@@ -922,7 +921,7 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<History>("<History></History>");
-        assert!(matches!(value, Ok(_)));
+        assert!(value.is_ok());
 
         let value = parse_test_xml::<History>("<WrongTag></WrongTag>");
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
@@ -931,7 +930,7 @@ mod parse_test {
         assert!(matches!(value, Err(XmlParseError::BadEvent { .. })));
 
         let value = parse_test_xml::<History>("<History><StrangeTag>Data</StrangeTag></History>");
-        assert!(matches!(value, Ok(_)));
+        assert!(value.is_ok());
 
         Ok(())
     }

@@ -21,9 +21,9 @@ fn parse_yubikey_slot(slot_number: &str) -> Result<Slot, DatabaseKeyError> {
     if let Some(slot) = Slot::from_str(slot_number) {
         return Ok(slot);
     }
-    return Err(DatabaseKeyError::ChallengeResponseKeyError(
+    Err(DatabaseKeyError::ChallengeResponseKeyError(
         "Invalid slot number".to_string(),
-    ));
+    ))
 }
 
 fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
@@ -83,22 +83,22 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     }
 
     // Check if the key is base64-encoded. If yes, return decoded bytes
-    return if let Ok(key) = base64_engine::STANDARD.decode(&key_bytes) {
+    if let Ok(key) = base64_engine::STANDARD.decode(&key_bytes) {
         Ok(key)
     } else {
         Ok(key_bytes)
-    };
+    }
 }
 
 fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     // try to parse the buffer as XML, if successful, use that data instead of full file
-    if let Ok(v) = parse_xml_keyfile(&buffer) {
+    if let Ok(v) = parse_xml_keyfile(buffer) {
         Ok(v)
     } else if buffer.len() == 32 {
         // legacy binary key format
         Ok(buffer.to_vec())
     } else {
-        Ok(calculate_sha256(&[&buffer])?.as_slice().to_vec())
+        Ok(calculate_sha256(&[buffer])?.as_slice().to_vec())
     }
 }
 
@@ -117,22 +117,18 @@ pub struct Yubikey {
 
 #[cfg(feature = "challenge_response")]
 impl ChallengeResponseKey {
-    fn perform_challenge(self: &Self, challenge: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
+    fn perform_challenge(&self, challenge: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
         match self {
             ChallengeResponseKey::LocalChallenge(secret) => {
-                let secret_bytes = hex::decode(&secret).map_err(|e| {
-                    return DatabaseKeyError::ChallengeResponseKeyError(e.to_string());
-                })?;
+                let secret_bytes = hex::decode(secret)
+                    .map_err(|e| DatabaseKeyError::ChallengeResponseKeyError(e.to_string()))?;
 
-                let response = crate::crypt::calculate_hmac_sha1(&[&challenge], &secret_bytes)?.to_vec();
+                let response = crate::crypt::calculate_hmac_sha1(&[challenge], &secret_bytes)?.to_vec();
                 Ok(response)
             }
             ChallengeResponseKey::YubikeyChallenge(yubikey, slot_number) => {
                 let mut challenge_response_client = ChallengeResponse::new().map_err(|e| {
-                    DatabaseKeyError::ChallengeResponseKeyError(format!(
-                        "Could not search for yubikey: {}",
-                        e.to_string()
-                    ))
+                    DatabaseKeyError::ChallengeResponseKeyError(format!("Could not search for yubikey: {}", e))
                 })?;
                 let slot = parse_yubikey_slot(slot_number)?;
 
@@ -155,7 +151,7 @@ impl ChallengeResponseKey {
                     Ok(hmac_result) => Ok(hmac_result.to_vec()),
                     Err(e) => Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
                         "Could not perform challenge response: {}",
-                        e.to_string(),
+                        e
                     ))),
                 }
             }
@@ -164,10 +160,7 @@ impl ChallengeResponseKey {
 
     pub fn get_available_yubikeys() -> Result<Vec<Yubikey>, DatabaseKeyError> {
         let mut challenge_response_client = ChallengeResponse::new().map_err(|e| {
-            DatabaseKeyError::ChallengeResponseKeyError(format!(
-                "Could not search for yubikey: {}",
-                e.to_string()
-            ))
+            DatabaseKeyError::ChallengeResponseKeyError(format!("Could not search for yubikey: {}", e))
         })?;
         let mut response: Vec<Yubikey> = vec![];
         let yubikeys = match challenge_response_client.find_all_devices() {
@@ -175,7 +168,7 @@ impl ChallengeResponseKey {
             Err(e) => {
                 return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
                     "Could not search for yubikeys: {}",
-                    e.to_string()
+                    e
                 )))
             }
         };
@@ -189,24 +182,25 @@ impl ChallengeResponseKey {
                 name: yubikey.name,
             });
         }
-        return Ok(response);
+        Ok(response)
     }
 
     pub fn get_yubikey(serial_number: Option<u32>) -> Result<Yubikey, DatabaseKeyError> {
         let all_yubikeys = ChallengeResponseKey::get_available_yubikeys()?;
-        if all_yubikeys.len() == 0 {
-            return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
-                "No yubikey connected to the system",
-            )));
+        if all_yubikeys.is_empty() {
+            return Err(DatabaseKeyError::ChallengeResponseKeyError(
+                "No yubikey connected to the system".to_string(),
+            ));
         }
 
         let serial_number = match serial_number {
             Some(n) => n,
             None => {
                 if all_yubikeys.len() != 1 {
-                    return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
-                        "Multiple yubikeys are connected to the system. Please provide a serial number.",
-                    )));
+                    return Err(DatabaseKeyError::ChallengeResponseKeyError(
+                        "Multiple yubikeys are connected to the system. Please provide a serial number."
+                            .to_string(),
+                    ));
                 }
                 return Ok(all_yubikeys[0].clone());
             }
@@ -217,10 +211,10 @@ impl ChallengeResponseKey {
                 return Ok(yubikey);
             }
         }
-        return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
+        Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
             "Could not find yubikey with serial number {}",
             serial_number
-        )));
+        )))
     }
 }
 

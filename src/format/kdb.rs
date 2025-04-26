@@ -30,7 +30,7 @@ const HEADER_SIZE: usize = 4 + 4 + 4 + 4 + 16 + 16 + 4 + 4 + 32 + 32 + 4; // fir
 
 fn parse_header(data: &[u8]) -> Result<KDBHeader, DatabaseIntegrityError> {
     if data.len() < HEADER_SIZE {
-        return Err(DatabaseIntegrityError::InvalidFixedHeader { size: data.len() }.into());
+        return Err(DatabaseIntegrityError::InvalidFixedHeader { size: data.len() });
     }
 
     Ok(KDBHeader {
@@ -60,8 +60,7 @@ fn ensure_length(
             field_type,
             field_size,
             expected_field_size,
-        }
-        .into())
+        })
     } else {
         Ok(())
     }
@@ -142,7 +141,7 @@ fn parse_groups(
             0xffff => {
                 ensure_length(field_type, field_size, 0)?;
 
-                let level = level.ok_or_else(|| DatabaseIntegrityError::MissingKDBGroupLevel)? as usize;
+                let level = level.ok_or(DatabaseIntegrityError::MissingKDBGroupLevel)? as usize;
 
                 // Update the current group tree branch (collapse previous sub-branch, initiate
                 // current sub-branch)
@@ -158,25 +157,24 @@ fn parse_groups(
                     return Err(DatabaseIntegrityError::InvalidKDBGroupLevel {
                         group_level: level as u16,
                         current_level: branch.len() as u16,
-                    }
-                    .into());
+                    });
                 }
 
                 // Update the GroupId map and reset state for the next group
-                let group_id = gid.ok_or_else(|| DatabaseIntegrityError::MissingKDBGroupId)?;
+                let group_id = gid.ok_or(DatabaseIntegrityError::MissingKDBGroupId)?;
                 gid_map.insert(group_id, group_path.clone());
                 group = Default::default();
                 gid = None;
                 num_groups += 1;
             }
             _ => {
-                return Err(DatabaseIntegrityError::InvalidKDBGroupFieldType { field_type }.into());
+                return Err(DatabaseIntegrityError::InvalidKDBGroupFieldType { field_type });
             }
         }
 
         *data = &data[6 + field_size as usize..];
     }
-    if gid != None {
+    if gid.is_some() {
         return Err(DatabaseIntegrityError::IncompleteKDBGroup);
     }
     // Collapse last group tree branch into the root
@@ -243,11 +241,11 @@ fn parse_entries(
             0xffff => {
                 ensure_length(field_type, field_size, 0)?;
 
-                let group_id = gid.ok_or_else(|| DatabaseIntegrityError::MissingKDBGroupId)?;
+                let group_id = gid.ok_or(DatabaseIntegrityError::MissingKDBGroupId)?;
                 let group_path: Vec<&str> = gid_map
                     .get(&group_id)
-                    .ok_or_else(|| DatabaseIntegrityError::InvalidKDBGroupId { group_id })?
-                    .into_iter()
+                    .ok_or(DatabaseIntegrityError::InvalidKDBGroupId { group_id })?
+                    .iter()
                     .map(|v| v.as_str())
                     .collect();
 
@@ -264,14 +262,14 @@ fn parse_entries(
                 num_entries += 1;
             }
             _ => {
-                return Err(DatabaseIntegrityError::InvalidKDBEntryFieldType { field_type }.into());
+                return Err(DatabaseIntegrityError::InvalidKDBEntryFieldType { field_type });
             }
         }
 
         *data = &data[6 + field_size as usize..];
     }
-    if gid != None {
-        return Err(DatabaseIntegrityError::IncompleteKDBEntry.into());
+    if gid.is_some() {
+        return Err(DatabaseIntegrityError::IncompleteKDBEntry);
     }
 
     Ok(())
@@ -283,7 +281,7 @@ fn parse_db(header: &KDBHeader, data: &[u8]) -> Result<Group, DatabaseIntegrityE
         ..Default::default()
     };
 
-    let mut pos = &data[..];
+    let mut pos = data;
 
     let gid_map = parse_groups(&mut root, header.num_groups, &mut pos)?;
 
@@ -336,12 +334,12 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
     let payload = &payload_padded[..payload_padded.len() - padlen];
 
     // Check if we decrypted correctly
-    let hash = calculate_sha256(&[&payload])?;
+    let hash = calculate_sha256(&[payload])?;
     if header.contents_hash != hash.as_slice() {
         return Err(DatabaseKeyError::IncorrectKey.into());
     }
 
-    let root_group = parse_db(&header, &payload)?;
+    let root_group = parse_db(&header, payload)?;
 
     let config = DatabaseConfig {
         version,

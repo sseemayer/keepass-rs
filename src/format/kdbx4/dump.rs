@@ -30,7 +30,7 @@ pub fn dump_kdbx4(
     writer: &mut dyn Write,
 ) -> Result<(), DatabaseSaveError> {
     if !matches!(db.config.version, DatabaseVersion::KDB4(_)) {
-        return Err(DatabaseSaveError::UnsupportedVersion.into());
+        return Err(DatabaseSaveError::UnsupportedVersion);
     }
 
     // generate encryption keys and seeds on the fly when saving
@@ -65,8 +65,8 @@ pub fn dump_kdbx4(
     let header_sha256 = crypt::calculate_sha256(&[&header_data])?;
 
     // write out header and header hash
-    writer.write(&header_data)?;
-    writer.write(&header_sha256)?;
+    writer.write_all(&header_data)?;
+    writer.write_all(&header_sha256)?;
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
@@ -78,10 +78,10 @@ pub fn dump_kdbx4(
     // verify credentials
     let hmac_key =
         crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END])?;
-    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::max_value(), &hmac_key)?;
+    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key)?;
     let header_hmac = crypt::calculate_hmac(&[&header_data], &header_hmac_key)?;
 
-    writer.write(&header_hmac)?;
+    writer.write_all(&header_hmac)?;
 
     // Initialize inner encryptor from inner header params
     let mut inner_cipher = db
@@ -98,7 +98,7 @@ pub fn dump_kdbx4(
     .dump(&db.header_attachments, &mut payload)?;
 
     // after inner header is one XML document
-    crate::xml_db::dump::dump(&db, &mut *inner_cipher, &mut payload)?;
+    crate::xml_db::dump::dump(db, &mut *inner_cipher, &mut payload)?;
 
     let payload_compressed = db
         .config
@@ -113,7 +113,7 @@ pub fn dump_kdbx4(
         .encrypt(&payload_compressed)?;
 
     let payload_hmac = hmac_block_stream::write_hmac_block_stream(&payload_encrypted, &hmac_key)?;
-    writer.write(&payload_hmac)?;
+    writer.write_all(&payload_hmac)?;
 
     Ok(())
 }
@@ -121,7 +121,7 @@ pub fn dump_kdbx4(
 impl HeaderAttachment {
     fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
         writer.write_u8(self.flags)?;
-        writer.write(&self.content)?;
+        writer.write_all(&self.content)?;
         Ok(())
     }
 }
@@ -170,7 +170,7 @@ impl KDBX4InnerHeader {
         header_attachments: &[HeaderAttachment],
         writer: &mut dyn Write,
     ) -> Result<(), DatabaseSaveError> {
-        writer.write(&[INNER_HEADER_RANDOM_STREAM_ID])?;
+        writer.write_all(&[INNER_HEADER_RANDOM_STREAM_ID])?;
         writer.write_u32::<LittleEndian>(4)?;
         writer.write_u32::<LittleEndian>(self.inner_random_stream.dump())?;
 

@@ -33,10 +33,7 @@ impl FromXml for Entry {
                     "Tags" => {
                         if let Some(tags) = SimpleTag::<Option<String>>::from_xml(iterator, inner_cipher)?.value
                         {
-                            out.tags = tags
-                                .split(|c| c == ';' || c == ',')
-                                .map(|x| x.to_owned())
-                                .collect();
+                            out.tags = tags.split([';', ',']).map(|x| x.to_owned()).collect();
                         }
                     }
                     "String" => {

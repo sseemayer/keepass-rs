@@ -39,12 +39,12 @@ pub enum DatabaseVersion {
 impl DatabaseVersion {
     pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseIntegrityError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
-            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier.into());
+            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
         }
 
         // check identifier
         if data[0..4] != KDBX_IDENTIFIER {
-            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier.into());
+            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
         }
 
         let version = LittleEndian::read_u32(&data[4..8]);
@@ -65,8 +65,7 @@ impl DatabaseVersion {
                     version,
                     file_major_version: file_major_version as u32,
                     file_minor_version: file_minor_version as u32,
-                }
-                .into())
+                })
             }
         };
 
@@ -76,7 +75,7 @@ impl DatabaseVersion {
     #[cfg(feature = "save_kdbx4")]
     fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
         if let DatabaseVersion::KDB4(minor_version) = self {
-            writer.write(&crate::format::KDBX_IDENTIFIER)?;
+            writer.write_all(&crate::format::KDBX_IDENTIFIER)?;
             writer.write_u32::<LittleEndian>(KEEPASS_LATEST_ID)?;
             writer.write_u16::<LittleEndian>(*minor_version)?;
             writer.write_u16::<LittleEndian>(KDBX4_MAJOR_VERSION)?;
@@ -92,13 +91,13 @@ impl DatabaseVersion {
     }
 }
 
-impl ToString for DatabaseVersion {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for DatabaseVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DatabaseVersion::KDB(_) => "KDB".to_string(),
-            DatabaseVersion::KDB2(_) => "KDBX2".to_string(),
-            DatabaseVersion::KDB3(minor_version) => format!("KDBX3.{}", minor_version),
-            DatabaseVersion::KDB4(minor_version) => format!("KDBX4.{}", minor_version),
+            DatabaseVersion::KDB(_) => write!(f, "KDB"),
+            DatabaseVersion::KDB2(_) => write!(f, "KDBX2"),
+            DatabaseVersion::KDB3(minor_version) => write!(f, "KDBX3.{}", minor_version),
+            DatabaseVersion::KDB4(minor_version) => write!(f, "KDBX4.{}", minor_version),
         }
     }
 }

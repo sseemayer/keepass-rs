@@ -216,63 +216,63 @@ impl From<Vec<u8>> for VariantDictionaryValue {
     }
 }
 
-impl<'a> Into<Option<&'a u32>> for &'a VariantDictionaryValue {
-    fn into(self) -> Option<&'a u32> {
-        match self {
+impl<'a> From<&'a VariantDictionaryValue> for Option<&'a u32> {
+    fn from(val: &'a VariantDictionaryValue) -> Self {
+        match val {
             VariantDictionaryValue::UInt32(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl<'a> Into<Option<&'a u64>> for &'a VariantDictionaryValue {
-    fn into(self) -> Option<&'a u64> {
-        match self {
+impl<'a> From<&'a VariantDictionaryValue> for Option<&'a u64> {
+    fn from(val: &'a VariantDictionaryValue) -> Self {
+        match val {
             VariantDictionaryValue::UInt64(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl<'a> Into<Option<&'a bool>> for &'a VariantDictionaryValue {
-    fn into(self) -> Option<&'a bool> {
-        match self {
+impl<'a> From<&'a VariantDictionaryValue> for Option<&'a bool> {
+    fn from(val: &'a VariantDictionaryValue) -> Self {
+        match val {
             VariantDictionaryValue::Bool(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl<'a> Into<Option<&'a i32>> for &'a VariantDictionaryValue {
-    fn into(self) -> Option<&'a i32> {
-        match self {
+impl<'a> From<&'a VariantDictionaryValue> for Option<&'a i32> {
+    fn from(val: &'a VariantDictionaryValue) -> Self {
+        match val {
             VariantDictionaryValue::Int32(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl<'a> Into<Option<&'a i64>> for &'a VariantDictionaryValue {
-    fn into(self) -> Option<&'a i64> {
-        match self {
+impl<'a> From<&'a VariantDictionaryValue> for Option<&'a i64> {
+    fn from(val: &'a VariantDictionaryValue) -> Self {
+        match val {
             VariantDictionaryValue::Int64(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl<'a> Into<Option<&'a String>> for &'a VariantDictionaryValue {
-    fn into(self) -> Option<&'a String> {
-        match self {
+impl<'a> From<&'a VariantDictionaryValue> for Option<&'a String> {
+    fn from(val: &'a VariantDictionaryValue) -> Self {
+        match val {
             VariantDictionaryValue::String(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl<'a> Into<Option<&'a Vec<u8>>> for &'a VariantDictionaryValue {
-    fn into(self) -> Option<&'a Vec<u8>> {
-        match self {
+impl<'a> From<&'a VariantDictionaryValue> for Option<&'a Vec<u8>> {
+    fn from(val: &'a VariantDictionaryValue) -> Self {
+        match val {
             VariantDictionaryValue::ByteArray(v) => Some(v),
             _ => None,
         }
@@ -294,7 +294,7 @@ mod variant_dictionary_tests {
         assert!(matches!(res, Err(VariantDictionaryError::NotTerminated)));
 
         let res = VariantDictionary::parse(&hex!("000100"));
-        assert!(matches!(res, Ok(_)));
+        assert!(res.is_ok());
 
         //                                        ver t key_len key   val_len value   termination
         //                                        |   | |       |     |       |       |
