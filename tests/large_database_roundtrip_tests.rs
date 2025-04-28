@@ -3,7 +3,7 @@ mod large_file_roundtrip_tests {
     use std::fs::File;
 
     use keepass::{
-        db::{Database, Entry, NodeRef, Value},
+        db::{Database, Entry, NodeRef},
         DatabaseKey,
     };
 
@@ -24,17 +24,9 @@ mod large_file_roundtrip_tests {
 
         for i in 0..LARGE_DATABASE_ENTRY_COUNT {
             let mut entry = Entry::new();
-            entry
-                .fields
-                .insert("Title".to_string(), Value::Unprotected(format!("Entry_{i}")));
-            entry.fields.insert(
-                "UserName".to_string(),
-                Value::Unprotected(format!("UserName_{i}")),
-            );
-            entry.fields.insert(
-                "Password".to_string(),
-                Value::Protected(format!("Password_{i}").as_bytes().into()),
-            );
+            entry.set_title(Some(&format!("Entry_{i}")));
+            entry.set_username(Some(&format!("UserName_{i}")));
+            entry.set_password(Some(&format!("Password_{i}")));
             db.root.add_child(entry);
         }
 

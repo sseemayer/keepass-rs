@@ -46,6 +46,53 @@ impl Entry {
         }
     }
 
+    pub fn set_username(&mut self, username: Option<&str>) {
+        self.set_unprotected_field_pair("UserName", username);
+    }
+
+    pub fn set_password(&mut self, password: Option<&str>) {
+        self.set_protected_field_pair("Password", password);
+    }
+
+    pub fn set_url(&mut self, url: Option<&str>) {
+        self.set_unprotected_field_pair("URL", url);
+    }
+
+    pub fn set_title(&mut self, title: Option<&str>) {
+        self.set_unprotected_field_pair("Title", title);
+    }
+
+    pub(crate) fn set_unprotected_field_pair(&mut self, field_name: &str, field_value: Option<&str>) {
+        if let Some(field_value) = field_value {
+            let v = Value::Unprotected(field_value.to_string());
+            self.fields.insert(field_name.to_string(), v);
+        } else {
+            self.fields.remove(field_name);
+        }
+    }
+
+    pub(crate) fn set_protected_field_pair<T: AsRef<[u8]>>(
+        &mut self,
+        field_name: &str,
+        field_value: Option<T>,
+    ) {
+        if let Some(field_value) = field_value {
+            let v = Value::Protected(SecStr::new(field_value.as_ref().to_vec()));
+            self.fields.insert(field_name.to_string(), v);
+        } else {
+            self.fields.remove(field_name);
+        }
+    }
+
+    pub(crate) fn set_binary_field_pair<T: AsRef<[u8]>>(&mut self, field_name: &str, field_value: Option<T>) {
+        if let Some(field_value) = field_value {
+            let v = Value::Bytes(field_value.as_ref().to_vec());
+            self.fields.insert(field_name.to_string(), v);
+        } else {
+            self.fields.remove(field_name);
+        }
+    }
+
     #[cfg(feature = "_merge")]
     pub(crate) fn merge(&self, other: &Entry) -> Result<(Option<Entry>, MergeLog), MergeError> {
         let mut log = MergeLog::default();
@@ -149,10 +196,7 @@ impl Entry {
     //    as it previously was. This is necessary since the timestamps in the KDBX format
     //    do not preserve the msecs.
     pub(crate) fn set_field_and_commit(&mut self, field_name: &str, field_value: &str) {
-        self.fields.insert(
-            field_name.to_string(),
-            Value::Unprotected(field_value.to_string()),
-        );
+        self.set_unprotected_field_pair(field_name, Some(field_value));
         thread::sleep(time::Duration::from_secs(1));
         self.update_history();
     }
@@ -435,26 +479,14 @@ impl History {
 mod entry_tests {
     use std::{thread, time};
 
-    use secstr::SecStr;
-
-    use super::{Entry, Value};
+    use super::Entry;
 
     #[test]
     fn byte_values() {
         let mut entry = Entry::new();
-        entry
-            .fields
-            .insert("a-bytes".to_string(), Value::Bytes(vec![1, 2, 3]));
-
-        entry.fields.insert(
-            "a-unprotected".to_string(),
-            Value::Unprotected("asdf".to_string()),
-        );
-
-        entry.fields.insert(
-            "a-protected".to_string(),
-            Value::Protected(SecStr::new("asdf".as_bytes().to_vec())),
-        );
+        entry.set_binary_field_pair("a-bytes", Some(&[1, 2, 3]));
+        entry.set_unprotected_field_pair("a-unprotected", Some("asdf"));
+        entry.set_protected_field_pair("a-protected", Some("asdf"));
 
         assert_eq!(entry.get_bytes("a-bytes"), Some(&[1, 2, 3][..]));
         assert_eq!(entry.get_bytes("a-unprotected"), None);
@@ -470,9 +502,7 @@ mod entry_tests {
         let mut entry = Entry::new();
         let mut last_modification_time = *entry.times.get_last_modification().unwrap();
 
-        entry
-            .fields
-            .insert("Username".to_string(), Value::Unprotected("user".to_string()));
+        entry.set_username(Some("user"));
         // Making sure to wait 1 sec before update the history, to make
         // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
@@ -497,9 +527,7 @@ mod entry_tests {
             &last_modification_time
         );
 
-        entry
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("first title".to_string()));
+        entry.set_title(Some("first title"));
 
         assert!(entry.update_history());
         assert!(entry.history.is_some());
@@ -519,10 +547,7 @@ mod entry_tests {
             &last_modification_time
         );
 
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("second title".to_string()),
-        );
+        entry.set_title(Some("second title"));
 
         assert!(entry.update_history());
         assert!(entry.history.is_some());
@@ -554,7 +579,11 @@ mod entry_tests {
     #[test]
     fn totp() {
         let mut entry = Entry::new();
-        entry.fields.insert("otp".to_string(), Value::Unprotected("otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string()));
+
+        entry.set_protected_field_pair(
+            "otp",
+            Some("otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30"),
+        );
 
         assert!(entry.get_otp().is_ok());
     }
@@ -562,6 +591,9 @@ mod entry_tests {
     #[cfg(feature = "serialization")]
     #[test]
     fn serialization() {
+        use super::Value;
+        use secstr::SecStr;
+
         assert_eq!(
             serde_json::to_string(&Value::Bytes(vec![65, 66, 67])).unwrap(),
             "[65,66,67]".to_string()
