@@ -97,6 +97,28 @@ impl Entry {
         }
     }
 
+    #[rustfmt::skip]
+    const EXCLUDED_FIELDS: [&str; 9] = ["Password", "BinaryData", "otp", "Title", "URL", "UserName", "Notes", "Additional", "BinaryDesc"];
+
+    pub fn set_additional_attribute(
+        &mut self,
+        key: &str,
+        value: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if Self::EXCLUDED_FIELDS.contains(&key) {
+            return Err(format!("Cannot set additional attribute for field {}", key).into());
+        }
+        self.set_unprotected_field_pair(key, value);
+        Ok(())
+    }
+
+    pub fn get_additional_attribute(&self, key: &str) -> Option<&str> {
+        if Self::EXCLUDED_FIELDS.contains(&key) {
+            return None;
+        }
+        self.get(key)
+    }
+
     #[cfg(feature = "_merge")]
     pub(crate) fn merge(&self, other: &Entry) -> Result<(Option<Entry>, MergeLog), MergeError> {
         let mut log = MergeLog::default();
