@@ -62,9 +62,13 @@ impl Entry {
         self.set_unprotected_field_pair("Title", title);
     }
 
-    pub(crate) fn set_unprotected_field_pair(&mut self, field_name: &str, field_value: Option<&str>) {
+    pub(crate) fn set_unprotected_field_pair<T: AsRef<str>>(
+        &mut self,
+        field_name: &str,
+        field_value: Option<T>,
+    ) {
         if let Some(field_value) = field_value {
-            let v = Value::Unprotected(field_value.to_string());
+            let v = Value::Unprotected(field_value.as_ref().to_string());
             self.fields.insert(field_name.to_string(), v);
         } else {
             self.fields.remove(field_name);
@@ -261,7 +265,22 @@ impl<'a> Entry {
         self.get_raw_otp_value().ok_or(TOTPError::NoRecord)?.parse()
     }
 
+    #[cfg(feature = "totp")]
+    pub fn set_otp(&mut self, otp: Option<&TOTP>) {
+        self.set_raw_otp_value(otp.map(|o| o.to_string()).as_deref());
+    }
+
+    #[cfg(feature = "totp")]
+    pub fn set_raw_otp_value(&mut self, otp: Option<&str>) {
+        if let Some(otp) = otp {
+            self.set_protected_field_pair("otp", Some(otp));
+        } else {
+            self.fields.remove("otp");
+        }
+    }
+
     /// Convenience method for getting the raw value of the 'otp' field
+    #[cfg(feature = "totp")]
     pub fn get_raw_otp_value(&'a self) -> Option<&'a str> {
         self.get("otp")
     }
@@ -580,10 +599,7 @@ mod entry_tests {
     fn totp() {
         let mut entry = Entry::new();
 
-        entry.set_protected_field_pair(
-            "otp",
-            Some("otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30"),
-        );
+        entry.set_raw_otp_value(Some("otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30"));
 
         assert!(entry.get_otp().is_ok());
     }

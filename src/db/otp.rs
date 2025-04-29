@@ -16,6 +16,16 @@ pub enum TOTPAlgorithm {
     Sha512,
 }
 
+impl std::fmt::Display for TOTPAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TOTPAlgorithm::Sha1 => write!(f, "SHA1"),
+            TOTPAlgorithm::Sha256 => write!(f, "SHA256"),
+            TOTPAlgorithm::Sha512 => write!(f, "SHA512"),
+        }
+    }
+}
+
 impl std::str::FromStr for TOTPAlgorithm {
     type Err = TOTPError;
 
@@ -39,6 +49,21 @@ pub struct TOTP {
     pub algorithm: TOTPAlgorithm,
 
     secret: Vec<u8>,
+}
+
+impl std::fmt::Display for TOTP {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "otpauth://totp/{}?secret={}&period={}&digits={}&issuer={}&algorithm={}",
+            self.label,
+            base32::encode(base32::Alphabet::Rfc4648 { padding: true }, &self.secret),
+            self.period,
+            self.digits,
+            self.issuer.as_deref().unwrap_or(""),
+            self.algorithm,
+        )
+    }
 }
 
 /// A generated one time password
