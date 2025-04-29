@@ -66,7 +66,7 @@ mod kdbx4_tests {
     use crate::format::kdbx4::dump::dump_kdbx4;
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-        db::{Database, Entry, Group, HeaderAttachment, NodeRef, Value},
+        db::{Database, Entry, Group, HeaderAttachment, NodeRef},
         format::KDBX4_CURRENT_MINOR_VERSION,
         key::DatabaseKey,
     };
@@ -110,13 +110,9 @@ mod kdbx4_tests {
         let mut root_group = Group::new("Root");
 
         let mut entry_with_password = Entry::new();
-        entry_with_password
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("Demo Entry".into()));
+        entry_with_password.set_title(Some("Demo Entry"));
 
-        entry_with_password
-            .fields
-            .insert("Password".to_string(), Value::Protected("secret".into()));
+        entry_with_password.set_password(Some("secret"));
 
         root_group.add_child(entry_with_password);
         root_group.add_child(Entry::new());
@@ -220,9 +216,7 @@ mod kdbx4_tests {
         ];
 
         let mut entry = Entry::new();
-        entry
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
+        entry.set_title(Some("Demo entry"));
 
         db.root.add_child(entry);
 

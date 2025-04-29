@@ -46,16 +46,10 @@ mod tests {
         let mut root_group = Group::new("Root");
         let mut entry = Entry::new();
 
-        entry
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("ASDF".to_string()));
-        entry
-            .fields
-            .insert("UserName".to_string(), Value::Unprotected("ghj".to_string()));
-        entry.fields.insert(
-            "Password".to_string(),
-            Value::Protected(std::str::from_utf8(b"klmno").unwrap().into()),
-        );
+        entry.set_title(Some("ASDF"));
+        entry.set_username(Some("ghj"));
+        entry.set_password(Some("klmno"));
+
         entry.tags.push("test".to_string());
         entry.tags.push("keepass-rs".to_string());
         entry.times.expires = true;
@@ -136,9 +130,7 @@ mod tests {
         let mut root_group = Group::new("Root");
         let mut entry = Entry::new();
         let new_entry_uuid = entry.uuid;
-        entry
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("ASDF".to_string()));
+        entry.set_title(Some("ASDF"));
 
         root_group.add_child(entry);
 

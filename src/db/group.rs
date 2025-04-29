@@ -471,10 +471,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_title(Some("Sample Entry #2"));
         general_group.add_child(sample_entry);
         db.root.add_child(general_group);
 
@@ -490,10 +487,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_title(Some("Sample Entry #2"));
         general_group.add_child(sample_entry);
         db.root.add_child(general_group);
 
@@ -509,10 +503,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_title(Some("Sample Entry #2"));
         general_group.add_child(sample_entry.clone());
         db.root.add_child(general_group.clone());
 
@@ -549,10 +540,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_title(Some("Sample Entry #2"));
         general_group.add_child(sample_entry.clone());
         db.root.add_child(general_group.clone());
 
