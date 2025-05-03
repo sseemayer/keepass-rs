@@ -51,6 +51,26 @@ jobs:
       - name: run cargo check on all feature combinations
         run: cargo hack check --feature-powerset --no-dev-deps
 
+  build-windows:
+    name: Build the project (Windows)
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Build the project with the default features
+        run: cargo build
+
+      - name: Build the project with all the features
+        run: cargo build --all-features
+
+      - name: Build the project with no default features
+        run: cargo build --no-default-features
+
   test:
     name: Test Suite
     runs-on: ubuntu-latest
