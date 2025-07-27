@@ -46,7 +46,7 @@ chrono = { version = "0.4.23", default-features = false, features = [
 ] }
 
 # cryptography
-rust-argon2 = "2.0"
+rust-argon2 = "3.0"
 sha1 = { version = "0.10", optional = true }
 sha2 = "0.10"
 aes = "0.8"

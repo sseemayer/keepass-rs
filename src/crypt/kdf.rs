@@ -56,6 +56,7 @@ impl Kdf for Argon2Kdf {
         composite_key: &GenericArray<u8, U32>,
     ) -> Result<GenericArray<u8, U32>, CryptographyError> {
         let config = argon2::Config {
+            thread_mode: argon2::ThreadMode::Parallel,
             ad: &[],
             hash_length: 32,
             lanes: self.parallelism,
