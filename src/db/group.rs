@@ -241,6 +241,28 @@ impl Group {
         }
     }
 
+    /// Recursively remove a node from this group or its children
+    pub fn remove_node_by_uuid(&mut self, uuid: &Uuid) -> Option<Node> {
+        // First, check direct children
+        if let Some(index) = self.children.iter().position(|child| match child {
+            Node::Group(g) => &g.uuid == uuid,
+            Node::Entry(e) => &e.uuid == uuid,
+        }) {
+            return Some(self.children.remove(index));
+        }
+
+        // If not found in direct children, recurse into subgroups
+        for child in &mut self.children {
+            if let Node::Group(g) = child {
+                if let Some(removed_node) = g.remove_node_by_uuid(uuid) {
+                    return Some(removed_node);
+                }
+            }
+        }
+
+        None
+    }
+
     /// Convenience method for getting the name of the Group
     pub fn get_name(&self) -> &str {
         &self.name

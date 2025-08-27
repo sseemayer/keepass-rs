@@ -138,6 +138,35 @@ impl Database {
         }
     }
 
+    /// Deletes a node (entry or group) from the database by its UUID.
+    ///
+    /// # Arguments
+    ///
+    /// * `uuid` - The UUID of the node to delete.
+    /// * `log_deletion` - If true, the deletion will be logged in the `deleted_objects` list,
+    ///   which is important for merging databases.
+    ///
+    /// # Returns
+    ///
+    /// `Some(Node)` containing the deleted node if it was found, otherwise `None`.
+    pub fn delete_by_uuid(&mut self, uuid: &Uuid, log_deletion: bool) -> Option<Node> {
+        if let Some(removed_node) = self.root.remove_node_by_uuid(uuid) {
+            if log_deletion {
+                let uuid_to_log = match &removed_node {
+                    Node::Group(g) => g.uuid,
+                    Node::Entry(e) => e.uuid,
+                };
+                self.deleted_objects.objects.push(DeletedObject {
+                    uuid: uuid_to_log,
+                    deletion_time: Times::now(),
+                });
+            }
+            Some(removed_node)
+        } else {
+            None
+        }
+    }
+
     /// Merge this database with another version of this same database.
     /// This function will use the UUIDs to detect that entries and groups are
     /// the same.
