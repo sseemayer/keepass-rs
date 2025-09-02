@@ -19,6 +19,7 @@ use crate::db::otp::{TOTPError, TOTP};
 pub struct Entry {
     pub uuid: Uuid,
     pub fields: HashMap<String, Value>,
+    pub attachment_refs: HashMap<String, String>,
     pub autotype: Option<AutoType>,
     pub tags: Vec<String>,
 
