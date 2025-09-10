@@ -297,11 +297,6 @@ pub enum XmlParseError {
     Eof,
 }
 
-/// Error parsing a color code
-#[derive(Debug, Error)]
-#[error("Cannot parse color: '{}'", _0)]
-pub struct ParseColorError(pub String);
-
 // move error type conversions to a module and exclude them from coverage counting.
 #[cfg(not(tarpaulin_include))]
 mod conversions {
