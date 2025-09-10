@@ -50,6 +50,24 @@ pub struct Entry {
 }
 
 impl Entry {
+    pub(crate) fn new() -> Entry {
+        Entry {
+            id: EntryId(Uuid::new_v4()),
+            fields: HashMap::new(),
+            autotype: None,
+            tags: HashSet::new(),
+            times: Times::default(),
+            custom_data: HashMap::new(),
+            icon_id: None,
+            custom_icon_id: None,
+            foreground_color: None,
+            background_color: None,
+            override_url: None,
+            quality_check: None,
+            history: History::new(),
+        }
+    }
+
     /// Get the unique identifier for the entry
     pub fn id(&self) -> EntryId {
         self.id

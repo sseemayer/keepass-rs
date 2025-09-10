@@ -30,7 +30,7 @@ pub use value::Value;
 use crate::config::DatabaseConfig;
 
 pub struct Database {
-    config: DatabaseConfig,
+    pub config: DatabaseConfig,
     root: GroupId,
 
     entries: HashMap<EntryId, Entry>,
@@ -45,10 +45,44 @@ pub struct Database {
     deleted_binary_attachments: HashSet<BinaryAttachmentId>,
     deleted_header_attachments: HashSet<HeaderAttachmentId>,
 
-    meta: Meta,
+    pub meta: Meta,
 }
 
 impl Database {
+    pub fn new() -> Self {
+        Database {
+            config: DatabaseConfig::default(),
+            root: GroupId::new(),
+            entries: HashMap::new(),
+            groups: HashMap::new(),
+            custom_icons: HashMap::new(),
+            binary_attachments: HashMap::new(),
+            header_attachments: HashMap::new(),
+            deleted_entries: HashSet::new(),
+            deleted_groups: HashSet::new(),
+            deleted_binary_attachments: HashSet::new(),
+            deleted_header_attachments: HashSet::new(),
+            meta: Meta::default(),
+        }
+    }
+
+    pub(crate) fn with_data(config: DatabaseConfig, root: GroupId, meta: Meta) -> Self {
+        Database {
+            config,
+            root,
+            entries: HashMap::new(),
+            groups: HashMap::new(),
+            custom_icons: HashMap::new(),
+            binary_attachments: HashMap::new(),
+            header_attachments: HashMap::new(),
+            deleted_entries: HashSet::new(),
+            deleted_groups: HashSet::new(),
+            deleted_binary_attachments: HashSet::new(),
+            deleted_header_attachments: HashSet::new(),
+            meta,
+        }
+    }
+
     pub fn root(&self) -> GroupRef {
         GroupRef::new(self, self.root)
     }
@@ -67,6 +101,18 @@ impl Database {
         self.entries
             .contains_key(&id)
             .then(move || EntryMut::new(self, id))
+    }
+
+    pub fn group(&self, id: GroupId) -> Option<GroupRef> {
+        self.groups
+            .contains_key(&id)
+            .then(move || GroupRef::new(self, id))
+    }
+
+    pub fn group_mut(&mut self, id: GroupId) -> Option<GroupMut> {
+        self.groups
+            .contains_key(&id)
+            .then(move || GroupMut::new(self, id))
     }
 
     pub fn custom_icon(&self, id: IconId) -> Option<IconRef> {
