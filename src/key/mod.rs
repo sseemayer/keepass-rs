@@ -1,6 +1,9 @@
 #[cfg(feature = "challenge_response")]
 mod yubikey;
 
+#[cfg(feature = "challenge_response")]
+pub use yubikey::ChallengeResponseKey;
+
 use std::io::Read;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
