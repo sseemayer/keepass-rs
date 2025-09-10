@@ -1,4 +1,4 @@
-use std::{convert::Infallible, error::Error};
+use std::error::Error;
 
 use aes::Aes256;
 use cipher::{
@@ -8,12 +8,10 @@ use cipher::{
 use sha2::{Digest, Sha256};
 
 pub(crate) trait Kdf {
-    type Error: Error;
-
     fn transform_key(
         &self,
         composite_key: &GenericArray<u8, U32>,
-    ) -> Result<GenericArray<u8, U32>, Self::Error>;
+    ) -> Result<GenericArray<u8, U32>, Box<dyn Error>>;
 }
 
 pub struct AesKdf {
@@ -22,12 +20,10 @@ pub struct AesKdf {
 }
 
 impl Kdf for AesKdf {
-    type Error = Infallible;
-
     fn transform_key(
         &self,
         composite_key: &GenericArray<u8, U32>,
-    ) -> Result<GenericArray<u8, U32>, Self::Error> {
+    ) -> Result<GenericArray<u8, U32>, Box<dyn Error>> {
         let cipher: Aes256 = cipher::KeyInit::new(&GenericArray::clone_from_slice(&self.seed));
         let mut block1 = GenericArray::clone_from_slice(&composite_key[..16]);
         let mut block2 = GenericArray::clone_from_slice(&composite_key[16..]);
@@ -55,12 +51,10 @@ pub struct Argon2Kdf {
 }
 
 impl Kdf for Argon2Kdf {
-    type Error = argon2::Error;
-
     fn transform_key(
         &self,
         composite_key: &GenericArray<u8, U32>,
-    ) -> Result<GenericArray<u8, U32>, Self::Error> {
+    ) -> Result<GenericArray<u8, U32>, Box<dyn Error>> {
         let config = argon2::Config {
             thread_mode: argon2::ThreadMode::Parallel,
             ad: &[],
