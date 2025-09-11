@@ -83,45 +83,45 @@ impl Database {
         }
     }
 
-    pub fn root(&self) -> GroupRef {
+    pub fn root(&self) -> GroupRef<'_> {
         GroupRef::new(self, self.root)
     }
 
-    pub fn root_mut(&mut self) -> GroupMut {
+    pub fn root_mut(&mut self) -> GroupMut<'_> {
         GroupMut::new(self, self.root)
     }
 
-    pub fn entry(&self, id: EntryId) -> Option<EntryRef> {
+    pub fn entry(&self, id: EntryId) -> Option<EntryRef<'_>> {
         self.entries
             .contains_key(&id)
             .then(move || EntryRef::new(self, id))
     }
 
-    pub fn entry_mut(&mut self, id: EntryId) -> Option<EntryMut> {
+    pub fn entry_mut(&mut self, id: EntryId) -> Option<EntryMut<'_>> {
         self.entries
             .contains_key(&id)
             .then(move || EntryMut::new(self, id))
     }
 
-    pub fn group(&self, id: GroupId) -> Option<GroupRef> {
+    pub fn group(&self, id: GroupId) -> Option<GroupRef<'_>> {
         self.groups
             .contains_key(&id)
             .then(move || GroupRef::new(self, id))
     }
 
-    pub fn group_mut(&mut self, id: GroupId) -> Option<GroupMut> {
+    pub fn group_mut(&mut self, id: GroupId) -> Option<GroupMut<'_>> {
         self.groups
             .contains_key(&id)
             .then(move || GroupMut::new(self, id))
     }
 
-    pub fn custom_icon(&self, id: IconId) -> Option<IconRef> {
+    pub fn custom_icon(&self, id: IconId) -> Option<IconRef<'_>> {
         self.custom_icons
             .contains_key(&id)
             .then(move || IconRef::new(self, id))
     }
 
-    pub fn custom_icon_mut(&mut self, id: IconId) -> Option<IconMut> {
+    pub fn custom_icon_mut(&mut self, id: IconId) -> Option<IconMut<'_>> {
         self.custom_icons
             .contains_key(&id)
             .then(move || IconMut::new(self, id))

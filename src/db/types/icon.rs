@@ -3,6 +3,7 @@ use uuid::Uuid;
 use crate::db::Database;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct IconId(Uuid);
 
 impl std::fmt::Display for IconId {
@@ -29,7 +30,7 @@ pub struct IconRef<'a> {
 }
 
 impl IconRef<'_> {
-    pub(crate) fn new(database: &Database, id: IconId) -> IconRef {
+    pub(crate) fn new(database: &Database, id: IconId) -> IconRef<'_> {
         IconRef { database, id }
     }
 }
@@ -50,7 +51,7 @@ pub struct IconMut<'a> {
 }
 
 impl IconMut<'_> {
-    pub(crate) fn new(database: &mut Database, id: IconId) -> IconMut {
+    pub(crate) fn new(database: &mut Database, id: IconId) -> IconMut<'_> {
         IconMut { database, id }
     }
 }
