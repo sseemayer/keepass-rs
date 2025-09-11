@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::db::{AutoType, Color, CustomDataItem, Database, History, IconId, IconRef, Times, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct EntryId(Uuid);
 
 impl std::fmt::Display for EntryId {
@@ -46,7 +47,8 @@ pub struct Entry {
     pub override_url: Option<String>,
     pub quality_check: Option<bool>,
 
-    history: History,
+    /// modification history of the entry
+    pub history: Option<History>,
 }
 
 impl Entry {
@@ -64,7 +66,7 @@ impl Entry {
             background_color: None,
             override_url: None,
             quality_check: None,
-            history: History::new(),
+            history: None,
         }
     }
 
@@ -81,10 +83,6 @@ impl Entry {
     /// Get custom data fields for the entry
     pub fn custom_data(&self) -> &HashMap<String, CustomDataItem> {
         &self.custom_data
-    }
-
-    pub fn history(&self) -> &History {
-        &self.history
     }
 
     // TODO: add ways to edit fields in need of protection
@@ -111,11 +109,11 @@ pub struct EntryRef<'a> {
 }
 
 impl EntryRef<'_> {
-    pub(crate) fn new(database: &Database, id: EntryId) -> EntryRef {
+    pub(crate) fn new(database: &Database, id: EntryId) -> EntryRef<'_> {
         EntryRef { database, id }
     }
 
-    pub fn custom_icon_id(&self) -> Option<IconRef> {
+    pub fn custom_icon_id(&self) -> Option<IconRef<'_>> {
         let icon_id = self.custom_icon_id?;
         self.database.custom_icon(icon_id)
     }
@@ -137,7 +135,7 @@ pub struct EntryMut<'a> {
 }
 
 impl EntryMut<'_> {
-    pub(crate) fn new(database: &mut Database, id: EntryId) -> EntryMut {
+    pub(crate) fn new(database: &mut Database, id: EntryId) -> EntryMut<'_> {
         EntryMut { database, id }
     }
 }
