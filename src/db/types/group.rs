@@ -87,6 +87,7 @@ impl Group {
             icon_id: None,
             custom_icon_id: None,
             groups: HashSet::new(),
+            entries: HashSet::new(),
             times: Times::new(),
             custom_data: HashMap::new(),
             is_expanded: true,
@@ -104,7 +105,7 @@ pub struct GroupRef<'a> {
 }
 
 impl GroupRef<'_> {
-    pub(crate) fn new(database: &Database, id: GroupId) -> GroupRef {
+    pub(crate) fn new(database: &Database, id: GroupId) -> GroupRef<'_> {
         GroupRef { database, id }
     }
 }
@@ -126,7 +127,7 @@ pub struct GroupMut<'a> {
 }
 
 impl GroupMut<'_> {
-    pub(crate) fn new(database: &mut Database, id: GroupId) -> GroupMut {
+    pub(crate) fn new(database: &mut Database, id: GroupId) -> GroupMut<'_> {
         GroupMut { database, id }
     }
 
