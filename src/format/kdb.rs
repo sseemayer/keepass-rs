@@ -3,7 +3,7 @@ use crate::{
     crypt::calculate_sha256,
     db::{Database, GroupId, Value},
     format::DatabaseVersion,
-    key::DatabaseKey,
+    key::{DatabaseKey, GetKeyElementsError},
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -153,10 +153,9 @@ fn parse_groups(
                     });
                 };
 
-                let mut group = db
-                    .group_mut(parent_id)
-                    .expect("parent group must exist")
-                    .add_group();
+                let mut parent = db.group_mut(parent_id).expect("parent group must exist");
+
+                let mut group = parent.add_group();
                 group.name = name;
 
                 parsing_gid = None;
@@ -286,7 +285,7 @@ fn parse_entries(
             0x0007 => {
                 parsing_fields.insert(
                     String::from("Password"),
-                    Value::protected_string(from_utf8(field_value).into()),
+                    Value::protected_string(from_utf8(field_value)),
                 );
             }
 
@@ -437,6 +436,9 @@ pub enum ParseKdbError {
 
     #[error("Invalid fixed cipher ID: {0}")]
     InvalidFixedCipherID(u32),
+
+    #[error("Error getting key elements: {0}")]
+    Key(#[from] GetKeyElementsError),
 
     #[error("Key derivation error: {0}")]
     KeyDerivation(String),
