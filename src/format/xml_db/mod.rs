@@ -1,30 +1,13 @@
+pub mod custom_serde;
 pub mod meta;
 pub mod timestamp;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use uuid::Uuid;
 
 use crate::format::xml_db::meta::Meta;
-
-pub fn ser_base64<S>(data: &[u8], s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    s.serialize_str(&base64_engine::STANDARD.encode(data))
-}
-
-pub fn de_base64<'de, D>(d: D) -> Result<Vec<u8>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(d)?;
-
-    base64_engine::STANDARD
-        .decode(s)
-        .map_err(serde::de::Error::custom)
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

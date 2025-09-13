@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     db::Color,
-    format::xml_db::{de_base64, ser_base64, timestamp::Timestamp, UUID},
+    format::xml_db::{
+        custom_serde::{base64 as cs_base64, bool as cs_bool},
+        timestamp::Timestamp,
+        UUID,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,10 +36,17 @@ pub struct Meta {
     history_max_items: Option<u32>,
     history_max_size: Option<u64>,
     setings_changed: Option<Timestamp>,
-    custom_data: Option<Vec<CustomDataItem>>,
+    custom_data: Option<CustomData>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct CustomData {
+    items: Vec<CustomDataItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename = "Icon", rename_all = "PascalCase")]
 struct CustomDataItem {
     key: String,
     value: CustomDataValue,
@@ -51,10 +62,19 @@ pub enum CustomDataValue {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct MemoryProtection {
+    #[serde(with = "cs_bool")]
     protect_title: bool,
+
+    #[serde(with = "cs_bool")]
     protect_username: bool,
+
+    #[serde(with = "cs_bool")]
     protect_password: bool,
+
+    #[serde(with = "cs_bool")]
     protect_url: bool,
+
+    #[serde(with = "cs_bool")]
     protect_notes: bool,
 }
 
@@ -64,7 +84,7 @@ struct Icon {
     #[serde(rename = "UUID")]
     uuid: UUID,
 
-    #[serde(serialize_with = "ser_base64", deserialize_with = "de_base64")]
+    #[serde(with = "cs_base64")]
     data: Vec<u8>,
 }
 
@@ -77,6 +97,23 @@ mod tests {
 
     #[derive(Serialize, Deserialize)]
     struct Test<T>(T);
+
+    #[test]
+    fn test_serialize_memory_protection() {
+        let mp = MemoryProtection {
+            protect_title: true,
+            protect_username: false,
+            protect_password: true,
+            protect_url: false,
+            protect_notes: true,
+        };
+
+        let serialized = quick_xml::se::to_string(&mp).unwrap();
+        assert_eq!(
+            serialized,
+            "<MemoryProtection><ProtectTitle>True</ProtectTitle><ProtectUsername>False</ProtectUsername><ProtectPassword>True</ProtectPassword><ProtectUrl>False</ProtectUrl><ProtectNotes>True</ProtectNotes></MemoryProtection>"
+        );
+    }
 
     #[test]
     fn test_serialize_icon() {
