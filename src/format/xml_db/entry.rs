@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     db::Color,
-    format::xml_db::{custom_serde::bool as cs_bool, times::Times, UUID},
+    format::xml_db::{
+        custom_serde::{cs_bool, cs_opt_fromstr, cs_opt_string},
+        times::Times,
+        UUID,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -11,14 +15,22 @@ pub struct Entry {
     #[serde(rename = "UUID")]
     pub uuid: UUID,
 
-    #[serde(rename = "IconID")]
+    #[serde(default, rename = "IconID", with = "cs_opt_fromstr")]
     pub icon_id: Option<u32>,
+
+    #[serde(default, with = "cs_opt_string")]
     pub foreground_color: Option<Color>,
+
+    #[serde(default, with = "cs_opt_string")]
     pub background_color: Option<Color>,
 
-    #[serde(rename = "OverrideURL")]
+    #[serde(default, rename = "OverrideURL", with = "cs_opt_string")]
     pub override_url: Option<String>,
+
+    #[serde(default, with = "cs_opt_string")]
     pub tags: Option<String>,
+
+    #[serde(default)]
     pub times: Option<Times>,
 
     #[serde(default, rename = "String")]
@@ -27,8 +39,10 @@ pub struct Entry {
     #[serde(default, rename = "Binary")]
     pub binary_fields: Vec<BinaryField>,
 
+    #[serde(default)]
     pub auto_type: Option<AutoType>,
 
+    #[serde(default)]
     pub history: Option<History>,
 }
 
@@ -44,7 +58,7 @@ pub struct StringValue {
     #[serde(default, rename = "@Protected", with = "cs_bool")]
     protected: bool,
 
-    #[serde(rename = "$value")]
+    #[serde(default, rename = "$value")]
     value: Option<String>,
 }
 
@@ -94,7 +108,7 @@ pub struct BinaryValue {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct AutoType {
-    #[serde(with = "cs_bool")]
+    #[serde(default, with = "cs_bool")]
     pub enabled: bool,
     pub data_transfer_obfuscation: Option<String>,
     pub default_sequence: Option<String>,
@@ -112,7 +126,7 @@ mod tests {
 
     use super::*;
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     struct Test<T>(T);
 
     #[test]
@@ -299,18 +313,20 @@ mod tests {
             <BackgroundColor/>
             <OverrideURL/>
             <Tags/>
-            <Times>
-                <CreationTime/>
-                <LastModificationTime/>
-                <LastAccessTime/>
-                <ExpiryTime/>
-                <Expires/>
-                <UsageCount/>
-                <LocationChanged/>
-            </Times>
+            <Times/>
             <AutoType/>
         </Entry>"#;
 
         let deserialized: Test<Entry> = quick_xml::de::from_str(xml).unwrap();
+
+        println!("{:#?}", deserialized);
+
+        assert!(deserialized.0.icon_id.is_none());
+        assert!(deserialized.0.foreground_color.is_none());
+        assert!(deserialized.0.background_color.is_none());
+        assert!(deserialized.0.override_url.is_none());
+        assert!(deserialized.0.tags.is_none());
+        assert!(deserialized.0.string_fields.is_empty());
+        assert!(deserialized.0.binary_fields.is_empty());
     }
 }

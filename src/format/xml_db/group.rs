@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::format::xml_db::{
-    custom_serde::{bool as cs_bool, opt_bool as cs_opt_bool},
+    custom_serde::{cs_bool, cs_opt_bool},
     entry::Entry,
     times::Times,
     UUID,
