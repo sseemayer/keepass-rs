@@ -19,14 +19,12 @@ pub struct BinaryAttachment {
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct HeaderAttachmentId(Uuid);
 
-/// Header attachment in the header of a database
+/// Header attachment in the header of a KDBX4 database
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct HeaderAttachment {
-    id: HeaderAttachmentId,
-
-    flags: u8,
-    data: Vec<u8>,
+    pub flags: u8,
+    pub data: Vec<u8>,
 }
 
 pub struct BinaryAttachmentRef<'a> {
