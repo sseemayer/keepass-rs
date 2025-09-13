@@ -31,7 +31,7 @@ impl Database {
             DatabaseVersion::KDB(_) => Ok(crate::format::kdb::parse_kdb(data, &key)?),
             DatabaseVersion::KDB2(_) => Err(DatabaseParseError::KDB2),
             DatabaseVersion::KDB3(_) => Ok(crate::format::kdbx3::parse_kdbx3(data, &key)?),
-            DatabaseVersion::KDB4(_) => todo!(), // Ok(parse_kdbx4(data, &key)?),
+            DatabaseVersion::KDB4(_) => Ok(crate::format::kdbx4::parse_kdbx4(data, &key)?),
         }
     }
 }
@@ -67,6 +67,7 @@ pub enum DatabaseParseError {
 
     #[error("Error parsing KDB v3 database: {0}")]
     KDB3(#[from] crate::format::kdbx3::KDBX3ParseError),
-    //#[error("Error parsing KDB v4 database: {0}")]
-    //KDB4(#[from] crate::format::kdbx4::ParseKdb4Error),
+
+    #[error("Error parsing KDB v4 database: {0}")]
+    KDB4(#[from] crate::format::kdbx4::ParseKdbx4Error),
 }
