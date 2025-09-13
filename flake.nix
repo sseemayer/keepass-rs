@@ -24,6 +24,7 @@
               rustc
               rustfmt
               rust-analyzer
+              cargo-tarpaulin
             ];
           };
         }

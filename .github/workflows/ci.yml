@@ -123,11 +123,9 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    container:
-      image: xd009642/tarpaulin:0.32.3
-      options: --security-opt seccomp=unconfined
     steps:
       - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v11
       - name: Generate code coverage
         run: |
-          cargo tarpaulin --verbose --timeout 120
+          nix develop --command cargo tarpaulin --verbose --timeout 120
