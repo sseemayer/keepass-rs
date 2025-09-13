@@ -1,19 +1,28 @@
 use serde::{Deserialize, Serialize};
 
-use crate::format::xml_db::{custom_serde::opt_bool as cs_opt_bool, timestamp::Timestamp};
+use crate::format::xml_db::{
+    custom_serde::{cs_opt_bool, cs_opt_string as cs_opt},
+    timestamp::Timestamp,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Times {
+    #[serde(default)]
     pub creation_time: Option<Timestamp>,
+    #[serde(default)]
     pub last_modification_time: Option<Timestamp>,
+    #[serde(default)]
     pub last_access_time: Option<Timestamp>,
+    #[serde(default)]
     pub expiry_time: Option<Timestamp>,
 
-    #[serde(with = "cs_opt_bool")]
+    #[serde(default, with = "cs_opt_bool")]
     pub expires: Option<bool>,
+    #[serde(default)]
     pub usage_count: Option<u32>,
 
+    #[serde(default)]
     pub location_changed: Option<Timestamp>,
 }
 
