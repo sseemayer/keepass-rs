@@ -181,6 +181,12 @@ pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
     Ok(db)
 }
 
+pub(crate) fn get_xml(data: &[u8], db_key: &DatabaseKey) -> Result<String, KDBX3ParseError> {
+    let (_config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
+    let xml_str = String::from_utf8_lossy(&xml).to_string();
+    Ok(xml_str)
+}
+
 #[derive(Error, Debug)]
 pub enum KDBX3ParseError {
     #[error(transparent)]

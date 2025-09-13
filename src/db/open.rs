@@ -23,13 +23,24 @@ impl Database {
         Ok(Database::parse(data.as_ref(), key)?)
     }
 
+    pub fn get_xml(data: &[u8], key: DatabaseKey) -> Result<String, DatabaseParseError> {
+        let database_version = DatabaseVersion::parse(data)?;
+
+        match database_version {
+            DatabaseVersion::KDB(_) => Err(DatabaseParseError::Unsupported(1)),
+            DatabaseVersion::KDB2(_) => Err(DatabaseParseError::Unsupported(2)),
+            DatabaseVersion::KDB3(_) => Ok(crate::format::kdbx3::get_xml(data, &key)?),
+            DatabaseVersion::KDB4(_) => Ok(crate::format::kdbx4::get_xml(data, &key)?),
+        }
+    }
+
     /// Parse a database from a byte slice
     pub fn parse(data: &[u8], key: DatabaseKey) -> Result<Self, DatabaseParseError> {
         let database_version = DatabaseVersion::parse(data)?;
 
         match database_version {
             DatabaseVersion::KDB(_) => Ok(crate::format::kdb::parse_kdb(data, &key)?),
-            DatabaseVersion::KDB2(_) => Err(DatabaseParseError::KDB2),
+            DatabaseVersion::KDB2(_) => Err(DatabaseParseError::Unsupported(2)),
             DatabaseVersion::KDB3(_) => Ok(crate::format::kdbx3::parse_kdbx3(data, &key)?),
             DatabaseVersion::KDB4(_) => Ok(crate::format::kdbx4::parse_kdbx4(data, &key)?),
         }
@@ -59,11 +70,11 @@ pub enum DatabaseParseError {
     #[error(transparent)]
     Version(#[from] DatabaseVersionParseError),
 
+    #[error("Error parsing database: unsupported version {0}")]
+    Unsupported(u8),
+
     #[error("Error parsing KDB v1 database: {0}")]
     KDB(#[from] crate::format::kdb::ParseKdbError),
-
-    #[error("Error parsing KDB v2 database: unsupported version")]
-    KDB2,
 
     #[error("Error parsing KDB v3 database: {0}")]
     KDB3(#[from] crate::format::kdbx3::KDBX3ParseError),

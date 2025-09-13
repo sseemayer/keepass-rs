@@ -43,6 +43,12 @@ pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
     Ok(db)
 }
 
+pub(crate) fn get_xml(data: &[u8], db_key: &DatabaseKey) -> Result<String, ParseKdbx4Error> {
+    let (_, _, _, xml) = decrypt_kdbx4(data, db_key)?;
+    let xml_str = String::from_utf8_lossy(&xml).to_string();
+    Ok(xml_str)
+}
+
 #[derive(Error, Debug)]
 pub enum ParseKdbx4Error {
     #[error("Error opening or decrypting KDBX4 database: {0}")]
