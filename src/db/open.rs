@@ -1,11 +1,6 @@
 use thiserror::Error;
 
 use crate::{
-    format::{
-        kdb::{parse_kdb, ParseKdbError},
-        //kdbx3::parse_kdbx3,
-        //kdbx4::parse_kdbx4,
-    },
     format::{DatabaseVersion, DatabaseVersionParseError},
     DatabaseKey,
 };
@@ -33,11 +28,10 @@ impl Database {
         let database_version = DatabaseVersion::parse(data)?;
 
         match database_version {
-            DatabaseVersion::KDB(_) => Ok(parse_kdb(data, &key)?),
-            //DatabaseVersion::KDB2(_) => Err(DatabaseParseError::KDB2),
-            //DatabaseVersion::KDB3(_) => Ok(parse_kdbx3(data, &key)?),
-            //DatabaseVersion::KDB4(_) => Ok(parse_kdbx4(data, &key)?),
-            _ => panic!("TODO implement"), // TODO: implement
+            DatabaseVersion::KDB(_) => Ok(crate::format::kdb::parse_kdb(data, &key)?),
+            DatabaseVersion::KDB2(_) => Err(DatabaseParseError::KDB2),
+            DatabaseVersion::KDB3(_) => Ok(crate::format::kdbx3::parse_kdbx3(data, &key)?),
+            DatabaseVersion::KDB4(_) => todo!(), // Ok(parse_kdbx4(data, &key)?),
         }
     }
 }
@@ -66,13 +60,13 @@ pub enum DatabaseParseError {
     Version(#[from] DatabaseVersionParseError),
 
     #[error("Error parsing KDB v1 database: {0}")]
-    KDB(#[from] ParseKdbError),
+    KDB(#[from] crate::format::kdb::ParseKdbError),
 
     #[error("Error parsing KDB v2 database: unsupported version")]
     KDB2,
-    //#[error("Error parsing KDB v3 database: {0}")]
-    //KDB3(#[from] ParseKdb3Error),
 
+    #[error("Error parsing KDB v3 database: {0}")]
+    KDB3(#[from] crate::format::kdbx3::KDBX3ParseError),
     //#[error("Error parsing KDB v4 database: {0}")]
-    //KDB4(#[from] ParseKdb4Error),
+    //KDB4(#[from] crate::format::kdbx4::ParseKdb4Error),
 }

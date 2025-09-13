@@ -10,12 +10,55 @@ use serde::{Deserialize, Serialize, Serializer};
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use uuid::Uuid;
 
-use crate::format::xml_db::meta::Meta;
+use crate::{
+    crypt::ciphers::Cipher,
+    format::xml_db::{group::Group, meta::Meta, timestamp::Timestamp},
+};
+
+pub fn parse_xml(
+    data: &[u8],
+    inner_decryptor: &dyn Cipher,
+    config: &crate::config::DatabaseConfig,
+) -> Result<crate::db::Database, quick_xml::DeError> {
+    let kdbx: KeePassFile = quick_xml::de::from_reader(data)?;
+    Ok(kdbx.xml_to_db(inner_decryptor, config))
+}
+
+#[cfg(feature = "save_kdbx4")]
+pub fn to_xml(db: &crate::db::Database, inner_encryptor: &dyn Cipher) -> Result<Vec<u8>, quick_xml::SeError> {
+    let kdbx = KeePassFile::db_to_xml(db, inner_encryptor);
+    Ok(quick_xml::se::to_string_with_root("KeePassFile", &kdbx)?
+        .as_bytes()
+        .to_vec())
+}
+
+pub trait XmlBridge {
+    type DbType;
+
+    fn xml_to_db(self, inner_decryptor: &dyn Cipher, config: &crate::config::DatabaseConfig) -> Self::DbType;
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn Cipher) -> Self;
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct KeePassFile {
     meta: Meta,
+    root: Root,
+}
+
+impl XmlBridge for KeePassFile {
+    type DbType = crate::db::Database;
+
+    fn xml_to_db(self, inner_decryptor: &dyn Cipher, config: &crate::config::DatabaseConfig) -> Self::DbType {
+        todo!()
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn Cipher) -> Self {
+        todo!()
+    }
 }
 
 /// A UUID deserialized from a Base64 string.
@@ -48,6 +91,28 @@ impl Serialize for UUID {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Root {
+    #[serde(rename = "Group")]
+    pub groups: Vec<Group>,
+
+    #[serde(rename = "DeletedObjects")]
+    pub deleted_objects: Option<DeletedObjects>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeletedObjects {
+    #[serde(rename = "DeletedObject")]
+    pub objects: Vec<DeletedObject>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeletedObject {
+    #[serde(rename = "UUID")]
+    uuid: UUID,
+    deletion_time: Timestamp,
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -58,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_uuid() {
-        let uuid_str = "AAECAwQFBgcICQoLDA0ODw=="; // Base64 for 0xdeadbeef
+        let uuid_str = "AAECAwQFBgcICQoLDA0ODw==";
         let uuid: UUID = quick_xml::de::from_str(&format!("{}", uuid_str)).unwrap();
         assert_eq!(
             uuid.0.as_bytes(),
