@@ -108,7 +108,7 @@ impl OuterCipherConfig {
 }
 
 impl TryFrom<&[u8]> for OuterCipherConfig {
-    type Error = InvalidOuterCipherID;
+    type Error = InvalidOuterCipherId;
     fn try_from(v: &[u8]) -> Result<OuterCipherConfig, Self::Error> {
         if v == CIPHERSUITE_AES256 {
             Ok(OuterCipherConfig::AES256)
@@ -117,14 +117,14 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
         } else if v == CIPHERSUITE_CHACHA20 {
             Ok(OuterCipherConfig::ChaCha20)
         } else {
-            Err(InvalidOuterCipherID(v.to_vec()))
+            Err(InvalidOuterCipherId(v.to_vec()))
         }
     }
 }
 
 #[derive(Error, Debug)]
 #[error("Invalid outer cipher ID: {0:x?}")]
-pub struct InvalidOuterCipherID(Vec<u8>);
+pub struct InvalidOuterCipherId(Vec<u8>);
 
 /// Choices for encrypting protected values inside of databases
 #[derive(Debug, Clone, PartialEq, Eq)]
