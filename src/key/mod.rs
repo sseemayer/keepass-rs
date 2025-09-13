@@ -1,32 +1,19 @@
+#[cfg(feature = "challenge_response")]
+mod yubikey;
+
 use std::io::Read;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
+use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-#[cfg(feature = "challenge_response")]
-use challenge_response::{
-    config::{Config, Mode, Slot},
-    ChallengeResponse,
-};
-
-use crate::{crypt::calculate_sha256, error::DatabaseKeyError};
+use crate::crypt::calculate_sha256;
 
 pub type KeyElement = Vec<u8>;
-pub type KeyElements = Vec<KeyElement>;
 
-#[cfg(feature = "challenge_response")]
-fn parse_yubikey_slot(slot_number: &str) -> Result<Slot, DatabaseKeyError> {
-    if let Some(slot) = Slot::from_str(slot_number) {
-        return Ok(slot);
-    }
-    Err(DatabaseKeyError::ChallengeResponseKeyError(
-        "Invalid slot number".to_string(),
-    ))
-}
-
-fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
+fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyfileError> {
     let parser = EventReader::new(xml);
 
     let mut tag_stack = Vec::new();
@@ -60,10 +47,8 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
         }
     }
 
-    let key_value = match key_value {
-        Some(k) => k,
-        None => return Err(DatabaseKeyError::InvalidKeyFile),
-    };
+    let key_value = key_value.ok_or(ParseXmlKeyfileError::EmptyKey)?;
+
     let key_bytes = key_value.as_bytes().to_vec();
 
     if key_version == Some("2.0".to_string()) {
@@ -90,7 +75,16 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     }
 }
 
-fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
+#[derive(Error, Debug)]
+pub enum ParseXmlKeyfileError {
+    #[error("Error parsing keyfile XML: {0}")]
+    Xml(#[from] xml::reader::Error),
+
+    #[error("Empty key in XML keyfile")]
+    EmptyKey,
+}
+
+fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, ParseXmlKeyfileError> {
     // try to parse the buffer as XML, if successful, use that data instead of full file
     if let Ok(v) = parse_xml_keyfile(buffer) {
         Ok(v)
@@ -98,124 +92,7 @@ fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
         // legacy binary key format
         Ok(buffer.to_vec())
     } else {
-        Ok(calculate_sha256(&[buffer])?.as_slice().to_vec())
-    }
-}
-
-#[cfg(feature = "challenge_response")]
-#[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
-pub enum ChallengeResponseKey {
-    LocalChallenge(String),
-    YubikeyChallenge(Yubikey, String),
-}
-
-#[cfg(feature = "challenge_response")]
-#[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
-pub struct Yubikey {
-    pub serial_number: u32,
-    pub name: Option<String>,
-}
-
-#[cfg(feature = "challenge_response")]
-impl ChallengeResponseKey {
-    fn perform_challenge(&self, challenge: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
-        match self {
-            ChallengeResponseKey::LocalChallenge(secret) => {
-                let secret_bytes = hex::decode(secret)
-                    .map_err(|e| DatabaseKeyError::ChallengeResponseKeyError(e.to_string()))?;
-
-                let response = crate::crypt::calculate_hmac_sha1(&[challenge], &secret_bytes)?.to_vec();
-                Ok(response)
-            }
-            ChallengeResponseKey::YubikeyChallenge(yubikey, slot_number) => {
-                let mut challenge_response_client = ChallengeResponse::new().map_err(|e| {
-                    DatabaseKeyError::ChallengeResponseKeyError(format!("Could not search for yubikey: {}", e))
-                })?;
-                let slot = parse_yubikey_slot(slot_number)?;
-
-                let yubikey_device =
-                    match challenge_response_client.find_device_from_serial(yubikey.serial_number) {
-                        Ok(d) => d,
-                        Err(_e) => {
-                            return Err(DatabaseKeyError::ChallengeResponseKeyError(
-                                "Yubikey not found".to_string(),
-                            ))
-                        }
-                    };
-
-                let mut config = Config::new_from(yubikey_device);
-                config = config.set_variable_size(true);
-                config = config.set_mode(Mode::Sha1);
-                config = config.set_slot(slot);
-
-                match challenge_response_client.challenge_response_hmac(challenge, config) {
-                    Ok(hmac_result) => Ok(hmac_result.to_vec()),
-                    Err(e) => Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
-                        "Could not perform challenge response: {}",
-                        e
-                    ))),
-                }
-            }
-        }
-    }
-
-    pub fn get_available_yubikeys() -> Result<Vec<Yubikey>, DatabaseKeyError> {
-        let mut challenge_response_client = ChallengeResponse::new().map_err(|e| {
-            DatabaseKeyError::ChallengeResponseKeyError(format!("Could not search for yubikey: {}", e))
-        })?;
-        let mut response: Vec<Yubikey> = vec![];
-        let yubikeys = match challenge_response_client.find_all_devices() {
-            Ok(y) => y,
-            Err(e) => {
-                return Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
-                    "Could not search for yubikeys: {}",
-                    e
-                )))
-            }
-        };
-        for yubikey in yubikeys {
-            let serial_number = match yubikey.serial {
-                Some(n) => n,
-                None => continue,
-            };
-            response.push(Yubikey {
-                serial_number,
-                name: yubikey.name,
-            });
-        }
-        Ok(response)
-    }
-
-    pub fn get_yubikey(serial_number: Option<u32>) -> Result<Yubikey, DatabaseKeyError> {
-        let all_yubikeys = ChallengeResponseKey::get_available_yubikeys()?;
-        if all_yubikeys.is_empty() {
-            return Err(DatabaseKeyError::ChallengeResponseKeyError(
-                "No yubikey connected to the system".to_string(),
-            ));
-        }
-
-        let serial_number = match serial_number {
-            Some(n) => n,
-            None => {
-                if all_yubikeys.len() != 1 {
-                    return Err(DatabaseKeyError::ChallengeResponseKeyError(
-                        "Multiple yubikeys are connected to the system. Please provide a serial number."
-                            .to_string(),
-                    ));
-                }
-                return Ok(all_yubikeys[0].clone());
-            }
-        };
-
-        for yubikey in all_yubikeys {
-            if yubikey.serial_number == serial_number {
-                return Ok(yubikey);
-            }
-        }
-        Err(DatabaseKeyError::ChallengeResponseKeyError(format!(
-            "Could not find yubikey with serial number {}",
-            serial_number
-        )))
+        Ok(calculate_sha256(&[buffer]).as_slice().to_vec())
     }
 }
 
@@ -225,7 +102,7 @@ pub struct DatabaseKey {
     password: Option<String>,
     keyfile: Option<Vec<u8>>,
     #[cfg(feature = "challenge_response")]
-    challenge_response_key: Option<ChallengeResponseKey>,
+    challenge_response_key: Option<yubikey::ChallengeResponseKey>,
     #[cfg(feature = "challenge_response")]
     challenge_response_result: Option<KeyElement>,
 }
@@ -244,9 +121,9 @@ impl DatabaseKey {
 
     #[cfg(all(feature = "challenge_response", feature = "utilities"))]
     pub fn with_hmac_sha1_secret_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
-        self.challenge_response_key = Some(ChallengeResponseKey::LocalChallenge(rpassword::prompt_password(
-            prompt_message,
-        )?));
+        self.challenge_response_key = Some(yubikey::ChallengeResponseKey::LocalChallenge(
+            rpassword::prompt_password(prompt_message)?,
+        ));
         Ok(self)
     }
 
@@ -260,13 +137,16 @@ impl DatabaseKey {
     }
 
     #[cfg(feature = "challenge_response")]
-    pub fn with_challenge_response_key(mut self, challenge_response_key: ChallengeResponseKey) -> Self {
+    pub fn with_challenge_response_key(
+        mut self,
+        challenge_response_key: yubikey::ChallengeResponseKey,
+    ) -> Self {
         self.challenge_response_key = Some(challenge_response_key);
         self
     }
 
     #[cfg(feature = "challenge_response")]
-    pub fn perform_challenge(mut self, kdf_seed: &[u8]) -> Result<Self, DatabaseKeyError> {
+    pub fn perform_challenge(mut self, kdf_seed: &[u8]) -> Result<Self, yubikey::KeyChallengeError> {
         if let Some(challenge_response_key) = &self.challenge_response_key {
             let response = challenge_response_key.perform_challenge(kdf_seed)?;
             self.challenge_response_result = Some(response);
@@ -279,11 +159,11 @@ impl DatabaseKey {
         Default::default()
     }
 
-    pub(crate) fn get_key_elements(&self) -> Result<KeyElements, DatabaseKeyError> {
+    pub(crate) fn get_key_elements(&self) -> Result<Vec<KeyElement>, GetKeyElementsError> {
         let mut out = Vec::new();
 
         if let Some(p) = &self.password {
-            out.push(calculate_sha256(&[p.as_bytes()])?.to_vec());
+            out.push(calculate_sha256(&[p.as_bytes()]).to_vec());
         }
 
         if let Some(ref f) = self.keyfile {
@@ -291,16 +171,14 @@ impl DatabaseKey {
         }
 
         if out.is_empty() {
-            return Err(DatabaseKeyError::IncorrectKey);
+            return Err(GetKeyElementsError::EmptyKey);
         }
 
         #[cfg(feature = "challenge_response")]
         if let Some(result) = &self.challenge_response_result {
-            out.push(calculate_sha256(&[result])?.as_slice().to_vec());
+            out.push(calculate_sha256(&[result]).as_slice().to_vec());
         } else if self.challenge_response_key.is_some() {
-            return Err(DatabaseKeyError::ChallengeResponseKeyError(
-                "Challenge-response was not performed".to_string(),
-            ));
+            return Err(GetKeyElementsError::NoChallengeResponse);
         }
 
         Ok(out)
@@ -319,15 +197,27 @@ impl DatabaseKey {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum GetKeyElementsError {
+    #[error("Invalid key - no key elements")]
+    EmptyKey,
+
+    #[error("Error parsing keyfile: {0}")]
+    Keyfile(#[from] ParseXmlKeyfileError),
+
+    #[error("Challenge-response was not performed")]
+    NoChallengeResponse,
+}
+
 #[cfg(test)]
 mod key_tests {
 
-    use crate::error::DatabaseKeyError;
+    use anyhow::Result;
 
     use super::DatabaseKey;
 
     #[test]
-    fn test_key() -> Result<(), DatabaseKeyError> {
+    fn test_key() -> Result<()> {
         let ke = DatabaseKey::new().with_password("asdf").get_key_elements()?;
         assert_eq!(ke.len(), 1);
 

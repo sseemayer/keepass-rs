@@ -39,12 +39,12 @@ flate2 = "1"
 xml-rs = "1.0"
 base64 = "0.22"
 hex-literal = "1"
-secstr = "0.5"
 chrono = { version = "0.4.23", default-features = false, features = [
     "serde",
     "clock",
     "std",
 ] }
+secrecy = "0.10.3"
 
 # cryptography
 rust-argon2 = "3.0"

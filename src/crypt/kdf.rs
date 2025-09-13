@@ -1,17 +1,19 @@
+use std::{convert::Infallible, error::Error};
+
 use aes::Aes256;
 use cipher::{
     generic_array::{typenum::U32, GenericArray},
-    BlockEncrypt, KeyInit,
+    BlockEncrypt,
 };
 use sha2::{Digest, Sha256};
 
-use super::CryptographyError;
-
 pub(crate) trait Kdf {
+    type Error: Error;
+
     fn transform_key(
         &self,
         composite_key: &GenericArray<u8, U32>,
-    ) -> Result<GenericArray<u8, U32>, CryptographyError>;
+    ) -> Result<GenericArray<u8, U32>, Self::Error>;
 }
 
 pub struct AesKdf {
@@ -20,11 +22,13 @@ pub struct AesKdf {
 }
 
 impl Kdf for AesKdf {
+    type Error = Infallible;
+
     fn transform_key(
         &self,
         composite_key: &GenericArray<u8, U32>,
-    ) -> Result<GenericArray<u8, U32>, CryptographyError> {
-        let cipher = Aes256::new(&GenericArray::clone_from_slice(&self.seed));
+    ) -> Result<GenericArray<u8, U32>, Self::Error> {
+        let cipher: Aes256 = cipher::KeyInit::new(&GenericArray::clone_from_slice(&self.seed));
         let mut block1 = GenericArray::clone_from_slice(&composite_key[..16]);
         let mut block2 = GenericArray::clone_from_slice(&composite_key[16..]);
         for _ in 0..self.rounds {
@@ -51,10 +55,12 @@ pub struct Argon2Kdf {
 }
 
 impl Kdf for Argon2Kdf {
+    type Error = argon2::Error;
+
     fn transform_key(
         &self,
         composite_key: &GenericArray<u8, U32>,
-    ) -> Result<GenericArray<u8, U32>, CryptographyError> {
+    ) -> Result<GenericArray<u8, U32>, Self::Error> {
         let config = argon2::Config {
             thread_mode: argon2::ThreadMode::Parallel,
             ad: &[],
@@ -72,15 +78,3 @@ impl Kdf for Argon2Kdf {
         Ok(*GenericArray::from_slice(&key))
     }
 }
-
-/*
-pub(crate) fn transform_key_argon2(
-    composite_key: &GenericArray<u8, U32>,
-) -> Result<GenericArray<u8, U32>> {
-    let version = match version {
-        0x10 => argon2::Version::Version10,
-        0x13 => argon2::Version::Version13,
-        _ => return Err(DatabaseIntegrityError::InvalidKDFVersion { version: version }.into()),
-    };
-}
-*/
