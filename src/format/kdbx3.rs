@@ -175,13 +175,20 @@ pub enum KDBX3OuterHeaderParseError {
 pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database, KDBX3ParseError> {
     let (config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
 
-    Ok(xml_db::parse::parse(&xml, &mut *inner_decryptor)?)
+    Ok(crate::format::xml_db::parse_xml(
+        &xml,
+        &mut *inner_decryptor,
+        &config,
+    )?)
 }
 
 #[derive(Error, Debug)]
 pub enum KDBX3ParseError {
     #[error(transparent)]
     Decryption(#[from] KDBX3DecryptError),
+
+    #[error("Error parsing XML inside KDBX3 database: {0}")]
+    Xml(#[from] quick_xml::DeError),
 }
 
 /// Open and decrypt a KeePass KDBX3 database from a source and a password
