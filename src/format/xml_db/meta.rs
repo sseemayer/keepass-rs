@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use base64::{engine::general_purpose as base64_engine, Engine as _};
+
 use crate::{
     db::Color,
     format::xml_db::{
@@ -42,21 +44,52 @@ pub struct Meta {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct CustomData {
+    #[serde(rename = "Item")]
     items: Vec<CustomDataItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename = "Icon", rename_all = "PascalCase")]
+#[serde(rename = "Item", rename_all = "PascalCase")]
 struct CustomDataItem {
     key: String,
     value: CustomDataValue,
     last_modification_time: Timestamp,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum CustomDataValue {
     String(String),
     Binary(Vec<u8>),
+}
+
+impl<'de> Deserialize<'de> for CustomDataValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        // Try to decode as base64, if it fails, treat it as a regular string
+        match base64_engine::STANDARD.decode(&s) {
+            Ok(v) => Ok(CustomDataValue::Binary(v)),
+            Err(_) => Ok(CustomDataValue::String(s)),
+        }
+    }
+}
+
+impl Serialize for CustomDataValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            CustomDataValue::String(s) => serializer.serialize_str(s),
+            CustomDataValue::Binary(b) => {
+                let b64 = base64_engine::STANDARD.encode(b);
+                serializer.serialize_str(&b64)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,12 +124,76 @@ struct Icon {
 #[cfg(test)]
 mod tests {
 
+    use std::str::FromStr;
+
+    use chrono::NaiveDateTime;
     use uuid::Uuid;
 
     use super::*;
 
     #[derive(Serialize, Deserialize)]
     struct Test<T>(T);
+
+    #[test]
+    fn test_serialize_custom_data() {
+        let cd = CustomData {
+            items: vec![
+                CustomDataItem {
+                    key: "example_key".to_string(),
+                    value: CustomDataValue::String("example_value".to_string()),
+                    last_modification_time: Timestamp::new_base64(
+                        NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
+                    ),
+                },
+                CustomDataItem {
+                    key: "binary_key".to_string(),
+                    value: CustomDataValue::Binary(vec![1, 2, 3, 4, 5]),
+                    last_modification_time: Timestamp::new_iso8601(
+                        NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
+                    ),
+                },
+            ],
+        };
+
+        let serialized = quick_xml::se::to_string(&cd).unwrap();
+
+        assert_eq!(
+            serialized,
+            "<CustomData><Item><Key>example_key</Key><Value>example_value</Value><LastModificationTime>cKSw3A4AAAA=</LastModificationTime></Item><Item><Key>binary_key</Key><Value>AQIDBAU=</Value><LastModificationTime>2023-10-05T12:34:56Z</LastModificationTime></Item></CustomData>"
+        );
+        assert!(serialized.contains("<Key>example_key</Key>"));
+        assert!(serialized.contains("<Value>example_value</Value>"));
+        assert!(serialized.contains("<Key>binary_key</Key>"));
+        assert!(serialized.contains("<Value>AQIDBAU=</Value>")); // Base64 for [1,2,3,4,5]
+    }
+
+    #[test]
+    fn test_deserialize_custom_data() {
+        let xml = r#"<CustomData>
+            <Item>
+                <Key>example_key</Key>
+                <Value>example_value</Value>
+                <LastModificationTime>cKSw3A4AAAA=</LastModificationTime>
+            </Item>
+            <Item>
+                <Key>binary_key</Key>
+                <Value>AQIDBAU=</Value>
+                <LastModificationTime>2023-10-05T12:34:56Z</LastModificationTime>
+            </Item>
+        </CustomData>"#;
+        let cd: CustomData = quick_xml::de::from_str(xml).unwrap();
+        assert_eq!(cd.items.len(), 2);
+        assert_eq!(cd.items[0].key, "example_key");
+        match &cd.items[0].value {
+            CustomDataValue::String(s) => assert_eq!(s, "example_value"),
+            _ => panic!("Expected string value"),
+        }
+        assert_eq!(cd.items[1].key, "binary_key");
+        match &cd.items[1].value {
+            CustomDataValue::Binary(b) => assert_eq!(b, &vec![1, 2, 3, 4, 5]),
+            _ => panic!("Expected binary value"),
+        }
+    }
 
     #[test]
     fn test_serialize_memory_protection() {
