@@ -18,10 +18,9 @@ Rust KeePass database file parser for KDB, KDBX3 and KDBX4, with experimental su
 
 ```rust
 use keepass::{
-    db::NodeRef,
     Database,
     DatabaseKey,
-    error::DatabaseOpenError
+    db::DatabaseOpenError,
 };
 use std::fs::File;
 
@@ -31,20 +30,6 @@ fn main() -> Result<(), DatabaseOpenError> {
     let key = DatabaseKey::new().with_password("demopass");
     let db = Database::open(&mut file, key)?;
 
-    // Iterate over all `Group`s and `Entry`s
-    for node in &db.root {
-        match node {
-            NodeRef::Group(g) => {
-                println!("Saw group '{0}'", g.name);
-            },
-            NodeRef::Entry(e) => {
-                let title = e.get_title().unwrap_or("(no title)");
-                let user = e.get_username().unwrap_or("(no username)");
-                let pass = e.get_password().unwrap_or("(no password)");
-                println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
-            }
-        }
-    }
 
     Ok(())
 }
@@ -64,26 +49,25 @@ You can enable the experimental support for saving KDBX4 databases using the `sa
 
 ```rust
 use keepass::{
-    db::{Database, Entry, Group, Node, NodeRef, Value},
+    db::{Database, Value, fields},
     DatabaseKey,
 };
 use std::fs::File;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut db = Database::new(Default::default());
+    let mut db = Database::new();
 
     db.meta.database_name = Some("Demo database".to_string());
 
-    let mut group = Group::new("Demo group");
+    let mut root = db.root_mut();
 
-    let mut entry = Entry::new();
-    entry.fields.insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
-    entry.fields.insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
-    entry.fields.insert("Password".to_string(), Value::Protected("hunter2".as_bytes().into()));
+    let mut group = root.add_group();
+    group.name = "Demo group".to_string();
 
-    group.add_child(entry);
-
-    db.root.add_child(group);
+    let mut entry = group.add_entry();
+    entry.set(fields::TITLE, Value::string("Demo entry"));
+    entry.set(fields::USERNAME, Value::string("jdoe"));
+    entry.set(fields::PASSWORD, Value::protected_string("hunter2"));
 
     #[cfg(feature = "save_kdbx4")]
     db.save(

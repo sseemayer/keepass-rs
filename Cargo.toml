@@ -22,7 +22,7 @@ include = [
 
 [features]
 utilities = ["anyhow", "clap", "rpassword", "serialization", "totp"]
-serialization = ["serde", "serde_json", "chrono/serde"]
+serialization = ["serde_json", "chrono/serde"]
 totp = ["totp-lite", "url", "base32"]
 save_kdbx4 = []
 challenge_response = ["sha1", "dep:challenge_response"]
@@ -43,7 +43,7 @@ chrono = { version = "0.4.23", default-features = false, features = [
     "clock",
     "std",
 ] }
-quick-xml = "0.38.3"
+quick-xml = { version = "0.38.3", features = ["serialize"] }
 secrecy = "0.10.3"
 serde = { version = "1", features = ["derive"] }
 
@@ -81,6 +81,7 @@ url = { version = "2.2", optional = true }
 base32 = { version = "0.5", optional = true }
 
 [dev-dependencies]
+anyhow = "1"
 rustfmt = "0.10"
 
 [[bin]]

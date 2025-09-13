@@ -7,9 +7,8 @@ pub use yubikey::ChallengeResponseKey;
 use std::io::Read;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
+use quick_xml::{encoding::EncodingError, events::Event, reader::Reader};
 use thiserror::Error;
-use xml::name::OwnedName;
-use xml::reader::{EventReader, XmlEvent};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypt::calculate_sha256;
@@ -17,25 +16,31 @@ use crate::crypt::calculate_sha256;
 pub type KeyElement = Vec<u8>;
 
 fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyfileError> {
-    let parser = EventReader::new(xml);
-
     let mut tag_stack = Vec::new();
 
     let mut key_version: Option<String> = None;
     let mut key_value: Option<String> = None;
 
-    for ev in parser {
-        match ev? {
-            XmlEvent::StartElement {
-                name: OwnedName { ref local_name, .. },
-                ..
-            } => {
-                tag_stack.push(local_name.clone());
+    let mut reader = Reader::from_reader(xml);
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Err(e) => return Err(ParseXmlKeyfileError::Xml(e)),
+
+            Ok(Event::Eof) => break,
+
+            Ok(Event::Start(e)) => {
+                tag_stack.push(String::from_utf8_lossy(e.name().as_ref()).to_string());
             }
-            XmlEvent::EndElement { .. } => {
+
+            Ok(Event::End(_)) => {
                 tag_stack.pop();
             }
-            XmlEvent::Characters(s) => {
+
+            Ok(Event::Text(e)) => {
+                let s = e.decode()?.into_owned();
+
                 if tag_stack == ["KeyFile", "Meta", "Version"] {
                     key_version = Some(s);
                     continue;
@@ -46,7 +51,8 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyfileError> {
                     continue;
                 }
             }
-            _ => {}
+
+            _ => (),
         }
     }
 
@@ -81,7 +87,10 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyfileError> {
 #[derive(Error, Debug)]
 pub enum ParseXmlKeyfileError {
     #[error("Error parsing keyfile XML: {0}")]
-    Xml(#[from] xml::reader::Error),
+    Xml(#[from] quick_xml::Error),
+
+    #[error("Error decoding keyfile text as UTF-8: {0}")]
+    Encoding(#[from] EncodingError),
 
     #[error("Empty key in XML keyfile")]
     EmptyKey,
