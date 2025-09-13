@@ -289,4 +289,28 @@ mod tests {
 
         assert!(deserialized.0.history.is_none());
     }
+
+    #[test]
+    fn test_deserialize_entry_minimal() {
+        let xml = r#"<Entry>
+            <UUID>AAECAwQFBgcICQoLDA0ODw==</UUID>
+            <IconID/>
+            <ForegroundColor/>
+            <BackgroundColor/>
+            <OverrideURL/>
+            <Tags/>
+            <Times>
+                <CreationTime/>
+                <LastModificationTime/>
+                <LastAccessTime/>
+                <ExpiryTime/>
+                <Expires/>
+                <UsageCount/>
+                <LocationChanged/>
+            </Times>
+            <AutoType/>
+        </Entry>"#;
+
+        let deserialized: Test<Entry> = quick_xml::de::from_str(xml).unwrap();
+    }
 }
