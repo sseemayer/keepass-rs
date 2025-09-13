@@ -71,7 +71,7 @@ struct MemoryProtection {
     #[serde(with = "cs_bool")]
     protect_password: bool,
 
-    #[serde(with = "cs_bool")]
+    #[serde(with = "cs_bool", rename = "ProtectURL")]
     protect_url: bool,
 
     #[serde(with = "cs_bool")]
@@ -109,10 +109,17 @@ mod tests {
         };
 
         let serialized = quick_xml::se::to_string(&mp).unwrap();
-        assert_eq!(
-            serialized,
-            "<MemoryProtection><ProtectTitle>True</ProtectTitle><ProtectUsername>False</ProtectUsername><ProtectPassword>True</ProtectPassword><ProtectUrl>False</ProtectUrl><ProtectNotes>True</ProtectNotes></MemoryProtection>"
-        );
+        assert_eq!(serialized, "<MemoryProtection><ProtectTitle>True</ProtectTitle><ProtectUsername>False</ProtectUsername><ProtectPassword>True</ProtectPassword><ProtectURL>False</ProtectURL><ProtectNotes>True</ProtectNotes></MemoryProtection>");
+    }
+
+    #[test]
+    fn test_deserialize_memory_protection() {
+        let mp: MemoryProtection = quick_xml::de::from_str( "<MemoryProtection><ProtectTitle>True</ProtectTitle><ProtectUsername>False</ProtectUsername><ProtectPassword>True</ProtectPassword><ProtectURL>False</ProtectURL><ProtectNotes>True</ProtectNotes></MemoryProtection>").unwrap();
+        assert!(mp.protect_title);
+        assert!(!mp.protect_username);
+        assert!(mp.protect_password);
+        assert!(!mp.protect_url);
+        assert!(mp.protect_notes);
     }
 
     #[test]
