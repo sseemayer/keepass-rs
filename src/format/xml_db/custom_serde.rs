@@ -49,3 +49,34 @@ pub mod bool {
         }
     }
 }
+
+/// Optional "True"/"False" boolean strings
+pub mod opt_bool {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(data: &Option<bool>, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match data {
+            Some(b) => s.serialize_str(if *b { "True" } else { "False" }),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(d: D) -> Result<Option<bool>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt = Option::<String>::deserialize(d)?;
+
+        match opt {
+            Some(s) => match s.as_str() {
+                "True" => Ok(Some(true)),
+                "False" => Ok(Some(false)),
+                _ => Err(serde::de::Error::custom(format!("Invalid boolean string: {}", s))),
+            },
+            None => Ok(None),
+        }
+    }
+}
