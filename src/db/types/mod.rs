@@ -38,7 +38,8 @@ pub struct Database {
 
     custom_icons: HashMap<IconId, Icon>,
     binary_attachments: HashMap<BinaryAttachmentId, BinaryAttachment>,
-    header_attachments: HashMap<HeaderAttachmentId, HeaderAttachment>,
+
+    pub header_attachments: Vec<HeaderAttachment>,
 
     deleted_entries: HashSet<EntryId>,
     deleted_groups: HashSet<GroupId>,
@@ -63,7 +64,7 @@ impl Database {
             groups: groups,
             custom_icons: HashMap::new(),
             binary_attachments: HashMap::new(),
-            header_attachments: HashMap::new(),
+            header_attachments: Vec::new(),
             deleted_entries: HashSet::new(),
             deleted_groups: HashSet::new(),
             deleted_binary_attachments: HashSet::new(),
@@ -85,7 +86,7 @@ impl Database {
             groups: groups,
             custom_icons: HashMap::new(),
             binary_attachments: HashMap::new(),
-            header_attachments: HashMap::new(),
+            header_attachments: Vec::new(),
             deleted_entries: HashSet::new(),
             deleted_groups: HashSet::new(),
             deleted_binary_attachments: HashSet::new(),

@@ -15,13 +15,9 @@ use crate::{
     format::xml_db::{group::Group, meta::Meta, timestamp::Timestamp},
 };
 
-pub fn parse_xml(
-    data: &[u8],
-    inner_decryptor: &dyn Cipher,
-    config: &crate::config::DatabaseConfig,
-) -> Result<crate::db::Database, quick_xml::DeError> {
+pub fn parse_xml(data: &[u8], inner_decryptor: &dyn Cipher) -> Result<crate::db::Database, quick_xml::DeError> {
     let kdbx: KeePassFile = quick_xml::de::from_reader(data)?;
-    Ok(kdbx.xml_to_db(inner_decryptor, config))
+    Ok(kdbx.xml_to_db(inner_decryptor))
 }
 
 #[cfg(feature = "save_kdbx4")]
@@ -35,7 +31,7 @@ pub fn to_xml(db: &crate::db::Database, inner_encryptor: &dyn Cipher) -> Result<
 pub trait XmlBridge {
     type DbType;
 
-    fn xml_to_db(self, inner_decryptor: &dyn Cipher, config: &crate::config::DatabaseConfig) -> Self::DbType;
+    fn xml_to_db(self, inner_decryptor: &dyn Cipher) -> Self::DbType;
 
     #[cfg(feature = "save_kdbx4")]
     fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn Cipher) -> Self;
@@ -51,7 +47,7 @@ struct KeePassFile {
 impl XmlBridge for KeePassFile {
     type DbType = crate::db::Database;
 
-    fn xml_to_db(self, inner_decryptor: &dyn Cipher, config: &crate::config::DatabaseConfig) -> Self::DbType {
+    fn xml_to_db(self, inner_decryptor: &dyn Cipher) -> Self::DbType {
         todo!()
     }
 
