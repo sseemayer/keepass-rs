@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::format::xml_db::{
-    custom_serde::{cs_bool, cs_opt_bool},
+    custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
     entry::Entry,
     times::Times,
     UUID,
@@ -12,26 +12,31 @@ use crate::format::xml_db::{
 pub struct Group {
     #[serde(rename = "UUID")]
     pub uuid: UUID,
+
     pub name: String,
 
+    #[serde(default, with = "cs_opt_string")]
     pub notes: Option<String>,
 
-    #[serde(rename = "IconID")]
+    #[serde(default, rename = "IconID", with = "cs_opt_fromstr")]
     pub icon_id: Option<u32>,
 
+    #[serde(default)]
     pub times: Option<Times>,
 
     #[serde(with = "cs_bool")]
     pub is_expanded: bool,
 
+    #[serde(default, with = "cs_opt_string")]
     pub default_auto_type_sequence: Option<String>,
 
-    #[serde(default, with = "cs_opt_bool")]
-    pub enable_auto_type: Option<bool>,
+    #[serde(default, with = "cs_opt_string")]
+    pub enable_auto_type: Option<String>,
 
-    #[serde(default, with = "cs_opt_bool")]
-    pub enable_searching: Option<bool>,
+    #[serde(default, with = "cs_opt_string")]
+    pub enable_searching: Option<String>,
 
+    #[serde(default, with = "cs_opt_string")]
     pub last_top_visible_entry: Option<UUID>,
 
     #[serde(default, rename = "Group")]
@@ -92,8 +97,8 @@ mod tests {
             group.0.default_auto_type_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
         );
-        assert_eq!(group.0.enable_auto_type.unwrap(), true);
-        assert_eq!(group.0.enable_searching.unwrap(), false);
+        assert_eq!(group.0.enable_auto_type.unwrap(), "True");
+        assert_eq!(group.0.enable_searching.unwrap(), "False");
         assert_eq!(group.0.entries.len(), 2);
         assert_eq!(group.0.groups.len(), 1);
     }

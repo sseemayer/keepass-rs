@@ -117,7 +117,7 @@ pub struct AutoType {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct History {
-    #[serde(rename = "Entry")]
+    #[serde(default, rename = "Entry")]
     pub entries: Vec<Entry>,
 }
 
