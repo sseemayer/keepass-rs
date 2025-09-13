@@ -1,31 +1,23 @@
 use keepass::{
-    db::{Database, Entry, Group, Value},
+    db::{fields, Database, Value},
     DatabaseKey,
 };
 use std::fs::File;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut db = Database::new(Default::default());
+    let mut db = Database::new();
 
     db.meta.database_name = Some("Demo database".to_string());
 
-    let mut group = Group::new("Demo group");
+    let mut root = db.root_mut();
 
-    let mut entry = Entry::new();
-    entry
-        .fields
-        .insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
-    entry
-        .fields
-        .insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
-    entry.fields.insert(
-        "Password".to_string(),
-        Value::Protected("hunter2".as_bytes().into()),
-    );
+    let mut group = root.add_group();
+    group.name = "Demo group".to_string();
 
-    group.add_child(entry);
-
-    db.root.add_child(group);
+    let mut entry = group.add_entry();
+    entry.set(fields::TITLE, Value::string("Demo entry"));
+    entry.set(fields::USERNAME, Value::string("jdoe"));
+    entry.set(fields::PASSWORD, Value::protected_string("hunter2"));
 
     #[cfg(feature = "save_kdbx4")]
     db.save(

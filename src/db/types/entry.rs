@@ -85,6 +85,14 @@ impl Entry {
         &self.custom_data
     }
 
+    pub fn set(&mut self, key: impl Into<String>, value: Value) {
+        self.fields.insert(key.into(), value);
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        self.fields.get(key)
+    }
+
     // TODO: add ways to edit fields in need of protection
 }
 
