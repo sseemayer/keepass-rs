@@ -80,9 +80,27 @@ impl Group {
         self.id
     }
 
-    fn new() -> Group {
+    pub(crate) fn new() -> Group {
         Group {
             id: GroupId::new(),
+            name: String::new(),
+            icon_id: None,
+            custom_icon_id: None,
+            groups: HashSet::new(),
+            entries: HashSet::new(),
+            times: Times::new(),
+            custom_data: HashMap::new(),
+            is_expanded: true,
+            default_autotype_sequence: None,
+            enable_autotype: None,
+            enable_searching: None,
+            last_top_visible_entry: None,
+        }
+    }
+
+    pub(crate) fn with_id(id: GroupId) -> Group {
+        Group {
+            id,
             name: String::new(),
             icon_id: None,
             custom_icon_id: None,

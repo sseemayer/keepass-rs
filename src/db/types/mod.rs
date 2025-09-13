@@ -50,11 +50,17 @@ pub struct Database {
 
 impl Database {
     pub fn new() -> Self {
+        let root = Group::new();
+        let root_id = root.id();
+
+        let mut groups = HashMap::new();
+        groups.insert(root_id, root);
+
         Database {
             config: DatabaseConfig::default(),
-            root: GroupId::new(),
+            root: root_id,
             entries: HashMap::new(),
-            groups: HashMap::new(),
+            groups: groups,
             custom_icons: HashMap::new(),
             binary_attachments: HashMap::new(),
             header_attachments: HashMap::new(),
@@ -66,12 +72,17 @@ impl Database {
         }
     }
 
-    pub(crate) fn with_data(config: DatabaseConfig, root: GroupId, meta: Meta) -> Self {
+    pub(crate) fn with_data(config: DatabaseConfig, root_id: GroupId, meta: Meta) -> Self {
+        let root = Group::with_id(root_id);
+
+        let mut groups = HashMap::new();
+        groups.insert(root_id, root);
+
         Database {
             config,
-            root,
+            root: root_id,
             entries: HashMap::new(),
-            groups: HashMap::new(),
+            groups: groups,
             custom_icons: HashMap::new(),
             binary_attachments: HashMap::new(),
             header_attachments: HashMap::new(),
