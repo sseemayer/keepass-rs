@@ -5,7 +5,7 @@ use base64::{engine::general_purpose as base64_engine, Engine as _};
 use crate::{
     db::Color,
     format::xml_db::{
-        custom_serde::{base64 as cs_base64, bool as cs_bool, opt_bool as cs_opt_bool},
+        custom_serde::{cs_base64, cs_bool, cs_opt_bool, cs_opt_string as cs_opt},
         timestamp::Timestamp,
         UUID,
     },
@@ -15,18 +15,43 @@ use crate::{
 #[serde(rename_all = "PascalCase")]
 pub struct Meta {
     generator: Option<String>,
+    #[serde(default)]
     database_name: Option<String>,
-    database_name_changed: Timestamp,
+
+    #[serde(default)]
+    database_name_changed: Option<Timestamp>,
+
+    #[serde(default)]
     database_description: Option<String>,
-    database_description_changed: Timestamp,
+
+    #[serde(default)]
+    database_description_changed: Option<Timestamp>,
+
+    #[serde(default)]
     default_username: Option<String>,
-    default_username_changed: Timestamp,
+
+    #[serde(default)]
+    default_username_changed: Option<Timestamp>,
+
+    #[serde(default)]
     maintenance_history_days: Option<u32>,
+
+    #[serde(default)]
     color: Option<Color>,
-    master_key_changed: Timestamp,
+
+    #[serde(default)]
+    master_key_changed: Option<Timestamp>,
+
+    #[serde(default)]
     master_key_change_rec: Option<i32>,
+
+    #[serde(default)]
     master_key_change_force: Option<i32>,
+
+    #[serde(default)]
     memory_protection: Option<MemoryProtection>,
+
+    #[serde(default)]
     custom_icons: Option<Vec<Icon>>,
 
     #[serde(with = "cs_opt_bool")]
@@ -34,14 +59,32 @@ pub struct Meta {
 
     #[serde(rename = "RecycleBinUUID")]
     recycle_bin_uuid: Option<UUID>,
+
+    #[serde(default)]
     recycle_bin_changed: Option<Timestamp>,
+
+    #[serde(default)]
     entry_templates_group: Option<UUID>,
+
+    #[serde(default)]
     entry_templates_group_changed: Option<Timestamp>,
+
+    #[serde(default)]
     last_selected_group: Option<UUID>,
+
+    #[serde(default)]
     last_top_visible_group: Option<UUID>,
+
+    #[serde(default)]
     history_max_items: Option<u32>,
+
+    #[serde(default)]
     history_max_size: Option<u64>,
+
+    #[serde(default)]
     settings_changed: Option<Timestamp>,
+
+    #[serde(default)]
     custom_data: Option<CustomData>,
 }
 
@@ -258,20 +301,22 @@ mod tests {
         let meta = Meta {
             generator: Some("TestGenerator".to_string()),
             database_name: Some("TestDB".to_string()),
-            database_name_changed: Timestamp::new_iso8601(
+            database_name_changed: Some(Timestamp::new_iso8601(
                 NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
-            ),
+            )),
             database_description: Some("A test database".to_string()),
-            database_description_changed: Timestamp::new_base64(
+            database_description_changed: Some(Timestamp::new_base64(
                 NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
-            ),
+            )),
             default_username: Some("admin".to_string()),
-            default_username_changed: Timestamp::new_iso8601(
+            default_username_changed: Some(Timestamp::new_iso8601(
                 NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
-            ),
+            )),
             maintenance_history_days: Some(30),
             color: Some(Color { r: 255, g: 0, b: 0 }),
-            master_key_changed: Timestamp::new_base64(NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()),
+            master_key_changed: Some(Timestamp::new_base64(
+                NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
+            )),
             master_key_change_rec: Some(-1),
             master_key_change_force: Some(42),
             memory_protection: Some(MemoryProtection {
@@ -415,23 +460,23 @@ mod tests {
         assert_eq!(meta.generator.unwrap(), "TestGenerator");
         assert_eq!(meta.database_name.unwrap(), "TestDB");
         assert_eq!(
-            meta.database_name_changed.time,
+            meta.database_name_changed.unwrap().time,
             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()
         );
         assert_eq!(meta.database_description.unwrap(), "A test database");
         assert_eq!(
-            meta.database_description_changed.time,
+            meta.database_description_changed.unwrap().time,
             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()
         );
         assert_eq!(meta.default_username.unwrap(), "admin");
         assert_eq!(
-            meta.default_username_changed.time,
+            meta.default_username_changed.unwrap().time,
             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()
         );
         assert_eq!(meta.maintenance_history_days.unwrap(), 30);
         assert_eq!(meta.color.unwrap(), Color { r: 255, g: 0, b: 0 });
         assert_eq!(
-            meta.master_key_changed.time,
+            meta.master_key_changed.unwrap().time,
             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()
         );
         assert_eq!(meta.master_key_change_rec.unwrap(), -1);
