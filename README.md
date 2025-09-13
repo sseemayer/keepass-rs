@@ -103,7 +103,7 @@ cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database
 ## Installation
 Add the following to the `dependencies` section of your `Cargo.toml`:
 
-```ignore
+```toml
 [dependencies]
 keepass = "*" # TODO replace with current version
 ```
@@ -124,7 +124,7 @@ Alternatively, you can add a `.cargo/config.toml` like in this project to ensure
 
 The `aes` optimizations are not yet enabled on stable rust. If you want a big performance boost you can build using nightly and enabling the `armv8` feature of the `aes` crate:
 
-```ignore
+```toml
 [dependencies.aes]
 # Needs at least 0.7.5 for the feature
 version = "0.7.5"
