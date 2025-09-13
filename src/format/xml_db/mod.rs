@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
-    format::xml_db::{group::Group, meta::Meta, timestamp::Timestamp},
+    format::xml_db::{custom_serde::cs_opt_string, group::Group, meta::Meta, timestamp::Timestamp},
 };
 
 pub fn parse_xml(data: &[u8], inner_decryptor: &dyn Cipher) -> Result<crate::db::Database, quick_xml::DeError> {
@@ -106,7 +106,9 @@ pub struct DeletedObjects {
 pub struct DeletedObject {
     #[serde(rename = "UUID")]
     uuid: UUID,
-    deletion_time: Timestamp,
+
+    #[serde(default, with = "cs_opt_string")]
+    deletion_time: Option<Timestamp>,
 }
 
 #[cfg(test)]

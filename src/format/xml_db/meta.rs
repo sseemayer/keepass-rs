@@ -5,7 +5,7 @@ use base64::{engine::general_purpose as base64_engine, Engine as _};
 use crate::{
     db::Color,
     format::xml_db::{
-        custom_serde::{cs_base64, cs_bool, cs_opt_bool, cs_opt_string as cs_opt},
+        custom_serde::{cs_base64, cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         timestamp::Timestamp,
         UUID,
     },
@@ -14,74 +14,76 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Meta {
+    #[serde(default, with = "cs_opt_string")]
     generator: Option<String>,
-    #[serde(default)]
+
+    #[serde(default, with = "cs_opt_string")]
     database_name: Option<String>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     database_name_changed: Option<Timestamp>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     database_description: Option<String>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     database_description_changed: Option<Timestamp>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     default_username: Option<String>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     default_username_changed: Option<Timestamp>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_fromstr")]
     maintenance_history_days: Option<u32>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     color: Option<Color>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     master_key_changed: Option<Timestamp>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_fromstr")]
     master_key_change_rec: Option<i32>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_fromstr")]
     master_key_change_force: Option<i32>,
 
     #[serde(default)]
     memory_protection: Option<MemoryProtection>,
 
     #[serde(default)]
-    custom_icons: Option<Vec<Icon>>,
+    custom_icons: Option<CustomIcons>,
 
-    #[serde(with = "cs_opt_bool")]
+    #[serde(default, with = "cs_opt_bool")]
     recycle_bin_enabled: Option<bool>,
 
-    #[serde(rename = "RecycleBinUUID")]
+    #[serde(default, rename = "RecycleBinUUID", with = "cs_opt_string")]
     recycle_bin_uuid: Option<UUID>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     recycle_bin_changed: Option<Timestamp>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     entry_templates_group: Option<UUID>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     entry_templates_group_changed: Option<Timestamp>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     last_selected_group: Option<UUID>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     last_top_visible_group: Option<UUID>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_fromstr")]
     history_max_items: Option<u32>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_fromstr")]
     history_max_size: Option<u64>,
 
-    #[serde(default)]
+    #[serde(default, with = "cs_opt_string")]
     settings_changed: Option<Timestamp>,
 
     #[serde(default)]
@@ -91,7 +93,7 @@ pub struct Meta {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct CustomData {
-    #[serde(rename = "Item")]
+    #[serde(default, rename = "Item")]
     items: Vec<CustomDataItem>,
 }
 
@@ -100,7 +102,9 @@ struct CustomData {
 struct CustomDataItem {
     key: String,
     value: CustomDataValue,
-    last_modification_time: Timestamp,
+
+    #[serde(default, with = "cs_opt_string")]
+    last_modification_time: Option<Timestamp>,
 }
 
 #[derive(Debug)]
@@ -142,20 +146,27 @@ impl Serialize for CustomDataValue {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct MemoryProtection {
-    #[serde(with = "cs_bool")]
-    protect_title: bool,
+    #[serde(default, with = "cs_opt_bool")]
+    protect_title: Option<bool>,
 
-    #[serde(with = "cs_bool")]
-    protect_username: bool,
+    #[serde(default, with = "cs_opt_bool")]
+    protect_username: Option<bool>,
 
-    #[serde(with = "cs_bool")]
-    protect_password: bool,
+    #[serde(default, with = "cs_opt_bool")]
+    protect_password: Option<bool>,
 
-    #[serde(with = "cs_bool", rename = "ProtectURL")]
-    protect_url: bool,
+    #[serde(default, with = "cs_opt_bool", rename = "ProtectURL")]
+    protect_url: Option<bool>,
 
-    #[serde(with = "cs_bool")]
-    protect_notes: bool,
+    #[serde(default, with = "cs_opt_bool")]
+    protect_notes: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct CustomIcons {
+    #[serde(default)]
+    icons: Vec<Icon>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -188,16 +199,14 @@ mod tests {
                 CustomDataItem {
                     key: "example_key".to_string(),
                     value: CustomDataValue::String("example_value".to_string()),
-                    last_modification_time: Timestamp::new_base64(
+                    last_modification_time: Some(Timestamp::new_base64(
                         NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
-                    ),
+                    )),
                 },
                 CustomDataItem {
                     key: "binary_key".to_string(),
                     value: CustomDataValue::Binary(vec![1, 2, 3, 4, 5]),
-                    last_modification_time: Timestamp::new_iso8601(
-                        NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
-                    ),
+                    last_modification_time: None,
                 },
             ],
         };
@@ -206,7 +215,7 @@ mod tests {
 
         assert_eq!(
             serialized,
-            "<CustomData><Item><Key>example_key</Key><Value>example_value</Value><LastModificationTime>cKSw3A4AAAA=</LastModificationTime></Item><Item><Key>binary_key</Key><Value>AQIDBAU=</Value><LastModificationTime>2023-10-05T12:34:56Z</LastModificationTime></Item></CustomData>"
+            "<CustomData><Item><Key>example_key</Key><Value>example_value</Value><LastModificationTime>cKSw3A4AAAA=</LastModificationTime></Item><Item><Key>binary_key</Key><Value>AQIDBAU=</Value><LastModificationTime/></Item></CustomData>"
         );
         assert!(serialized.contains("<Key>example_key</Key>"));
         assert!(serialized.contains("<Value>example_value</Value>"));
@@ -245,11 +254,11 @@ mod tests {
     #[test]
     fn test_serialize_memory_protection() {
         let mp = MemoryProtection {
-            protect_title: true,
-            protect_username: false,
-            protect_password: true,
-            protect_url: false,
-            protect_notes: true,
+            protect_title: Some(true),
+            protect_username: Some(false),
+            protect_password: Some(true),
+            protect_url: Some(false),
+            protect_notes: Some(true),
         };
 
         let serialized = quick_xml::se::to_string(&mp).unwrap();
@@ -259,11 +268,11 @@ mod tests {
     #[test]
     fn test_deserialize_memory_protection() {
         let mp: MemoryProtection = quick_xml::de::from_str( "<MemoryProtection><ProtectTitle>True</ProtectTitle><ProtectUsername>False</ProtectUsername><ProtectPassword>True</ProtectPassword><ProtectURL>False</ProtectURL><ProtectNotes>True</ProtectNotes></MemoryProtection>").unwrap();
-        assert!(mp.protect_title);
-        assert!(!mp.protect_username);
-        assert!(mp.protect_password);
-        assert!(!mp.protect_url);
-        assert!(mp.protect_notes);
+        assert_eq!(mp.protect_title, Some(true));
+        assert_eq!(mp.protect_username, Some(false));
+        assert_eq!(mp.protect_password, Some(true));
+        assert_eq!(mp.protect_url, Some(false));
+        assert_eq!(mp.protect_notes, Some(true));
     }
 
     #[test]
@@ -320,19 +329,21 @@ mod tests {
             master_key_change_rec: Some(-1),
             master_key_change_force: Some(42),
             memory_protection: Some(MemoryProtection {
-                protect_title: true,
-                protect_username: false,
-                protect_password: true,
-                protect_url: false,
-                protect_notes: true,
+                protect_title: Some(true),
+                protect_username: Some(false),
+                protect_password: Some(true),
+                protect_url: Some(false),
+                protect_notes: Some(true),
             }),
-            custom_icons: Some(vec![Icon {
-                uuid: UUID(Uuid::from_bytes([
-                    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-                    0x0f,
-                ])),
-                data: vec![1, 2, 3, 4, 5],
-            }]),
+            custom_icons: Some(CustomIcons {
+                icons: vec![Icon {
+                    uuid: UUID(Uuid::from_bytes([
+                        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                        0x0e, 0x0f,
+                    ])),
+                    data: vec![1, 2, 3, 4, 5],
+                }],
+            }),
             recycle_bin_enabled: Some(true),
             recycle_bin_uuid: Some(UUID(Uuid::from_bytes([
                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
@@ -362,16 +373,16 @@ mod tests {
                     CustomDataItem {
                         key: "example_key".to_string(),
                         value: CustomDataValue::String("example_value".to_string()),
-                        last_modification_time: Timestamp::new_base64(
+                        last_modification_time: Some(Timestamp::new_base64(
                             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
-                        ),
+                        )),
                     },
                     CustomDataItem {
                         key: "binary_key".to_string(),
                         value: CustomDataValue::Binary(vec![1, 2, 3, 4, 5]),
-                        last_modification_time: Timestamp::new_iso8601(
+                        last_modification_time: Some(Timestamp::new_iso8601(
                             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
-                        ),
+                        )),
                     },
                 ],
             }),
@@ -482,18 +493,18 @@ mod tests {
         assert_eq!(meta.master_key_change_rec.unwrap(), -1);
         assert_eq!(meta.master_key_change_force.unwrap(), 42);
         let mp = meta.memory_protection.unwrap();
-        assert!(mp.protect_title);
-        assert!(!mp.protect_username);
-        assert!(mp.protect_password);
-        assert!(!mp.protect_url);
-        assert!(mp.protect_notes);
+        assert_eq!(mp.protect_title, Some(true));
+        assert_eq!(mp.protect_username, Some(false));
+        assert_eq!(mp.protect_password, Some(true));
+        assert_eq!(mp.protect_url, Some(false));
+        assert_eq!(mp.protect_notes, Some(true));
         let icons = meta.custom_icons.unwrap();
-        assert_eq!(icons.len(), 1);
+        assert_eq!(icons.icons.len(), 1);
         assert_eq!(
-            icons[0].uuid.0.as_bytes(),
+            icons.icons[0].uuid.0.as_bytes(),
             &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
         );
-        assert_eq!(icons[0].data, vec![1, 2, 3, 4, 5]);
+        assert_eq!(icons.icons[0].data, vec![1, 2, 3, 4, 5]);
         assert_eq!(meta.recycle_bin_enabled.unwrap(), true);
         assert_eq!(
             meta.recycle_bin_uuid.unwrap().0.as_bytes(),
@@ -533,7 +544,7 @@ mod tests {
             _ => panic!("Expected string value"),
         }
         assert_eq!(
-            cd.items[0].last_modification_time.time,
+            cd.items[0].last_modification_time.as_ref().unwrap().time,
             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()
         );
         assert_eq!(cd.items[1].key, "binary_key");
@@ -542,7 +553,7 @@ mod tests {
             _ => panic!("Expected binary value"),
         }
         assert_eq!(
-            cd.items[1].last_modification_time.time,
+            cd.items[1].last_modification_time.as_ref().unwrap().time,
             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()
         );
     }

@@ -11,6 +11,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct GroupId(Uuid);
 
 impl GroupId {
