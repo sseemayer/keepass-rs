@@ -306,10 +306,12 @@ impl<'a> From<&'a VariantDictionaryValue> for Option<&'a Vec<u8>> {
 mod variant_dictionary_tests {
     use hex_literal::hex;
 
+    use anyhow::Result;
+
     use super::*;
 
     #[test]
-    fn parsing_errors() -> Result<(), VariantDictionaryParseError> {
+    fn parsing_errors() -> Result<()> {
         let res = VariantDictionary::parse("not-a-variant-dictionary".as_bytes());
         assert!(matches!(
             res,

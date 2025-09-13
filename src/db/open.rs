@@ -21,7 +21,7 @@ impl Database {
     }
 
     /// Load a database from a source implementing `std::io::Read`
-    pub fn load(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Self, DatabaseLoadError> {
+    pub fn open(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Self, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
 
@@ -52,7 +52,7 @@ pub enum GetDatabaseVersionError {
 }
 
 #[derive(Error, Debug)]
-pub enum DatabaseLoadError {
+pub enum DatabaseOpenError {
     #[error("I/O error reading database: {0}")]
     Io(#[from] std::io::Error),
 

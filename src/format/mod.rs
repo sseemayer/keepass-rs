@@ -1,5 +1,5 @@
 pub(crate) mod kdb;
-pub(crate) mod kdbx3;
+//pub(crate) mod kdbx3;
 //pub(crate) mod kdbx4;
 
 pub(crate) mod xml_db;
