@@ -20,6 +20,22 @@ pub struct Timestamp {
     pub time: NaiveDateTime,
 }
 
+impl Timestamp {
+    pub fn new_base64(time: NaiveDateTime) -> Self {
+        Timestamp {
+            mode: TimestampMode::Base64,
+            time,
+        }
+    }
+
+    pub fn new_iso8601(time: NaiveDateTime) -> Self {
+        Timestamp {
+            mode: TimestampMode::Iso8601,
+            time,
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for Timestamp {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
