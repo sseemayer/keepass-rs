@@ -5,14 +5,15 @@ mod compression;
 pub mod config;
 pub(crate) mod crypt;
 pub mod db;
-pub mod error;
+//pub mod error;
 pub(crate) mod format;
-pub(crate) mod hmac_block_stream;
-#[cfg(feature = "save_kdbx4")]
-mod io;
+//pub(crate) mod hmac_block_stream;
+//#[cfg(feature = "save_kdbx4")]
+//mod io;
 mod key;
+//pub mod olddb;
 pub(crate) mod variant_dictionary;
-pub(crate) mod xml_db;
+//pub(crate) mod xml_db;
 
 pub use self::db::Database;
 #[cfg(feature = "challenge_response")]

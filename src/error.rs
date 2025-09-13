@@ -254,25 +254,6 @@ pub enum BlockStreamError {
     BlockHashMismatch { block_index: u64 },
 }
 
-/// Errors while parsing a VariantDictionary
-#[derive(Debug, Error)]
-pub enum VariantDictionaryError {
-    #[error("Invalid variant dictionary version: {}", version)]
-    InvalidVersion { version: u16 },
-
-    #[error("Invalid value type: {}", value_type)]
-    InvalidValueType { value_type: u8 },
-
-    #[error("Missing key: {}", key)]
-    MissingKey { key: String },
-
-    #[error("Mistyped value: {}", key)]
-    Mistyped { key: String },
-
-    #[error("VariantDictionary did not end with null byte, when it should")]
-    NotTerminated,
-}
-
 /// Errors while parsing the XML document inside of a KeePass database
 #[derive(Debug, Error)]
 pub enum XmlParseError {

@@ -4,8 +4,8 @@ use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
 #[cfg(feature = "save_kdbx4")]
 use std::io::Write;
+use thiserror::Error;
 
-use crate::error::VariantDictionaryError;
 #[cfg(feature = "save_kdbx4")]
 use crate::io::WriteLengthTaggedExt;
 
@@ -32,11 +32,11 @@ impl VariantDictionary {
         Self { data: HashMap::new() }
     }
 
-    pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryError> {
+    pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryParseError> {
         let version = LittleEndian::read_u16(&buffer[0..2]);
 
         if version != VARIANT_DICTIONARY_VERSION {
-            return Err(VariantDictionaryError::InvalidVersion { version });
+            return Err(VariantDictionaryParseError::InvalidVersion { version });
         }
 
         let mut pos = 2;
@@ -69,7 +69,7 @@ impl VariantDictionary {
                 }
                 BYTES_TYPE_ID => VariantDictionaryValue::ByteArray(value_buffer.to_vec()),
                 _ => {
-                    return Err(VariantDictionaryError::InvalidValueType { value_type });
+                    return Err(VariantDictionaryParseError::InvalidValueType { value_type });
                 }
             };
 
@@ -80,7 +80,7 @@ impl VariantDictionary {
             // even though we can determine when to stop parsing a VariantDictionary by where we
             // are in the buffer, there should always be a value_type = 0 entry to denote that a
             // VariantDictionary is finished
-            return Err(VariantDictionaryError::NotTerminated);
+            return Err(VariantDictionaryParseError::NotTerminated);
         }
 
         Ok(VariantDictionary { data })
@@ -140,17 +140,17 @@ impl VariantDictionary {
         Ok(())
     }
 
-    pub(crate) fn get<'a, T: 'a>(&'a self, key: &str) -> Result<&'a T, VariantDictionaryError>
+    pub(crate) fn get<'a, T: 'a>(&'a self, key: &str) -> Result<&'a T, VariantDictionaryGetError>
     where
         &'a VariantDictionaryValue: Into<Option<&'a T>>,
     {
         let vdv = self
             .data
             .get(key)
-            .ok_or_else(|| VariantDictionaryError::MissingKey { key: key.to_owned() })?;
+            .ok_or_else(|| VariantDictionaryGetError::MissingKey { key: key.to_owned() })?;
 
         vdv.into()
-            .ok_or_else(|| VariantDictionaryError::Mistyped { key: key.to_owned() })
+            .ok_or_else(|| VariantDictionaryGetError::Mistyped { key: key.to_owned() })
     }
 
     #[cfg(feature = "save_kdbx4")]
@@ -172,6 +172,29 @@ pub enum VariantDictionaryValue {
     Int64(i64),
     String(String),
     ByteArray(Vec<u8>),
+}
+
+/// Errors while retrieving data from a VariantDictionary
+#[derive(Error, Debug)]
+pub enum VariantDictionaryGetError {
+    #[error("Missing key: {}", key)]
+    MissingKey { key: String },
+
+    #[error("Mistyped value: {}", key)]
+    Mistyped { key: String },
+}
+
+/// Errors while parsing a VariantDictionary
+#[derive(Error, Debug)]
+pub enum VariantDictionaryParseError {
+    #[error("Invalid variant dictionary version: {}", version)]
+    InvalidVersion { version: u16 },
+
+    #[error("Invalid value type: {}", value_type)]
+    InvalidValueType { value_type: u8 },
+
+    #[error("VariantDictionary did not end with null byte, when it should")]
+    NotTerminated,
 }
 
 impl From<u32> for VariantDictionaryValue {
@@ -286,28 +309,31 @@ mod variant_dictionary_tests {
     use super::*;
 
     #[test]
-    fn parsing_errors() -> Result<(), VariantDictionaryError> {
+    fn parsing_errors() -> Result<(), VariantDictionaryParseError> {
         let res = VariantDictionary::parse("not-a-variant-dictionary".as_bytes());
-        assert!(matches!(res, Err(VariantDictionaryError::InvalidVersion { .. })));
+        assert!(matches!(
+            res,
+            Err(VariantDictionaryParseError::InvalidVersion { .. })
+        ));
 
         let res = VariantDictionary::parse(&hex!("0001"));
-        assert!(matches!(res, Err(VariantDictionaryError::NotTerminated)));
+        assert!(matches!(res, Err(VariantDictionaryParseError::NotTerminated)));
 
         let res = VariantDictionary::parse(&hex!("000100"));
         assert!(res.is_ok());
 
-        //                                        ver t key_len key   val_len value   termination
-        //                                        |   | |       |     |       |       |
+        //                                                                   ver t key_len key   val_len value   termination
+        //                                                                   |   | |       |     |       |       |
         let res = VariantDictionary::parse(&hex!("000104030000004142430400000015CD5B0700"))?;
         assert_eq!(res.get::<u32>("ABC")?, &123456789);
 
-        //                                        ver t key_len key val_len termination
-        //                                        |   | |       |   |       |
+        //                                                                              ver t key_len key val_len termination
+        //                                                                              |   | |       |   |       |
         let res = VariantDictionary::parse(&hex!("0001AA0200000041420000000000"));
         dbg!(&res);
         assert!(matches!(
             res,
-            Err(VariantDictionaryError::InvalidValueType { value_type: 0xAA })
+            Err(VariantDictionaryParseError::InvalidValueType { value_type: 0xAA })
         ));
 
         Ok(())
