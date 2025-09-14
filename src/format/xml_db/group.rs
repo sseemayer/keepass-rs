@@ -19,7 +19,7 @@ pub struct Group {
     pub notes: Option<String>,
 
     #[serde(default, rename = "IconID", with = "cs_opt_fromstr")]
-    pub icon_id: Option<u32>,
+    pub icon_id: Option<usize>,
 
     #[serde(default)]
     pub times: Option<Times>,

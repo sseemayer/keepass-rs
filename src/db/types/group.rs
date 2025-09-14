@@ -64,16 +64,13 @@ pub struct Group {
     pub default_autotype_sequence: Option<String>,
 
     /// Whether autotype is enabled by default for entries in this group
-    /// TODO: in example XML files, this is "null" - what should the type be?
-    pub enable_autotype: Option<String>,
+    pub enable_autotype: Option<bool>,
 
     /// Whether searching is enabled by default for entries in this group
-    pub enable_searching: Option<String>,
+    pub enable_searching: Option<bool>,
 
     /// UUID for the last top visible entry
-    // TODO figure out what that is supposed to mean. According to the KeePass sourcecode, it has
-    // something to do with restoring selected items when re-opening a database.
-    last_top_visible_entry: Option<Uuid>,
+    pub(crate) last_top_visible_entry: Option<EntryId>,
 }
 
 impl Group {
@@ -85,11 +82,12 @@ impl Group {
         Group {
             id: GroupId::new(),
             name: String::new(),
+            notes: None,
             icon_id: None,
             custom_icon_id: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
-            times: Times::new(),
+            times: Times::default(),
             custom_data: HashMap::new(),
             is_expanded: true,
             default_autotype_sequence: None,
@@ -103,11 +101,12 @@ impl Group {
         Group {
             id,
             name: String::new(),
+            notes: None,
             icon_id: None,
             custom_icon_id: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
-            times: Times::new(),
+            times: Times::default(),
             custom_data: HashMap::new(),
             is_expanded: true,
             default_autotype_sequence: None,
