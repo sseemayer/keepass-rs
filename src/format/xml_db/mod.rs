@@ -48,7 +48,9 @@ impl XmlBridge for KeePassFile {
     type DbType = crate::db::Database;
 
     fn xml_to_db(self, inner_decryptor: &dyn Cipher) -> Self::DbType {
-        todo!()
+        let mut db = crate::db::Database::new();
+
+        db
     }
 
     #[cfg(feature = "save_kdbx4")]

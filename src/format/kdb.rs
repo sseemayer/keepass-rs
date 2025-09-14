@@ -419,7 +419,7 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, P
         public_custom_data: Default::default(),
     };
 
-    let mut db = Database::with_data(config, GroupId::new(), Default::default());
+    let mut db = Database::with_data(config, GroupId::new());
 
     let mut pos = data;
 

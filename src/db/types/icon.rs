@@ -6,6 +6,16 @@ use crate::db::Database;
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct IconId(Uuid);
 
+impl IconId {
+    pub(crate) fn from_uuid(id: Uuid) -> IconId {
+        IconId(id)
+    }
+
+    pub fn to_uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
 impl std::fmt::Display for IconId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -17,10 +27,16 @@ impl std::fmt::Display for IconId {
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Icon {
     /// UUID, to reference the icon
-    id: IconId,
+    pub(crate) id: IconId,
 
     /// Image data
-    data: Vec<u8>,
+    pub data: Vec<u8>,
+}
+
+impl Icon {
+    pub fn id(&self) -> IconId {
+        self.id
+    }
 }
 
 /// An immutable reference to an icon in the database

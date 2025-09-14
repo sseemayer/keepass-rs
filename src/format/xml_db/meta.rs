@@ -5,9 +5,9 @@ use base64::{engine::general_purpose as base64_engine, Engine as _};
 use crate::{
     db::Color,
     format::xml_db::{
-        custom_serde::{cs_base64, cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
+        custom_serde::{cs_base64, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         timestamp::Timestamp,
-        UUID,
+        XmlBridge, UUID,
     },
 };
 
@@ -36,7 +36,7 @@ pub struct Meta {
     default_username_changed: Option<Timestamp>,
 
     #[serde(default, with = "cs_opt_fromstr")]
-    maintenance_history_days: Option<u32>,
+    maintenance_history_days: Option<usize>,
 
     #[serde(default, with = "cs_opt_string")]
     color: Option<Color>,
@@ -45,10 +45,10 @@ pub struct Meta {
     master_key_changed: Option<Timestamp>,
 
     #[serde(default, with = "cs_opt_fromstr")]
-    master_key_change_rec: Option<i32>,
+    master_key_change_rec: Option<isize>,
 
     #[serde(default, with = "cs_opt_fromstr")]
-    master_key_change_force: Option<i32>,
+    master_key_change_force: Option<isize>,
 
     #[serde(default)]
     memory_protection: Option<MemoryProtection>,
@@ -78,10 +78,10 @@ pub struct Meta {
     last_top_visible_group: Option<UUID>,
 
     #[serde(default, with = "cs_opt_fromstr")]
-    history_max_items: Option<u32>,
+    history_max_items: Option<usize>,
 
     #[serde(default, with = "cs_opt_fromstr")]
-    history_max_size: Option<u64>,
+    history_max_size: Option<usize>,
 
     #[serde(default, with = "cs_opt_string")]
     settings_changed: Option<Timestamp>,
@@ -90,11 +90,160 @@ pub struct Meta {
     custom_data: Option<CustomData>,
 }
 
+impl XmlBridge for Meta {
+    type DbType = crate::db::Meta;
+
+    fn xml_to_db(self, inner_decryptor: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+        // NOTE: custom icons and binary attachments are moved out of the Meta into the main
+        // databsase, so they are not converted here.
+        crate::db::Meta {
+            generator: self.generator,
+            database_name: self.database_name,
+            database_name_changed: self.database_name_changed.map(|t| t.time),
+            database_description: self.database_description,
+            database_description_changed: self.database_description_changed.map(|t| t.time),
+            default_username: self.default_username,
+            default_username_changed: self.default_username_changed.map(|t| t.time),
+            maintenance_history_days: self.maintenance_history_days,
+            color: self.color,
+            master_key_changed: self.master_key_changed.map(|t| t.time),
+            master_key_change_rec: self.master_key_change_rec,
+            master_key_change_force: self.master_key_change_force,
+            memory_protection: self.memory_protection.map(|mp| mp.xml_to_db(inner_decryptor)),
+            recyclebin_enabled: self.recycle_bin_enabled,
+            recyclebin_uuid: self.recycle_bin_uuid.map(|u| u.0),
+            recyclebin_changed: self.recycle_bin_changed.map(|t| t.time),
+            entry_templates_group: self.entry_templates_group.map(|u| u.0),
+            entry_templates_group_changed: self.entry_templates_group_changed.map(|t| t.time),
+            last_selected_group: self.last_selected_group.map(|u| u.0),
+            last_top_visible_group: self.last_top_visible_group.map(|u| u.0),
+            history_max_items: self.history_max_items,
+            history_max_size: self.history_max_size,
+            settings_changed: self.settings_changed.map(|t| t.time),
+            custom_data: self
+                .custom_data
+                .map(|cd| cd.xml_to_db(inner_decryptor).into_iter().collect())
+                .unwrap_or_default(),
+        }
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn crate::crypt::ciphers::Cipher) -> Self {
+        Self {
+            generator: db.generator.clone(),
+            database_name: db.database_name.clone(),
+            database_name_changed: db
+                .database_name_changed
+                .as_ref()
+                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            database_description: db.database_description.clone(),
+            database_description_changed: db
+                .database_description_changed
+                .as_ref()
+                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            default_username: db.default_username.clone(),
+            default_username_changed: db
+                .default_username_changed
+                .as_ref()
+                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            maintenance_history_days: db.maintenance_history_days,
+            color: db.color.clone(),
+            master_key_changed: db
+                .master_key_changed
+                .as_ref()
+                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            master_key_change_rec: db.master_key_change_rec,
+            master_key_change_force: db.master_key_change_force,
+            memory_protection: db
+                .memory_protection
+                .as_ref()
+                .map(|mp| MemoryProtection::db_to_xml(mp, inner_encryptor)),
+            custom_icons: None, // Handled separately
+            recycle_bin_enabled: db.recyclebin_enabled,
+            recycle_bin_uuid: db.recyclebin_uuid.map(|u| UUID(u)),
+            recycle_bin_changed: db
+                .recyclebin_changed
+                .as_ref()
+                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            entry_templates_group: db.entry_templates_group.map(|u| UUID(u)),
+            entry_templates_group_changed: db
+                .entry_templates_group_changed
+                .as_ref()
+                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            last_selected_group: db.last_selected_group.map(|u| UUID(u)),
+            last_top_visible_group: db.last_top_visible_group.map(|u| UUID(u)),
+            history_max_items: db.history_max_items,
+            history_max_size: db.history_max_size,
+            settings_changed: db
+                .settings_changed
+                .as_ref()
+                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            custom_data: Some(CustomData::db_to_xml(
+                &db.custom_data
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
+                inner_encryptor,
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct CustomData {
     #[serde(default, rename = "Item")]
     items: Vec<CustomDataItem>,
+}
+
+impl XmlBridge for CustomData {
+    type DbType = Vec<(String, crate::db::CustomDataItem)>;
+
+    fn xml_to_db(self, inner_decryptor: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+        self.items
+            .into_iter()
+            .map(|item| {
+                let value = item.value.xml_to_db(inner_decryptor);
+
+                let last_modification_time = item.last_modification_time.map(|t| t.xml_to_db(inner_decryptor));
+
+                (
+                    item.key,
+                    crate::db::CustomDataItem {
+                        value: Some(value),
+                        last_modification_time,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn crate::crypt::ciphers::Cipher) -> Self {
+        let items = db
+            .iter()
+            .map(|(key, item)| {
+                let value = item
+                    .value
+                    .as_ref()
+                    .map(|v| CustomDataValue::db_to_xml(v, inner_encryptor))
+                    .unwrap_or(CustomDataValue::String(String::new()));
+
+                let last_modification_time = item
+                    .last_modification_time
+                    .as_ref()
+                    .map(|t| Timestamp::db_to_xml(t, inner_encryptor));
+
+                CustomDataItem {
+                    key: key.clone(),
+                    value,
+                    last_modification_time,
+                }
+            })
+            .collect();
+
+        Self { items }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,6 +260,26 @@ struct CustomDataItem {
 pub enum CustomDataValue {
     String(String),
     Binary(Vec<u8>),
+}
+
+impl XmlBridge for CustomDataValue {
+    type DbType = crate::db::Value;
+
+    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+        match self {
+            CustomDataValue::String(s) => crate::db::Value::string(s),
+            CustomDataValue::Binary(b) => crate::db::Value::bytes(b),
+        }
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(db: &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
+        match db {
+            crate::db::Value::String(s) => CustomDataValue::String(s.clone()),
+            crate::db::Value::Bytes(b) => CustomDataValue::Binary(b.clone()),
+            _ => panic!("Cannot serialize protected CustomData values"),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for CustomDataValue {
@@ -162,6 +331,31 @@ struct MemoryProtection {
     protect_notes: Option<bool>,
 }
 
+impl XmlBridge for MemoryProtection {
+    type DbType = crate::db::MemoryProtection;
+
+    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+        crate::db::MemoryProtection {
+            protect_title: self.protect_title.unwrap_or(false),
+            protect_username: self.protect_username.unwrap_or(false),
+            protect_password: self.protect_password.unwrap_or(true),
+            protect_url: self.protect_url.unwrap_or(false),
+            protect_notes: self.protect_notes.unwrap_or(false),
+        }
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(db: &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
+        Self {
+            protect_title: Some(db.protect_title),
+            protect_username: Some(db.protect_username),
+            protect_password: Some(db.protect_password),
+            protect_url: Some(db.protect_url),
+            protect_notes: Some(db.protect_notes),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct CustomIcons {
@@ -177,6 +371,25 @@ struct Icon {
 
     #[serde(with = "cs_base64")]
     data: Vec<u8>,
+}
+
+impl XmlBridge for Icon {
+    type DbType = crate::db::Icon;
+
+    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+        crate::db::Icon {
+            id: crate::db::IconId::from_uuid(self.uuid.0),
+            data: self.data,
+        }
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(db: &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
+        Self {
+            uuid: UUID(db.id.to_uuid()),
+            data: db.data.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
