@@ -1,2 +1,9 @@
 [build]
+# Enable CPU-specific optimizations.
+# This can greatly improve performance for AES key derivation.
 rustflags = "-C target-cpu=native"
+
+# Performance optimizations for ARMv8 are available since Rust 1.61
+# via the `aes_armv8` configuration option.
+[target.'cfg(target_arch = "aarch64")']
+rustflags = ["--cfg", "aes_armv8"]
