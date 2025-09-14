@@ -72,8 +72,24 @@ jobs:
         run: cargo build --no-default-features
 
   test:
-    name: Test Suite
-    runs-on: ubuntu-latest
+    name: Test Suite on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: x86_64
+            with_cross_compilation: false
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            name: armv7
+            with_cross_compilation: true
+          # - os: ubuntu-latest-arm64
+          #   target: aarch64-unknown-linux-gnu
+          #   name: armv8
+          #   with_cross_compilation: false
+
     env:
       RUSTFLAGS: -D warnings
     steps:
@@ -81,28 +97,36 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      - name: run cargo test
-        run: cargo test --all-features
 
-  armv7-test:
-    name: ARMv7 Test Suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-
-      - name: install armv7 target
-        run: rustup target add armv7-unknown-linux-musleabihf
+      - name: install ${{ matrix.target }} target
+        if: matrix.with_cross_compilation
+        run: rustup target add ${{ matrix.target }}
 
       - name: Install cross
-        run: |
-          cargo install cross
+        if: matrix.with_cross_compilation
+        run: cargo install cross
 
-      - run: |
-          cross test --release --target armv7-unknown-linux-musleabihf tests::kdbx4_entry --all-features
+      - name: run cargo test
+        if: '!matrix.with_cross_compilation'
+        run: cargo test --all-features
+
+      - name: run cross test
+        if: matrix.with_cross_compilation
+        run: cross test --release --target ${{ matrix.target }} --all-features
+
+  test-suite:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    steps:
+      - name: Check test job result
+        if: needs.test.result != 'success'
+        run: |
+          echo "The test job was not successful (result: ${{ needs.test.result }})."
+          exit 1
+      - name: All tests passed
+        run: echo "All tests passed"
 
   msrv:
     name: MSRV Check
