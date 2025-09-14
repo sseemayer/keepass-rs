@@ -30,11 +30,11 @@ pub struct Group {
     #[serde(default, with = "cs_opt_string")]
     pub default_auto_type_sequence: Option<String>,
 
-    #[serde(default, with = "cs_opt_string")]
-    pub enable_auto_type: Option<String>,
+    #[serde(default, with = "cs_opt_bool")]
+    pub enable_auto_type: Option<bool>,
 
-    #[serde(default, with = "cs_opt_string")]
-    pub enable_searching: Option<String>,
+    #[serde(default, with = "cs_opt_bool")]
+    pub enable_searching: Option<bool>,
 
     #[serde(default, with = "cs_opt_string")]
     pub last_top_visible_entry: Option<UUID>,
@@ -97,8 +97,8 @@ mod tests {
             group.0.default_auto_type_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
         );
-        assert_eq!(group.0.enable_auto_type.unwrap(), "True");
-        assert_eq!(group.0.enable_searching.unwrap(), "False");
+        assert_eq!(group.0.enable_auto_type.unwrap(), true);
+        assert_eq!(group.0.enable_searching.unwrap(), false);
         assert_eq!(group.0.entries.len(), 2);
         assert_eq!(group.0.groups.len(), 1);
     }
