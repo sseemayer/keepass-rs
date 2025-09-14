@@ -39,11 +39,14 @@ pub struct Group {
     /// The name of the group
     pub name: String,
 
+    /// Notes associated with the group
+    pub notes: Option<String>,
+
     /// The icon ID for the group
     pub icon_id: Option<usize>,
 
     /// The unique identifier for a custom icon, if any
-    custom_icon_id: Option<IconId>,
+    pub(crate) custom_icon_id: Option<IconId>,
 
     /// Unique identifiers for child groups
     groups: HashSet<GroupId>,

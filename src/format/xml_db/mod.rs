@@ -82,6 +82,8 @@ impl XmlBridge for KeePassFile {
             })
             .unwrap_or_default();
 
+        self.root.group.xml_to_db_handle(db.root_mut());
+
         db
     }
 
@@ -124,7 +126,7 @@ impl Serialize for UUID {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Root {
     #[serde(rename = "Group")]
-    pub groups: Vec<Group>,
+    pub group: Group,
 
     #[serde(rename = "DeletedObjects")]
     pub deleted_objects: Option<DeletedObjects>,
