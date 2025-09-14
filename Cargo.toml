@@ -2,6 +2,7 @@
 name = "keepass"
 description = "KeePass .kdbx database file parser"
 edition = "2018"
+rust-version = "1.85.1"
 
 homepage = "https://github.com/sseemayer/keepass-rs"
 repository = "https://github.com/sseemayer/keepass-rs"
