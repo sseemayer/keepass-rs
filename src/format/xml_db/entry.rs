@@ -46,6 +46,36 @@ pub struct Entry {
     pub history: Option<History>,
 }
 
+impl Entry {
+    pub(crate) fn xml_to_db_handle(self, mut target: crate::db::EntryMut) {
+        target.icon_id = self.icon_id.map(|id| id as usize);
+        target.foreground_color = self.foreground_color;
+        target.background_color = self.background_color;
+        target.override_url = self.override_url;
+        target.tags = self
+            .tags
+            .map(|t| t.split(';').map(|s| s.to_string()).collect())
+            .unwrap_or_default();
+
+        target.times = self.times.map(|t| t.into()).unwrap_or_default();
+
+        for field in self.string_fields {
+            let fval = field.value.value.unwrap_or_default();
+
+            let value = if field.value.protected {
+                crate::db::Value::protected_string(fval)
+            } else {
+                crate::db::Value::string(fval)
+            };
+            target.fields.insert(field.key, value);
+        }
+
+        // TODO: handle binary fields
+        // TODO: handle autotype
+        // TODO: handle history
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct StringField {

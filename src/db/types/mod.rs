@@ -103,6 +103,14 @@ impl Database {
         GroupMut::new(self, self.root)
     }
 
+    pub fn iter_all_entries(&self) -> impl Iterator<Item = EntryRef<'_>> + '_ {
+        self.entries.keys().map(move |id| EntryRef::new(self, *id))
+    }
+
+    pub fn iter_all_groups(&self) -> impl Iterator<Item = GroupRef<'_>> + '_ {
+        self.groups.keys().map(move |id| GroupRef::new(self, *id))
+    }
+
     pub fn entry(&self, id: EntryId) -> Option<EntryRef<'_>> {
         self.entries
             .contains_key(&id)

@@ -12,6 +12,12 @@ use crate::db::{AutoType, Color, CustomDataItem, Database, History, IconId, Icon
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct EntryId(Uuid);
 
+impl EntryId {
+    pub(crate) fn with_uuid(uuid: Uuid) -> EntryId {
+        EntryId(uuid)
+    }
+}
+
 impl std::fmt::Display for EntryId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -33,10 +39,10 @@ pub struct Entry {
     pub tags: HashSet<String>,
 
     /// time fields for the entry
-    times: Times,
+    pub times: Times,
 
     /// custom data associated with the entry
-    custom_data: HashMap<String, CustomDataItem>,
+    pub custom_data: HashMap<String, CustomDataItem>,
 
     pub icon_id: Option<usize>,
     custom_icon_id: Option<IconId>,
