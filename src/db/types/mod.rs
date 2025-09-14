@@ -31,20 +31,20 @@ use crate::config::DatabaseConfig;
 
 pub struct Database {
     pub config: DatabaseConfig,
-    root: GroupId,
+    pub(crate) root: GroupId,
 
-    entries: HashMap<EntryId, Entry>,
-    groups: HashMap<GroupId, Group>,
+    pub(crate) entries: HashMap<EntryId, Entry>,
+    pub(crate) groups: HashMap<GroupId, Group>,
 
-    custom_icons: HashMap<IconId, Icon>,
-    binary_attachments: HashMap<BinaryAttachmentId, BinaryAttachment>,
+    pub(crate) custom_icons: HashMap<IconId, Icon>,
+    pub(crate) binary_attachments: HashMap<BinaryAttachmentId, BinaryAttachment>,
 
     pub header_attachments: Vec<HeaderAttachment>,
 
-    deleted_entries: HashSet<EntryId>,
-    deleted_groups: HashSet<GroupId>,
-    deleted_binary_attachments: HashSet<BinaryAttachmentId>,
-    deleted_header_attachments: HashSet<HeaderAttachmentId>,
+    pub(crate) deleted_entries: HashSet<EntryId>,
+    pub(crate) deleted_groups: HashSet<GroupId>,
+    pub(crate) deleted_binary_attachments: HashSet<BinaryAttachmentId>,
+    pub(crate) deleted_header_attachments: HashSet<HeaderAttachmentId>,
 
     pub meta: Meta,
 }
@@ -73,7 +73,7 @@ impl Database {
         }
     }
 
-    pub(crate) fn with_data(config: DatabaseConfig, root_id: GroupId, meta: Meta) -> Self {
+    pub(crate) fn with_data(config: DatabaseConfig, root_id: GroupId) -> Self {
         let root = Group::with_id(root_id);
 
         let mut groups = HashMap::new();
@@ -91,7 +91,7 @@ impl Database {
             deleted_groups: HashSet::new(),
             deleted_binary_attachments: HashSet::new(),
             deleted_header_attachments: HashSet::new(),
-            meta,
+            meta: Meta::default(),
         }
     }
 
