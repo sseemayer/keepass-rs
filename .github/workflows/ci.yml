@@ -104,6 +104,16 @@ jobs:
       - run: |
           cross test --release --target armv7-unknown-linux-musleabihf tests::kdbx4_entry --all-features
 
+  msrv:
+    name: MSRV Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v11
+      - name: check msrv
+        run: |
+          nix develop --command cargo msrv verify
+
   formatting:
     name: Code Formatting
     runs-on: ubuntu-latest
