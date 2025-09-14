@@ -126,25 +126,9 @@ keepass = "*" # TODO replace with current version
 
 ### Performance Notes
 
-Please set the `RUSTFLAGS` environment variable when compiling to enable CPU-specific optimizations (this greatly affects the speed of the AES key derivation):
+For the best performance, this crate requires specific cargo configuration to enable CPU-specific optimizations, especially for AES key derivation.
 
-```bash
-export RUSTFLAGS='-C target-cpu=native'
-```
-
-For best results, also compile in Release mode.
-
-Alternatively, you can add a `.cargo/config.toml` like in this project to ensure that rustflags are always set.
-
-#### For AArch64 / ARMv8:
-
-Performance optimizations are available for ARMv8 since Rust 1.61 via the `aes_armv8` configuration option. To enable the optimizations, add
-the following option to your `.cargo/config.toml` file:
-
-```ignore
-[target.'cfg(target_arch = "aarch64")']
-rustflags = ["--cfg", "aes_armv8"]
-```
+Please see the recommended settings in the [.cargo/config.toml](https://github.com/sseemayer/keepass-rs/blob/master/.cargo/config.toml) file in this repository.
 
 ## License
 MIT
