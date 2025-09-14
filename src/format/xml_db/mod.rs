@@ -5,6 +5,8 @@
 //!
 //! The `XmlBridge` trait provides conversion methods between these XML-specific types and the
 //! user-facing types in `crate::db`.
+//!
+//! See https://keepass.info/help/download/KDBX_XML.xsd for an XML schema.
 
 pub mod custom_serde;
 pub mod entry;
