@@ -12,7 +12,13 @@ use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
-    format::xml_db::{custom_serde::cs_opt_string, group::Group, meta::Meta, timestamp::Timestamp},
+    db::IconId,
+    format::xml_db::{
+        custom_serde::cs_opt_string,
+        group::Group,
+        meta::{Icon, Meta},
+        timestamp::Timestamp,
+    },
 };
 
 pub fn parse_xml(data: &[u8], inner_decryptor: &dyn Cipher) -> Result<crate::db::Database, quick_xml::DeError> {
@@ -47,8 +53,21 @@ struct KeePassFile {
 impl XmlBridge for KeePassFile {
     type DbType = crate::db::Database;
 
-    fn xml_to_db(self, inner_decryptor: &dyn Cipher) -> Self::DbType {
+    fn xml_to_db(mut self, inner_decryptor: &dyn Cipher) -> Self::DbType {
         let mut db = crate::db::Database::new();
+
+        let custom_icons = self.meta.custom_icons.take();
+
+        db.meta = Meta::xml_to_db(self.meta, inner_decryptor);
+
+        db.custom_icons = custom_icons
+            .map(|ci| {
+                ci.icons
+                    .into_iter()
+                    .map(|icon| Icon::xml_to_db(icon, inner_decryptor))
+                    .collect()
+            })
+            .unwrap_or_default();
 
         db
     }

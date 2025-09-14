@@ -54,7 +54,7 @@ pub struct Meta {
     memory_protection: Option<MemoryProtection>,
 
     #[serde(default)]
-    custom_icons: Option<CustomIcons>,
+    pub custom_icons: Option<CustomIcons>,
 
     #[serde(default, with = "cs_opt_bool")]
     recycle_bin_enabled: Option<bool>,
@@ -358,36 +358,39 @@ impl XmlBridge for MemoryProtection {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct CustomIcons {
+pub struct CustomIcons {
     #[serde(default)]
-    icons: Vec<Icon>,
+    pub icons: Vec<Icon>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct Icon {
+pub struct Icon {
     #[serde(rename = "UUID")]
-    uuid: UUID,
+    pub uuid: UUID,
 
     #[serde(with = "cs_base64")]
     data: Vec<u8>,
 }
 
 impl XmlBridge for Icon {
-    type DbType = crate::db::Icon;
+    type DbType = (crate::db::IconId, crate::db::Icon);
 
     fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
-        crate::db::Icon {
+        let key = crate::db::IconId::from_uuid(self.uuid.0);
+        let value = crate::db::Icon {
             id: crate::db::IconId::from_uuid(self.uuid.0),
             data: self.data,
-        }
+        };
+
+        (key, value)
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
+    fn db_to_xml((_, value): &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
         Self {
-            uuid: UUID(db.id.to_uuid()),
-            data: db.data.clone(),
+            uuid: UUID(value.id.to_uuid()),
+            data: value.data.clone(),
         }
     }
 }
