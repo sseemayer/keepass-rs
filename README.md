@@ -103,13 +103,12 @@ cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database
 ## Installation
 Add the following to the `dependencies` section of your `Cargo.toml`:
 
-```ignore
+```toml
 [dependencies]
 keepass = "*" # TODO replace with current version
 ```
 
 ### Performance Notes
-
 For the best performance, this crate requires specific cargo configuration to enable CPU-specific optimizations, especially for AES key derivation.
 
 Please see the recommended settings in the [.cargo/config.toml](https://github.com/sseemayer/keepass-rs/blob/master/.cargo/config.toml) file in this repository.
