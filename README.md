@@ -138,13 +138,12 @@ Alternatively, you can add a `.cargo/config.toml` like in this project to ensure
 
 #### For AArch64 / ARMv8:
 
-The `aes` optimizations are not yet enabled on stable rust. If you want a big performance boost you can build using nightly and enabling the `armv8` feature of the `aes` crate:
+Performance optimizations are available for ARMv8 since Rust 1.61 via the `aes_armv8` configuration option. To enable the optimizations, add
+the following option to your `.cargo/config.toml` file:
 
 ```ignore
-[dependencies.aes]
-# Needs at least 0.7.5 for the feature
-version = "0.7.5"
-features = ["armv8"]
+[target.'cfg(target_arch = "aarch64")']
+rustflags = ["--cfg", "aes_armv8"]
 ```
 
 ## License
