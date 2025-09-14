@@ -1,3 +1,11 @@
+//! XML (de)serialization for KeePass databases.
+//!
+//! This module provides types that mirror the ones in `crate::db`, but are tailored to closely fit
+//! the XMl structure of KeePass databases for easy `#[derive(Serialize, Deserialize)]`.
+//!
+//! The `XmlBridge` trait provides conversion methods between these XML-specific types and the
+//! user-facing types in `crate::db`.
+
 pub mod custom_serde;
 pub mod entry;
 pub mod group;
@@ -12,7 +20,6 @@ use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::IconId,
     format::xml_db::{
         custom_serde::cs_opt_string,
         group::Group,
@@ -34,6 +41,10 @@ pub fn to_xml(db: &crate::db::Database, inner_encryptor: &dyn Cipher) -> Result<
         .to_vec())
 }
 
+/// Bridge between the XML representation of a KeePass database and the user-facing types in `crate::db`.
+///
+/// The trait should be implemented for types in `crate::format::xml_db`, and `DbType` should be
+/// the corresponding type in `crate::db`.
 pub trait XmlBridge {
     type DbType;
 
