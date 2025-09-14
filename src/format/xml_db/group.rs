@@ -46,6 +46,32 @@ pub struct Group {
     pub entries: Vec<Entry>,
 }
 
+impl Group {
+    pub(crate) fn xml_to_db_handle(self, mut target: crate::db::GroupMut) {
+        target.name = self.name;
+        target.notes = self.notes;
+        target.icon_id = self.icon_id;
+        target.times = self.times.map(|t| t.into()).unwrap_or_default();
+        target.is_expanded = self.is_expanded;
+        target.default_autotype_sequence = self.default_auto_type_sequence;
+        target.enable_autotype = self.enable_auto_type;
+        target.enable_searching = self.enable_searching;
+        target.last_top_visible_entry = self
+            .last_top_visible_entry
+            .map(|u| crate::db::EntryId::with_uuid(u.0));
+
+        for entry in self.entries {
+            let new_entry = target.add_entry();
+            entry.xml_to_db_handle(new_entry);
+        }
+
+        for group in self.groups {
+            let new_group = target.add_group();
+            group.xml_to_db_handle(new_group);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
