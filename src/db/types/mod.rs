@@ -37,9 +37,12 @@ pub struct Database {
     pub(crate) groups: HashMap<GroupId, Group>,
 
     pub(crate) custom_icons: HashMap<IconId, Icon>,
+
+    /// binary attachments are used in KDBX3 files
     pub(crate) binary_attachments: HashMap<BinaryAttachmentId, BinaryAttachment>,
 
-    pub header_attachments: Vec<HeaderAttachment>,
+    /// header attachments are used in KDBX4 files
+    pub(crate) header_attachments: Vec<HeaderAttachment>,
 
     pub(crate) deleted_entries: HashSet<EntryId>,
     pub(crate) deleted_groups: HashSet<GroupId>,
