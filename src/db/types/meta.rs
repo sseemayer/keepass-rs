@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::db::{BinaryAttachmentId, Color, CustomDataItem};
+use crate::db::{Color, CustomDataItem};
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -75,9 +75,6 @@ pub struct Meta {
 
     /// Last time the settings were changed
     pub settings_changed: Option<NaiveDateTime>,
-
-    /// Binary attachments in the Metadata header
-    pub binaries: HashSet<BinaryAttachmentId>,
 
     /// Additional custom data fields
     pub custom_data: HashMap<String, CustomDataItem>,
