@@ -83,9 +83,9 @@ impl Entry {
         }
     }
 
-    pub(crate) fn with_id(id: Uuid) -> Entry {
+    pub(crate) fn with_id(id: EntryId) -> Entry {
         Entry {
-            id: EntryId(id),
+            id,
             fields: HashMap::new(),
             attachments: HashSet::new(),
             autotype: None,
