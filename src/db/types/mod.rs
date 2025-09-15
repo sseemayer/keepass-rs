@@ -28,6 +28,8 @@ use crate::config::DatabaseConfig;
 
 pub struct Database {
     pub config: DatabaseConfig,
+    pub meta: Meta,
+
     pub(crate) root: GroupId,
 
     pub(crate) entries: HashMap<EntryId, Entry>,
@@ -35,13 +37,10 @@ pub struct Database {
 
     pub(crate) custom_icons: HashMap<IconId, Icon>,
 
-    pub(crate) header_attachments: HashMap<AttachmentId, Attachment>,
+    pub(crate) attachments: HashMap<AttachmentId, Attachment>,
 
     pub(crate) deleted_entries: HashSet<EntryId>,
     pub(crate) deleted_groups: HashSet<GroupId>,
-    pub(crate) deleted_header_attachments: HashSet<AttachmentId>,
-
-    pub meta: Meta,
 }
 
 impl Database {
@@ -54,15 +53,14 @@ impl Database {
 
         Database {
             config: DatabaseConfig::default(),
+            meta: Meta::default(),
             root: root_id,
             entries: HashMap::new(),
             groups: groups,
             custom_icons: HashMap::new(),
-            header_attachments: HashMap::new(),
+            attachments: HashMap::new(),
             deleted_entries: HashSet::new(),
             deleted_groups: HashSet::new(),
-            deleted_header_attachments: HashSet::new(),
-            meta: Meta::default(),
         }
     }
 
@@ -74,15 +72,14 @@ impl Database {
 
         Database {
             config,
+            meta: Meta::default(),
             root: root_id,
             entries: HashMap::new(),
             groups: groups,
             custom_icons: HashMap::new(),
-            header_attachments: HashMap::new(),
+            attachments: HashMap::new(),
             deleted_entries: HashSet::new(),
             deleted_groups: HashSet::new(),
-            deleted_header_attachments: HashSet::new(),
-            meta: Meta::default(),
         }
     }
 
