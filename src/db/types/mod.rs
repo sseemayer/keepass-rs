@@ -95,8 +95,32 @@ impl Database {
         self.entries.keys().map(move |id| EntryRef::new(self, *id))
     }
 
+    /// Iterate over all entries with mutable access. The provided closure is
+    /// called for each `EntryMut` and borrows are limited to the closure body.
+    pub fn foreach_entry_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(EntryMut<'_>),
+    {
+        let ids: Vec<EntryId> = self.entries.keys().copied().collect();
+        for id in ids {
+            f(EntryMut::new(self, id));
+        }
+    }
+
     pub fn iter_all_groups(&self) -> impl Iterator<Item = GroupRef<'_>> + '_ {
         self.groups.keys().map(move |id| GroupRef::new(self, *id))
+    }
+
+    /// Iterate over all groups with mutable access. The provided closure is
+    /// called for each `GroupMut` and borrows are limited to the closure body.
+    pub fn foreach_group_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(GroupMut<'_>),
+    {
+        let ids: Vec<GroupId> = self.groups.keys().copied().collect();
+        for id in ids {
+            f(GroupMut::new(self, id));
+        }
     }
 
     pub fn entry(&self, id: EntryId) -> Option<EntryRef<'_>> {
