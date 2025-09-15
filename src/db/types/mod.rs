@@ -12,13 +12,10 @@ mod value;
 
 use std::collections::{HashMap, HashSet};
 
-pub use attachment::{
-    BinaryAttachment, BinaryAttachmentId, BinaryAttachmentMut, BinaryAttachmentRef, HeaderAttachment,
-    HeaderAttachmentId, HeaderAttachmentMut, HeaderAttachmentRef,
-};
+pub use attachment::{Attachment, AttachmentId, AttachmentMut, AttachmentRef};
 pub use autotype::{AutoType, AutoTypeAssociation};
 pub use color::Color;
-pub use custom_data::CustomDataItem;
+pub use custom_data::{CustomDataItem, CustomDataValue};
 pub use entry::{Entry, EntryId, EntryMut, EntryRef};
 pub use group::{Group, GroupId, GroupMut, GroupRef};
 pub use history::History;
@@ -38,16 +35,11 @@ pub struct Database {
 
     pub(crate) custom_icons: HashMap<IconId, Icon>,
 
-    /// binary attachments are used in KDBX3 files
-    pub(crate) binary_attachments: HashMap<BinaryAttachmentId, BinaryAttachment>,
-
-    /// header attachments are used in KDBX4 files
-    pub(crate) header_attachments: Vec<HeaderAttachment>,
+    pub(crate) header_attachments: HashMap<AttachmentId, Attachment>,
 
     pub(crate) deleted_entries: HashSet<EntryId>,
     pub(crate) deleted_groups: HashSet<GroupId>,
-    pub(crate) deleted_binary_attachments: HashSet<BinaryAttachmentId>,
-    pub(crate) deleted_header_attachments: HashSet<HeaderAttachmentId>,
+    pub(crate) deleted_header_attachments: HashSet<AttachmentId>,
 
     pub meta: Meta,
 }
@@ -66,11 +58,9 @@ impl Database {
             entries: HashMap::new(),
             groups: groups,
             custom_icons: HashMap::new(),
-            binary_attachments: HashMap::new(),
-            header_attachments: Vec::new(),
+            header_attachments: HashMap::new(),
             deleted_entries: HashSet::new(),
             deleted_groups: HashSet::new(),
-            deleted_binary_attachments: HashSet::new(),
             deleted_header_attachments: HashSet::new(),
             meta: Meta::default(),
         }
@@ -88,11 +78,9 @@ impl Database {
             entries: HashMap::new(),
             groups: groups,
             custom_icons: HashMap::new(),
-            binary_attachments: HashMap::new(),
-            header_attachments: Vec::new(),
+            header_attachments: HashMap::new(),
             deleted_entries: HashSet::new(),
             deleted_groups: HashSet::new(),
-            deleted_binary_attachments: HashSet::new(),
             deleted_header_attachments: HashSet::new(),
             meta: Meta::default(),
         }

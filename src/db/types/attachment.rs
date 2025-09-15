@@ -1,48 +1,88 @@
+use std::ops::{Deref, DerefMut};
+
+use secrecy::{ExposeSecret, SecretBox};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachmentId(Uuid);
+pub struct AttachmentId(Uuid);
 
-/// Binary attachment in the metadata of a XML database
-#[derive(Debug, PartialEq, Eq, Clone)]
+/// Attachment associated with an entry
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachment {
-    id: BinaryAttachmentId,
-
-    identifier: Option<String>,
-    compressed: bool,
-    data: Vec<u8>,
+pub struct Attachment {
+    id: AttachmentId,
+    pub name: String,
+    pub protected: bool,
+    data: SecretBox<[u8]>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct HeaderAttachmentId(Uuid);
+impl Attachment {
+    pub(crate) fn new() -> Self {
+        Attachment {
+            id: AttachmentId(Uuid::new_v4()),
+            name: String::new(),
+            protected: true,
+            data: SecretBox::new(Box::new([])),
+        }
+    }
 
-/// Header attachment in the header of a KDBX4 database
-#[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct HeaderAttachment {
-    pub flags: u8,
-    pub data: Vec<u8>,
+    pub fn id(&self) -> AttachmentId {
+        self.id
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data.expose_secret()
+    }
+
+    pub fn set_data(&mut self, data: Vec<u8>) {
+        self.data = SecretBox::new(data.into_boxed_slice());
+    }
 }
 
-pub struct BinaryAttachmentRef<'a> {
+pub struct AttachmentRef<'a> {
     database: &'a crate::db::Database,
-    id: BinaryAttachmentId,
+    id: AttachmentId,
 }
 
-pub struct BinaryAttachmentMut<'a> {
+impl AttachmentRef<'_> {
+    pub(crate) fn new(database: &crate::db::Database, id: AttachmentId) -> AttachmentRef<'_> {
+        AttachmentRef { database, id }
+    }
+}
+
+impl Deref for AttachmentRef<'_> {
+    type Target = Attachment;
+
+    fn deref(&self) -> &Self::Target {
+        // UNWRAP safety: AttachmentRef can only be constructed with a valid AttachmentId
+        self.database.header_attachments.get(&self.id).unwrap()
+    }
+}
+
+pub struct AttachmentMut<'a> {
     database: &'a mut crate::db::Database,
-    id: BinaryAttachmentId,
+    id: AttachmentId,
 }
 
-pub struct HeaderAttachmentRef<'a> {
-    database: &'a crate::db::Database,
-    id: HeaderAttachmentId,
+impl AttachmentMut<'_> {
+    pub(crate) fn new(database: &mut crate::db::Database, id: AttachmentId) -> AttachmentMut<'_> {
+        AttachmentMut { database, id }
+    }
 }
 
-pub struct HeaderAttachmentMut<'a> {
-    database: &'a mut crate::db::Database,
-    id: HeaderAttachmentId,
+impl Deref for AttachmentMut<'_> {
+    type Target = Attachment;
+
+    fn deref(&self) -> &Self::Target {
+        // UNWRAP safety: AttachmentMut can only be constructed with a valid AttachmentId
+        self.database.header_attachments.get(&self.id).unwrap()
+    }
+}
+
+impl DerefMut for AttachmentMut<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // UNWRAP safety: AttachmentMut can only be constructed with a valid AttachmentId
+        self.database.header_attachments.get_mut(&self.id).unwrap()
+    }
 }

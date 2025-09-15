@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{Database, HeaderAttachment},
+    db::{Attachment, Database},
     format::{
         kdbx4::{
             KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
@@ -24,22 +24,13 @@ use crate::{
 
 use super::KDBX4InnerHeader;
 
-impl From<&[u8]> for HeaderAttachment {
-    fn from(buffer: &[u8]) -> Self {
-        let flags = buffer[0];
-        let data = buffer[1..].to_vec();
-
-        HeaderAttachment { flags, data }
-    }
-}
-
 /// Open, decrypt and parse a KeePass database from a source and key elements
 pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database, ParseKdbx4Error> {
     let (config, header_attachments, mut inner_decryptor, xml) = decrypt_kdbx4(data, db_key)?;
 
-    let mut db = crate::format::xml_db::parse_xml(&xml, &mut *inner_decryptor)?;
+    let mut db = crate::format::xml_db::parse_xml(&xml, &header_attachments, &mut *inner_decryptor)?;
     db.config = config;
-    db.header_attachments = header_attachments;
+
     Ok(db)
 }
 
@@ -63,7 +54,7 @@ pub enum ParseKdbx4Error {
 pub(crate) fn decrypt_kdbx4(
     data: &[u8],
     db_key: &DatabaseKey,
-) -> Result<(DatabaseConfig, Vec<HeaderAttachment>, Box<dyn Cipher>, Vec<u8>), DecryptKdbx4Error> {
+) -> Result<(DatabaseConfig, Vec<Attachment>, Box<dyn Cipher>, Vec<u8>), DecryptKdbx4Error> {
     // parse header
     let (outer_header, inner_header_start) = parse_outer_header(data)?;
 
@@ -312,7 +303,7 @@ pub enum ParseOuterHeaderError {
 
 fn parse_inner_header(
     data: &[u8],
-) -> Result<(Vec<HeaderAttachment>, KDBX4InnerHeader, usize), ParseInnerHeaderError> {
+) -> Result<(Vec<Attachment>, KDBX4InnerHeader, usize), ParseInnerHeaderError> {
     let mut pos = 0;
 
     let mut inner_random_stream = None;
@@ -336,8 +327,18 @@ fn parse_inner_header(
             INNER_HEADER_RANDOM_STREAM_KEY => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
             INNER_HEADER_BINARY_ATTACHMENTS => {
-                let header_attachment = HeaderAttachment::from(entry_buffer);
-                header_attachments.push(header_attachment);
+                let flags = entry_buffer[0];
+                let data = &entry_buffer[1..];
+
+                // according to the KeePass documentation, protected means "should be protected in
+                // process memory", not encrypted in the inner header
+                let protected = (flags & 0x01) != 0;
+
+                let mut attachment = Attachment::new();
+                attachment.protected = protected;
+                attachment.set_data(data.to_vec());
+
+                header_attachments.push(attachment);
             }
 
             _ => {
