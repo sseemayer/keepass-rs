@@ -7,10 +7,6 @@ pub struct History {
     pub(crate) entries: Vec<Entry>,
 }
 impl History {
-    pub(crate) fn new() -> History {
-        History { entries: Vec::new() }
-    }
-
     pub fn add_entry(&mut self, mut entry: Entry) {
         // DISCUSS: should we make sure that the last modification time is not the same
         // or older than the entry at the top of the history?

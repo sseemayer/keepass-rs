@@ -237,6 +237,11 @@ fn parse_entries(
     let mut parsing_gid: Option<u32> = None;
     let mut parsing_fields: HashMap<String, Value> = HashMap::new();
 
+    let mut parsing_binary_desc: Option<String> = None;
+    let mut parsing_binary_data: Option<Vec<u8>> = None;
+
+    let mut entry_attachments: HashMap<String, Vec<u8>> = HashMap::new();
+
     let mut num_entries = 0;
     while num_entries < header_num_entries {
         let field_type = LittleEndian::read_u16(&data[0..]);
@@ -299,12 +304,24 @@ fn parse_entries(
 
             // BinaryDesc
             0x000d => {
-                parsing_fields.insert(String::from("BinaryDesc"), Value::string(from_utf8(field_value)));
+                if parsing_binary_data.is_some() {
+                    let data = parsing_binary_data.take().unwrap();
+                    entry_attachments.insert(from_utf8(field_value), data);
+                    parsing_binary_desc = None;
+                } else {
+                    parsing_binary_desc = Some(from_utf8(field_value));
+                }
             }
 
             // BinaryData
             0x000e => {
-                parsing_fields.insert(String::from("BinaryData"), Value::bytes(field_value.to_vec()));
+                if parsing_binary_desc.is_some() {
+                    let desc = parsing_binary_desc.take().unwrap();
+                    entry_attachments.insert(desc, field_value.to_vec());
+                    parsing_binary_data = None;
+                } else {
+                    parsing_binary_data = Some(field_value.to_vec());
+                }
             }
 
             0xffff => {
@@ -315,6 +332,12 @@ fn parse_entries(
 
                 let mut entry = group.add_entry();
                 entry.fields = parsing_fields.clone();
+
+                for (desc, data) in entry_attachments.drain() {
+                    let mut attachment = entry.add_attachment();
+                    attachment.name = desc;
+                    attachment.set_data(data);
+                }
 
                 parsing_fields.clear();
 
