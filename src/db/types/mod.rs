@@ -91,6 +91,14 @@ impl Database {
         GroupMut::new(self, self.root)
     }
 
+    pub fn num_entries(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn num_groups(&self) -> usize {
+        self.groups.len()
+    }
+
     pub fn iter_all_entries(&self) -> impl Iterator<Item = EntryRef<'_>> + '_ {
         self.entries.keys().map(move |id| EntryRef::new(self, *id))
     }
