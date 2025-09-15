@@ -164,7 +164,7 @@ impl EntryMut<'_> {
     pub fn add_attachment(&mut self) -> AttachmentMut<'_> {
         let attachment = Attachment::new();
         let id = attachment.id();
-        self.database.header_attachments.insert(id, attachment);
+        self.database.attachments.insert(id, attachment);
         self.attachments.insert(id);
 
         AttachmentMut::new(self.database, id)

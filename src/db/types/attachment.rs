@@ -56,7 +56,7 @@ impl Deref for AttachmentRef<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentRef can only be constructed with a valid AttachmentId
-        self.database.header_attachments.get(&self.id).unwrap()
+        self.database.attachments.get(&self.id).unwrap()
     }
 }
 
@@ -76,13 +76,13 @@ impl Deref for AttachmentMut<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentMut can only be constructed with a valid AttachmentId
-        self.database.header_attachments.get(&self.id).unwrap()
+        self.database.attachments.get(&self.id).unwrap()
     }
 }
 
 impl DerefMut for AttachmentMut<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: AttachmentMut can only be constructed with a valid AttachmentId
-        self.database.header_attachments.get_mut(&self.id).unwrap()
+        self.database.attachments.get_mut(&self.id).unwrap()
     }
 }
