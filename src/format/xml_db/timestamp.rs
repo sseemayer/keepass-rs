@@ -41,7 +41,11 @@ impl Timestamp {
 impl XmlBridge for Timestamp {
     type DbType = NaiveDateTime;
 
-    fn xml_to_db(self, _inner_decryptor: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+    fn xml_to_db(
+        self,
+        _inner_decryptor: &dyn crate::crypt::ciphers::Cipher,
+        _: &[crate::db::Attachment],
+    ) -> Self::DbType {
         self.time
     }
 

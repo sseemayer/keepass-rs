@@ -6,7 +6,10 @@ use std::{
 
 use uuid::Uuid;
 
-use crate::db::{AutoType, Color, CustomDataItem, Database, History, IconId, IconRef, Times, Value};
+use crate::db::{
+    Attachment, AttachmentId, AttachmentMut, AutoType, Color, CustomDataItem, Database, History, IconId,
+    IconRef, Times, Value,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
@@ -31,6 +34,9 @@ pub struct Entry {
 
     /// fields contained within the entry, such as title, username, password
     pub fields: HashMap<String, Value>,
+
+    /// attachments associated with the entry
+    pub attachments: HashSet<AttachmentId>,
 
     /// auto-type settings for the entry
     pub autotype: Option<AutoType>,
@@ -62,6 +68,7 @@ impl Entry {
         Entry {
             id: EntryId(Uuid::new_v4()),
             fields: HashMap::new(),
+            attachments: HashSet::new(),
             autotype: None,
             tags: HashSet::new(),
             times: Times::default(),
@@ -151,6 +158,16 @@ pub struct EntryMut<'a> {
 impl EntryMut<'_> {
     pub(crate) fn new(database: &mut Database, id: EntryId) -> EntryMut<'_> {
         EntryMut { database, id }
+    }
+
+    /// Add a new attachment to the entry, returning a mutable reference to it.
+    pub fn add_attachment(&mut self) -> AttachmentMut<'_> {
+        let attachment = Attachment::new();
+        let id = attachment.id();
+        self.database.header_attachments.insert(id, attachment);
+        self.attachments.insert(id);
+
+        AttachmentMut::new(self.database, id)
     }
 }
 

@@ -6,7 +6,7 @@
 //! The `XmlBridge` trait provides conversion methods between these XML-specific types and the
 //! user-facing types in `crate::db`.
 //!
-//! See https://keepass.info/help/download/KDBX_XML.xsd for an XML schema.
+//! See <https://keepass.info/help/download/KDBX_XML.xsd> for an XML schema.
 
 pub mod custom_serde;
 pub mod entry;
@@ -30,9 +30,13 @@ use crate::{
     },
 };
 
-pub fn parse_xml(data: &[u8], inner_decryptor: &dyn Cipher) -> Result<crate::db::Database, quick_xml::DeError> {
+pub fn parse_xml(
+    data: &[u8],
+    header_attachments: &[crate::db::Attachment],
+    inner_decryptor: &dyn Cipher,
+) -> Result<crate::db::Database, quick_xml::DeError> {
     let kdbx: KeePassFile = quick_xml::de::from_reader(data)?;
-    Ok(kdbx.xml_to_db(inner_decryptor))
+    Ok(kdbx.xml_to_db(inner_decryptor, header_attachments))
 }
 
 #[cfg(feature = "save_kdbx4")]
@@ -50,7 +54,11 @@ pub fn to_xml(db: &crate::db::Database, inner_encryptor: &dyn Cipher) -> Result<
 pub trait XmlBridge {
     type DbType;
 
-    fn xml_to_db(self, inner_decryptor: &dyn Cipher) -> Self::DbType;
+    fn xml_to_db(
+        self,
+        inner_decryptor: &dyn Cipher,
+        header_attachments: &[crate::db::Attachment],
+    ) -> Self::DbType;
 
     #[cfg(feature = "save_kdbx4")]
     fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn Cipher) -> Self;
@@ -66,18 +74,22 @@ struct KeePassFile {
 impl XmlBridge for KeePassFile {
     type DbType = crate::db::Database;
 
-    fn xml_to_db(mut self, inner_decryptor: &dyn Cipher) -> Self::DbType {
+    fn xml_to_db(
+        mut self,
+        inner_decryptor: &dyn Cipher,
+        header_attachments: &[crate::db::Attachment],
+    ) -> Self::DbType {
         let mut db = crate::db::Database::new();
 
         let custom_icons = self.meta.custom_icons.take();
 
-        db.meta = Meta::xml_to_db(self.meta, inner_decryptor);
+        db.meta = Meta::xml_to_db(self.meta, inner_decryptor, header_attachments);
 
         db.custom_icons = custom_icons
             .map(|ci| {
                 ci.icons
                     .into_iter()
-                    .map(|icon| Icon::xml_to_db(icon, inner_decryptor))
+                    .map(|icon| Icon::xml_to_db(icon, inner_decryptor, header_attachments))
                     .collect()
             })
             .unwrap_or_default();

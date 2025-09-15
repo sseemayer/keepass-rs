@@ -175,14 +175,15 @@ pub enum KDBX3OuterHeaderParseError {
 pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database, KDBX3ParseError> {
     let (config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
 
-    let mut db = crate::format::xml_db::parse_xml(&xml, &mut *inner_decryptor)?;
+    let mut db = crate::format::xml_db::parse_xml(&xml, &Vec::new(), &mut *inner_decryptor)?;
+
     db.config = config;
 
     Ok(db)
 }
 
 pub(crate) fn get_xml(data: &[u8], db_key: &DatabaseKey) -> Result<String, KDBX3ParseError> {
-    let (_config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
+    let (_config, _, xml) = decrypt_kdbx3(data, db_key)?;
     let xml_str = String::from_utf8_lossy(&xml).to_string();
     Ok(xml_str)
 }

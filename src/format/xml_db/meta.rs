@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 
 use crate::{
+    compression::Compression,
     db::Color,
     format::xml_db::{
         custom_serde::{cs_base64, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
@@ -87,13 +88,20 @@ pub struct Meta {
     settings_changed: Option<Timestamp>,
 
     #[serde(default)]
+    binaries: Option<Binaries>,
+
+    #[serde(default)]
     custom_data: Option<CustomData>,
 }
 
 impl XmlBridge for Meta {
     type DbType = crate::db::Meta;
 
-    fn xml_to_db(self, inner_decryptor: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+    fn xml_to_db(
+        self,
+        inner_decryptor: &dyn crate::crypt::ciphers::Cipher,
+        header_attachments: &[crate::db::Attachment],
+    ) -> Self::DbType {
         // NOTE: custom icons and binary attachments are moved out of the Meta into the main
         // databsase, so they are not converted here.
         crate::db::Meta {
@@ -109,7 +117,9 @@ impl XmlBridge for Meta {
             master_key_changed: self.master_key_changed.map(|t| t.time),
             master_key_change_rec: self.master_key_change_rec,
             master_key_change_force: self.master_key_change_force,
-            memory_protection: self.memory_protection.map(|mp| mp.xml_to_db(inner_decryptor)),
+            memory_protection: self
+                .memory_protection
+                .map(|mp| mp.xml_to_db(inner_decryptor, header_attachments)),
             recyclebin_enabled: self.recycle_bin_enabled,
             recyclebin_uuid: self.recycle_bin_uuid.map(|u| u.0),
             recyclebin_changed: self.recycle_bin_changed.map(|t| t.time),
@@ -122,7 +132,11 @@ impl XmlBridge for Meta {
             settings_changed: self.settings_changed.map(|t| t.time),
             custom_data: self
                 .custom_data
-                .map(|cd| cd.xml_to_db(inner_decryptor).into_iter().collect())
+                .map(|cd| {
+                    cd.xml_to_db(inner_decryptor, header_attachments)
+                        .into_iter()
+                        .collect()
+                })
                 .unwrap_or_default(),
         }
     }
@@ -178,6 +192,7 @@ impl XmlBridge for Meta {
                 .settings_changed
                 .as_ref()
                 .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            binaries: None, // Handled separately
             custom_data: Some(CustomData::db_to_xml(
                 &db.custom_data
                     .iter()
@@ -186,6 +201,54 @@ impl XmlBridge for Meta {
                 inner_encryptor,
             )),
         }
+    }
+}
+
+// Binaries (Meta/Binaries)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Binaries {
+    #[serde(rename = "Binary", default)]
+    pub binaries: Vec<Binary>,
+}
+
+// <Binary ID="..." Compressed="False" Protected="False">BASE64</Binary>
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Binary {
+    #[serde(rename = "$value")]
+    pub value: String,
+
+    #[serde(rename = "@ID")]
+    pub id: usize,
+
+    #[serde(rename = "@Compressed", default, with = "cs_opt_bool")]
+    pub compressed: Option<bool>,
+
+    #[serde(rename = "@Protected", default, with = "cs_opt_bool")]
+    pub protected: Option<bool>,
+}
+
+impl Binary {
+    pub(crate) fn xml_to_db_handle(
+        self,
+        mut target: crate::db::AttachmentMut,
+        inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
+    ) {
+        let mut data = base64_engine::STANDARD.decode(self.value).unwrap_or_default();
+
+        if self.protected.unwrap_or(false) {
+            data = inner_decryptor.decrypt(&data).unwrap_or_default();
+        }
+
+        if self.compressed.unwrap_or(false) {
+            data = crate::compression::GZipCompression
+                .decompress(&data)
+                .unwrap_or_default();
+        }
+
+        target.protected = self.protected.unwrap_or(true);
+        target.set_data(data);
     }
 }
 
@@ -199,13 +262,19 @@ struct CustomData {
 impl XmlBridge for CustomData {
     type DbType = Vec<(String, crate::db::CustomDataItem)>;
 
-    fn xml_to_db(self, inner_decryptor: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+    fn xml_to_db(
+        self,
+        inner_decryptor: &dyn crate::crypt::ciphers::Cipher,
+        header_attachments: &[crate::db::Attachment],
+    ) -> Self::DbType {
         self.items
             .into_iter()
             .map(|item| {
-                let value = item.value.xml_to_db(inner_decryptor);
+                let value = item.value.xml_to_db(inner_decryptor, header_attachments);
 
-                let last_modification_time = item.last_modification_time.map(|t| t.xml_to_db(inner_decryptor));
+                let last_modification_time = item
+                    .last_modification_time
+                    .map(|t| t.xml_to_db(inner_decryptor, header_attachments));
 
                 (
                     item.key,
@@ -263,12 +332,12 @@ pub enum CustomDataValue {
 }
 
 impl XmlBridge for CustomDataValue {
-    type DbType = crate::db::Value;
+    type DbType = crate::db::CustomDataValue;
 
-    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
         match self {
-            CustomDataValue::String(s) => crate::db::Value::string(s),
-            CustomDataValue::Binary(b) => crate::db::Value::bytes(b),
+            CustomDataValue::String(s) => crate::db::CustomDataValue::String(s),
+            CustomDataValue::Binary(b) => crate::db::CustomDataValue::Binary(b),
         }
     }
 
@@ -334,7 +403,7 @@ struct MemoryProtection {
 impl XmlBridge for MemoryProtection {
     type DbType = crate::db::MemoryProtection;
 
-    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
         crate::db::MemoryProtection {
             protect_title: self.protect_title.unwrap_or(false),
             protect_username: self.protect_username.unwrap_or(false),
@@ -376,7 +445,7 @@ pub struct Icon {
 impl XmlBridge for Icon {
     type DbType = (crate::db::IconId, crate::db::Icon);
 
-    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher) -> Self::DbType {
+    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
         let key = crate::db::IconId::from_uuid(self.uuid.0);
         let value = crate::db::Icon {
             id: crate::db::IconId::from_uuid(self.uuid.0),
@@ -584,6 +653,22 @@ mod tests {
             settings_changed: Some(Timestamp::new_iso8601(
                 NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap(),
             )),
+            binaries: Some(Binaries {
+                binaries: vec![
+                    Binary {
+                        id: 0,
+                        value: base64_engine::STANDARD.encode(&[1, 2, 3, 4, 5]),
+                        compressed: Some(false),
+                        protected: Some(false),
+                    },
+                    Binary {
+                        id: 1,
+                        value: base64_engine::STANDARD.encode(&[10, 20, 30, 40, 50]),
+                        compressed: Some(true),
+                        protected: Some(true),
+                    },
+                ],
+            }),
             custom_data: Some(CustomData {
                 items: vec![
                     CustomDataItem {
@@ -629,6 +714,9 @@ mod tests {
         assert!(serialized.contains("<HistoryMaxItems>10</HistoryMaxItems>"));
         assert!(serialized.contains("<HistoryMaxSize>1048576</HistoryMaxSize>"));
         assert!(serialized.contains("<SettingsChanged>2023-10-05T12:34:56Z</SettingsChanged>"));
+        assert!(serialized.contains("<Binaries>"));
+        assert!(serialized.contains(r#"<Binary ID="0" Compressed="False" Protected="False">AQIDBAU=</Binary>"#));
+        assert!(serialized.contains(r#"<Binary ID="1" Compressed="True" Protected="True">ChQeKDI=</Binary>"#));
         assert!(serialized.contains("<CustomData>"));
     }
 
@@ -669,6 +757,10 @@ mod tests {
             <HistoryMaxItems>10</HistoryMaxItems>
             <HistoryMaxSize>1048576</HistoryMaxSize>
             <SettingsChanged>2023-10-05T12:34:56Z</SettingsChanged>
+            <Binaries>
+                <Binary ID="0" Compressed="False" Protected="False">AQIDBAU=</Binary>
+                <Binary ID="1" Compressed="True" Protected="True">ChQeKDI=</Binary>
+            </Binaries>
             <CustomData>
                 <Item>
                     <Key>example_key</Key>
@@ -752,6 +844,24 @@ mod tests {
             meta.settings_changed.unwrap().time,
             NaiveDateTime::from_str("2023-10-05T12:34:56").unwrap()
         );
+
+        let binaries = meta.binaries.unwrap();
+        assert_eq!(binaries.binaries.len(), 2);
+        assert_eq!(binaries.binaries[0].id, 0);
+        assert_eq!(binaries.binaries[0].compressed, Some(false));
+        assert_eq!(binaries.binaries[0].protected, Some(false));
+        assert_eq!(
+            binaries.binaries[0].value,
+            base64_engine::STANDARD.encode(&[1, 2, 3, 4, 5])
+        );
+        assert_eq!(binaries.binaries[1].id, 1);
+        assert_eq!(binaries.binaries[1].compressed, Some(true));
+        assert_eq!(binaries.binaries[1].protected, Some(true));
+        assert_eq!(
+            binaries.binaries[1].value,
+            base64_engine::STANDARD.encode(&[10, 20, 30, 40, 50])
+        );
+
         let cd = meta.custom_data.unwrap();
         assert_eq!(cd.items.len(), 2);
         assert_eq!(cd.items[0].key, "example_key");
