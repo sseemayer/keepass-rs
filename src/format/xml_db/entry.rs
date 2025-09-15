@@ -47,7 +47,11 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub(crate) fn xml_to_db_handle(self, mut target: crate::db::EntryMut) {
+    pub(crate) fn xml_to_db_handle(
+        self,
+        mut target: crate::db::EntryMut,
+        header_attachments: &[crate::db::Attachment],
+    ) {
         target.icon_id = self.icon_id.map(|id| id as usize);
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
@@ -70,8 +74,27 @@ impl Entry {
             target.fields.insert(field.key, value);
         }
 
-        // TODO: handle binary fields
-        // TODO: handle autotype
+        for field in self.binary_fields {
+            if let Some(attachment) = header_attachments.get(field.value.value_ref) {
+                let mut ar = target.add_attachment();
+                ar.name = field.key;
+                ar.set_data(attachment.data().to_vec());
+            }
+        }
+
+        target.autotype = self.auto_type.map(|at| crate::db::AutoType {
+            enabled: at.enabled,
+            sequence: at.default_sequence,
+            associations: at
+                .association
+                .into_iter()
+                .map(|a| crate::db::AutoTypeAssociation {
+                    window: a.window,
+                    sequence: a.keystroke_sequence,
+                })
+                .collect(),
+        });
+
         // TODO: handle history
     }
 }
@@ -140,8 +163,18 @@ pub struct BinaryValue {
 pub struct AutoType {
     #[serde(default, with = "cs_bool")]
     pub enabled: bool,
-    pub data_transfer_obfuscation: Option<String>,
+    pub data_transfer_obfuscation: Option<isize>,
     pub default_sequence: Option<String>,
+
+    #[serde(rename = "Association", default)]
+    pub association: Vec<AutoTypeAssociation>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct AutoTypeAssociation {
+    pub window: String,
+    pub keystroke_sequence: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -248,7 +281,7 @@ mod tests {
 
         let deserialized: Test<AutoType> = quick_xml::de::from_str(xml).unwrap();
         assert_eq!(deserialized.0.enabled, true);
-        assert_eq!(deserialized.0.data_transfer_obfuscation.unwrap(), "0");
+        assert_eq!(deserialized.0.data_transfer_obfuscation.unwrap(), 0);
         assert_eq!(
             deserialized.0.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
@@ -259,14 +292,18 @@ mod tests {
     fn test_serialize_autotype() {
         let autotype = AutoType {
             enabled: true,
-            data_transfer_obfuscation: Some("0".to_string()),
+            data_transfer_obfuscation: Some(0),
             default_sequence: Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string()),
+            association: vec![AutoTypeAssociation {
+                window: "Example Window".to_string(),
+                keystroke_sequence: "{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string(),
+            }],
         };
 
         let serialized = quick_xml::se::to_string(&Test(autotype)).unwrap();
         assert_eq!(
             serialized,
-            r#"<Test><Enabled>True</Enabled><DataTransferObfuscation>0</DataTransferObfuscation><DefaultSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</DefaultSequence></Test>"#
+            r#"<Test><Enabled>True</Enabled><DataTransferObfuscation>0</DataTransferObfuscation><DefaultSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</DefaultSequence><Association><Window>Example Window</Window><KeystrokeSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</KeystrokeSequence></Association></Test>"#
         );
     }
 
@@ -325,7 +362,7 @@ mod tests {
         assert!(deserialized.0.auto_type.is_some());
         let autotype = deserialized.0.auto_type.unwrap();
         assert_eq!(autotype.enabled, true);
-        assert_eq!(autotype.data_transfer_obfuscation.unwrap(), "0");
+        assert_eq!(autotype.data_transfer_obfuscation.unwrap(), 0);
         assert_eq!(
             autotype.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"

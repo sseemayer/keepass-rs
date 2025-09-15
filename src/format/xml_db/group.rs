@@ -47,7 +47,11 @@ pub struct Group {
 }
 
 impl Group {
-    pub(crate) fn xml_to_db_handle(self, mut target: crate::db::GroupMut) {
+    pub(crate) fn xml_to_db_handle(
+        self,
+        mut target: crate::db::GroupMut,
+        header_attachments: &[crate::db::Attachment],
+    ) {
         target.name = self.name;
         target.notes = self.notes;
         target.icon_id = self.icon_id;
@@ -62,12 +66,12 @@ impl Group {
 
         for entry in self.entries {
             let new_entry = target.add_entry();
-            entry.xml_to_db_handle(new_entry);
+            entry.xml_to_db_handle(new_entry, header_attachments);
         }
 
         for group in self.groups {
             let new_group = target.add_group();
-            group.xml_to_db_handle(new_group);
+            group.xml_to_db_handle(new_group, header_attachments);
         }
     }
 }
