@@ -4,6 +4,7 @@ use chrono::NaiveDateTime;
 ///
 /// NaiveDateTime is used because KeePass does not store timezone information
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[non_exhaustive]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Times {
     pub creation: Option<NaiveDateTime>,
