@@ -95,7 +95,59 @@ impl Entry {
                 .collect(),
         });
 
-        // TODO: handle history
+        target.history = self.history.map(|h| crate::db::History {
+            entries: h
+                .entries
+                .into_iter()
+                .map(|e| {
+                    let mut he = crate::db::Entry::with_id(crate::db::EntryId::with_uuid(e.uuid.0));
+                    e.xml_to_history(&mut he);
+                    he
+                })
+                .collect(),
+        });
+    }
+
+    /// Like `xml_to_db_handle` but for history entries without binary fields and history
+    pub(crate) fn xml_to_history(self, target: &mut crate::db::Entry) {
+        target.icon_id = self.icon_id.map(|id| id as usize);
+        target.foreground_color = self.foreground_color;
+        target.background_color = self.background_color;
+        target.override_url = self.override_url;
+        target.tags = self
+            .tags
+            .map(|t| t.split(';').map(|s| s.to_string()).collect())
+            .unwrap_or_default();
+
+        target.times = self.times.map(|t| t.into()).unwrap_or_default();
+
+        for field in self.string_fields {
+            let fval = field.value.value.unwrap_or_default();
+
+            let value = if field.value.protected {
+                crate::db::Value::protected_string(fval)
+            } else {
+                crate::db::Value::string(fval)
+            };
+            target.fields.insert(field.key, value);
+        }
+
+        // binary fields cannot be handled here as we don't have access to header attachments
+
+        target.autotype = self.auto_type.map(|at| crate::db::AutoType {
+            enabled: at.enabled,
+            sequence: at.default_sequence,
+            associations: at
+                .association
+                .into_iter()
+                .map(|a| crate::db::AutoTypeAssociation {
+                    window: a.window,
+                    sequence: a.keystroke_sequence,
+                })
+                .collect(),
+        });
+
+        // history cannot be handled here as this is already a history entry
     }
 }
 
