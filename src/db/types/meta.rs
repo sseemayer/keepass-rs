@@ -7,6 +7,7 @@ use crate::db::{Color, CustomDataItem};
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
+#[non_exhaustive]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Meta {
     /// the program that generated the database file.
