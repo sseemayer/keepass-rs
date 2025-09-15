@@ -11,6 +11,6 @@ pub struct AutoType {
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoTypeAssociation {
-    pub window: Option<String>,
-    pub sequence: Option<String>,
+    pub window: String,
+    pub sequence: String,
 }

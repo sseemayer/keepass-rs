@@ -94,7 +94,9 @@ impl XmlBridge for KeePassFile {
             })
             .unwrap_or_default();
 
-        self.root.group.xml_to_db_handle(db.root_mut());
+        self.root
+            .group
+            .xml_to_db_handle(db.root_mut(), header_attachments);
 
         db
     }

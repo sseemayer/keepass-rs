@@ -83,6 +83,25 @@ impl Entry {
         }
     }
 
+    pub(crate) fn with_id(id: Uuid) -> Entry {
+        Entry {
+            id: EntryId(id),
+            fields: HashMap::new(),
+            attachments: HashSet::new(),
+            autotype: None,
+            tags: HashSet::new(),
+            times: Times::default(),
+            custom_data: HashMap::new(),
+            icon_id: None,
+            custom_icon_id: None,
+            foreground_color: None,
+            background_color: None,
+            override_url: None,
+            quality_check: None,
+            history: None,
+        }
+    }
+
     /// Get the unique identifier for the entry
     pub fn id(&self) -> EntryId {
         self.id
