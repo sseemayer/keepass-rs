@@ -43,20 +43,17 @@ impl XmlBridge for Timestamp {
 
     fn xml_to_db(
         self,
-        _inner_decryptor: &dyn crate::crypt::ciphers::Cipher,
+        _inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
         _: &[crate::db::Attachment],
     ) -> Self::DbType {
         self.time
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, _inner_encryptor: &dyn crate::crypt::ciphers::Cipher) -> Self {
-        Timestamp {
-            // NOTE: always use ISO8601 for serialization. We could remember the original format to
-            // have more faithful round-tripping
-            mode: TimestampMode::Iso8601,
-            time: *db,
-        }
+    fn db_to_xml(db: &Self::DbType, _inner_encryptor: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+        // NOTE: always use ISO8601 for serialization. We could remember the original format to
+        // have more faithful round-tripping
+        Timestamp::new_iso8601(*db)
     }
 }
 
@@ -68,11 +65,7 @@ impl<'de> Deserialize<'de> for Timestamp {
         let t = String::deserialize(deserializer)?;
 
         match chrono::NaiveDateTime::parse_from_str(&t, "%Y-%m-%dT%H:%M:%SZ") {
-            // Prior to KDBX4 file format, timestamps were stored as ISO 8601 strings
-            Ok(ndt) => Ok(Timestamp {
-                mode: TimestampMode::Iso8601,
-                time: ndt,
-            }),
+            Ok(ndt) => Ok(Timestamp::new_iso8601(ndt)),
 
             // If we don't have a valid ISO 8601 string, assume we have found a Base64 encoded int.
             _ => {
@@ -85,10 +78,7 @@ impl<'de> Deserialize<'de> for Timestamp {
                 a.copy_from_slice(&v[0..8]);
                 let ndt = get_epoch_baseline() + chrono::Duration::seconds(i64::from_le_bytes(a));
 
-                Ok(Timestamp {
-                    mode: TimestampMode::Base64,
-                    time: ndt,
-                })
+                Ok(Timestamp::new_base64(ndt))
             }
         }
     }

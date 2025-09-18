@@ -33,14 +33,17 @@ use crate::{
 pub fn parse_xml(
     data: &[u8],
     header_attachments: &[crate::db::Attachment],
-    inner_decryptor: &dyn Cipher,
+    inner_decryptor: &mut dyn Cipher,
 ) -> Result<crate::db::Database, quick_xml::DeError> {
     let kdbx: KeePassFile = quick_xml::de::from_reader(data)?;
     Ok(kdbx.xml_to_db(inner_decryptor, header_attachments))
 }
 
 #[cfg(feature = "save_kdbx4")]
-pub fn to_xml(db: &crate::db::Database, inner_encryptor: &dyn Cipher) -> Result<Vec<u8>, quick_xml::SeError> {
+pub fn to_xml(
+    db: &crate::db::Database,
+    inner_encryptor: &mut dyn Cipher,
+) -> Result<Vec<u8>, quick_xml::SeError> {
     let kdbx = KeePassFile::db_to_xml(db, inner_encryptor);
     Ok(quick_xml::se::to_string_with_root("KeePassFile", &kdbx)?
         .as_bytes()
@@ -56,12 +59,12 @@ pub trait XmlBridge {
 
     fn xml_to_db(
         self,
-        inner_decryptor: &dyn Cipher,
+        inner_decryptor: &mut dyn Cipher,
         header_attachments: &[crate::db::Attachment],
     ) -> Self::DbType;
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn Cipher) -> Self;
+    fn db_to_xml(db: &Self::DbType, inner_encryptor: &mut dyn Cipher) -> Self;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,33 +79,39 @@ impl XmlBridge for KeePassFile {
 
     fn xml_to_db(
         mut self,
-        inner_decryptor: &dyn Cipher,
+        inner_decryptor: &mut dyn Cipher,
         header_attachments: &[crate::db::Attachment],
     ) -> Self::DbType {
         let mut db = crate::db::Database::new();
+        let mut attachments = header_attachments.to_vec();
 
         let custom_icons = self.meta.custom_icons.take();
 
-        db.meta = Meta::xml_to_db(self.meta, inner_decryptor, header_attachments);
+        if let Some(binaries) = self.meta.binaries.take() {
+            for binary in binaries.binaries {
+                let attachment = binary.xml_to_db(inner_decryptor, header_attachments);
+                attachments.push(attachment);
+            }
+        }
+
+        db.meta = Meta::xml_to_db(self.meta, inner_decryptor, &attachments);
 
         db.custom_icons = custom_icons
             .map(|ci| {
                 ci.icons
                     .into_iter()
-                    .map(|icon| Icon::xml_to_db(icon, inner_decryptor, header_attachments))
+                    .map(|icon| Icon::xml_to_db(icon, inner_decryptor, &attachments))
                     .collect()
             })
             .unwrap_or_default();
 
-        self.root
-            .group
-            .xml_to_db_handle(db.root_mut(), header_attachments);
+        self.root.group.xml_to_db_handle(db.root_mut(), &attachments);
 
         db
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn Cipher) -> Self {
+    fn db_to_xml(_: &Self::DbType, _: &mut dyn Cipher) -> Self {
         todo!()
     }
 }

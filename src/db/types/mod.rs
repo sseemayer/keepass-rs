@@ -155,6 +155,18 @@ impl Database {
             .then(move || GroupMut::new(self, id))
     }
 
+    pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
+        self.attachments
+            .contains_key(&id)
+            .then(move || AttachmentRef::new(self, id))
+    }
+
+    pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
+        self.attachments
+            .contains_key(&id)
+            .then(move || AttachmentMut::new(self, id))
+    }
+
     pub fn custom_icon(&self, id: IconId) -> Option<IconRef<'_>> {
         self.custom_icons
             .contains_key(&id)
