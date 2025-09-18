@@ -20,7 +20,8 @@ Rust KeePass database file parser for KDB, KDBX3 and KDBX4, with experimental su
 use keepass::{
     Database,
     DatabaseKey,
-    db::DatabaseOpenError,
+    DatabaseOpenError,
+    db::fields,
 };
 use std::fs::File;
 
@@ -30,6 +31,11 @@ fn main() -> Result<(), DatabaseOpenError> {
     let key = DatabaseKey::new().with_password("demopass");
     let db = Database::open(&mut file, key)?;
 
+    for entry in db.iter_all_entries() {
+        if let Some(title) = entry.get(fields::TITLE) {
+            println!("Title: {}", title);
+        }
+    }
 
     Ok(())
 }

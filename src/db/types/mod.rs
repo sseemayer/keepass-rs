@@ -28,9 +28,9 @@ use crate::config::DatabaseConfig;
 
 /// In-memory representation of a KeePass Database.
 ///
-/// This struct holds all data in a KeePass database, including [Group]s, [Entry]s, and
-/// [Attachment]s, and provides access to them via [GroupRef], [EntryRef], and [AttachmentRef]
-/// handles. Use e.g. [Database::root] to get handle to the root group, and then
+/// This struct holds all data in a KeePass database within private fields, including [Group]s,
+/// [Entry]s, and [Attachment]s, and provides access to them via [GroupRef], [EntryRef], and
+/// [AttachmentRef] handles. Use e.g. [Database::root] to get a handle for the root group, and then
 /// traverse the group hierarchy from there.
 ///
 /// See the [module-level documentation](crate::db) for an example.
