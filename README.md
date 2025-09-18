@@ -69,9 +69,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     group.name = "Demo group".to_string();
 
     let mut entry = group.add_entry();
-    entry.set(fields::TITLE, Value::string("Demo entry"));
-    entry.set(fields::USERNAME, Value::string("jdoe"));
-    entry.set(fields::PASSWORD, Value::protected_string("hunter2"));
+    entry.set_unprotected(fields::TITLE, "Demo entry");
+    entry.set_unprotected(fields::USERNAME, "jdoe");
+    entry.set_protected(fields::PASSWORD, "hunter2");
 
     #[cfg(feature = "save_kdbx4")]
     db.save(
