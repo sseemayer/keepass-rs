@@ -132,9 +132,25 @@ impl Entry {
         self.fields.insert(key.into(), value);
     }
 
+    /// Set a protected field value. See [crate::db::fields] for common field names.
+    pub fn set_protected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.fields
+            .insert(key.into(), Value::protected_string(value.into()));
+    }
+
+    /// Set an unprotected field value. See [crate::db::fields] for common field names.
+    pub fn set_unprotected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.fields.insert(key.into(), Value::string(value.into()));
+    }
+
     /// Get a field value. See [crate::db::fields] for common field names.
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.fields.get(key)
+    }
+
+    /// Get a field value as a string slice, if it exists.
+    pub fn get_str(&self, key: &str) -> Option<&str> {
+        self.fields.get(key).map(|v| v.as_str())
     }
 }
 
