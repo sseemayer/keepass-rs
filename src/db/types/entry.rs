@@ -7,8 +7,8 @@ use std::{
 use uuid::Uuid;
 
 use crate::db::{
-    Attachment, AttachmentId, AttachmentMut, AutoType, Color, CustomDataItem, Database, History, IconId,
-    IconRef, Times, Value,
+    Attachment, AttachmentId, AttachmentMut, AttachmentRef, AutoType, Color, CustomDataItem, Database, History,
+    IconId, IconRef, Times, Value,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -36,7 +36,7 @@ pub struct Entry {
     pub fields: HashMap<String, Value>,
 
     /// attachments associated with the entry
-    pub attachments: HashSet<AttachmentId>,
+    attachments: HashSet<AttachmentId>,
 
     /// auto-type settings for the entry
     pub autotype: Option<AutoType>,
@@ -112,11 +112,6 @@ impl Entry {
         &self.times
     }
 
-    /// Get custom data fields for the entry
-    pub fn custom_data(&self) -> &HashMap<String, CustomDataItem> {
-        &self.custom_data
-    }
-
     pub fn set(&mut self, key: impl Into<String>, value: Value) {
         self.fields.insert(key.into(), value);
     }
@@ -124,8 +119,6 @@ impl Entry {
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.fields.get(key)
     }
-
-    // TODO: add ways to edit fields in need of protection
 }
 
 impl Deref for Entry {
@@ -153,7 +146,15 @@ impl EntryRef<'_> {
         EntryRef { database, id }
     }
 
-    pub fn custom_icon_id(&self) -> Option<IconRef<'_>> {
+    pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
+        if self.attachments.contains(&id) {
+            Some(AttachmentRef::new(self.database, id))
+        } else {
+            None
+        }
+    }
+
+    pub fn custom_icon(&self) -> Option<IconRef<'_>> {
         let icon_id = self.custom_icon_id?;
         self.database.custom_icon(icon_id)
     }
@@ -187,6 +188,14 @@ impl EntryMut<'_> {
         self.attachments.insert(id);
 
         AttachmentMut::new(self.database, id)
+    }
+
+    pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
+        if self.attachments.contains(&id) {
+            Some(AttachmentMut::new(self.database, id))
+        } else {
+            None
+        }
     }
 }
 
