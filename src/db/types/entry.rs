@@ -27,6 +27,12 @@ impl std::fmt::Display for EntryId {
     }
 }
 
+/// A KeePass database entry.
+///
+/// You will never construct or handle ownership of `Entry` objects directly, but will be handed
+/// [EntryRef] and [EntryMut] handles through which you can access the entries.
+///
+/// See the [module-level documentation](crate::db) for an example.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Entry {
@@ -50,13 +56,22 @@ pub struct Entry {
     /// custom data associated with the entry
     pub custom_data: HashMap<String, CustomDataItem>,
 
+    /// numerical icon index for the KeePass-provided icons
     pub icon_id: Option<usize>,
+
+    /// UUID of a custom icon associated with the entry
     custom_icon_id: Option<IconId>,
 
+    /// foreground color for the entry
     pub foreground_color: Option<Color>,
+
+    /// background color for the entry
     pub background_color: Option<Color>,
 
+    /// override URL for the entry
     pub override_url: Option<String>,
+
+    /// unclear what a quality_check is; KeePass seems to use it for some kind of internal flagging
     pub quality_check: Option<bool>,
 
     /// modification history of the entry
@@ -112,26 +127,14 @@ impl Entry {
         &self.times
     }
 
+    /// Set a field value. See [crate::db::fields] for common field names.
     pub fn set(&mut self, key: impl Into<String>, value: Value) {
         self.fields.insert(key.into(), value);
     }
 
+    /// Get a field value. See [crate::db::fields] for common field names.
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.fields.get(key)
-    }
-}
-
-impl Deref for Entry {
-    type Target = HashMap<String, Value>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.fields
-    }
-}
-
-impl DerefMut for Entry {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.fields
     }
 }
 
