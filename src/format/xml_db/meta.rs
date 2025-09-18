@@ -88,7 +88,7 @@ pub struct Meta {
     settings_changed: Option<Timestamp>,
 
     #[serde(default)]
-    binaries: Option<Binaries>,
+    pub binaries: Option<Binaries>,
 
     #[serde(default)]
     custom_data: Option<CustomData>,
@@ -99,7 +99,7 @@ impl XmlBridge for Meta {
 
     fn xml_to_db(
         self,
-        inner_decryptor: &dyn crate::crypt::ciphers::Cipher,
+        inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
         header_attachments: &[crate::db::Attachment],
     ) -> Self::DbType {
         // NOTE: custom icons and binary attachments are moved out of the Meta into the main
@@ -142,7 +142,7 @@ impl XmlBridge for Meta {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn crate::crypt::ciphers::Cipher) -> Self {
+    fn db_to_xml(db: &Self::DbType, inner_encryptor: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
         Self {
             generator: db.generator.clone(),
             database_name: db.database_name.clone(),
@@ -229,12 +229,14 @@ pub struct Binary {
     pub protected: Option<bool>,
 }
 
-impl Binary {
-    pub(crate) fn xml_to_db_handle(
+impl XmlBridge for Binary {
+    type DbType = crate::db::Attachment;
+
+    fn xml_to_db(
         self,
-        mut target: crate::db::AttachmentMut,
         inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-    ) {
+        _header_attachments: &[crate::db::Attachment],
+    ) -> Self::DbType {
         let mut data = base64_engine::STANDARD.decode(self.value).unwrap_or_default();
 
         if self.protected.unwrap_or(false) {
@@ -247,8 +249,17 @@ impl Binary {
                 .unwrap_or_default();
         }
 
-        target.protected = self.protected.unwrap_or(true);
-        target.set_data(data);
+        let mut attachment = crate::db::Attachment::new();
+        attachment.protected = self.protected.unwrap_or(false);
+        attachment.set_data(data);
+
+        attachment
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    fn db_to_xml(_: &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+        // we only support KDBX4 saving, which uses header attachments, not Meta/Binaries
+        unreachable!()
     }
 }
 
@@ -264,7 +275,7 @@ impl XmlBridge for CustomData {
 
     fn xml_to_db(
         self,
-        inner_decryptor: &dyn crate::crypt::ciphers::Cipher,
+        inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
         header_attachments: &[crate::db::Attachment],
     ) -> Self::DbType {
         self.items
@@ -288,7 +299,7 @@ impl XmlBridge for CustomData {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, inner_encryptor: &dyn crate::crypt::ciphers::Cipher) -> Self {
+    fn db_to_xml(db: &Self::DbType, inner_encryptor: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
         let items = db
             .iter()
             .map(|(key, item)| {
@@ -334,7 +345,7 @@ pub enum CustomDataValue {
 impl XmlBridge for CustomDataValue {
     type DbType = crate::db::CustomDataValue;
 
-    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
+    fn xml_to_db(self, _: &mut dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
         match self {
             CustomDataValue::String(s) => crate::db::CustomDataValue::String(s),
             CustomDataValue::Binary(b) => crate::db::CustomDataValue::Binary(b),
@@ -342,10 +353,10 @@ impl XmlBridge for CustomDataValue {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
+    fn db_to_xml(db: &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
         match db {
-            crate::db::Value::String(s) => CustomDataValue::String(s.clone()),
-            crate::db::Value::Bytes(b) => CustomDataValue::Binary(b.clone()),
+            crate::db::CustomDataValue::String(s) => CustomDataValue::String(s.clone()),
+            crate::db::CustomDataValue::Binary(b) => CustomDataValue::Binary(b.clone()),
             _ => panic!("Cannot serialize protected CustomData values"),
         }
     }
@@ -403,7 +414,7 @@ struct MemoryProtection {
 impl XmlBridge for MemoryProtection {
     type DbType = crate::db::MemoryProtection;
 
-    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
+    fn xml_to_db(self, _: &mut dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
         crate::db::MemoryProtection {
             protect_title: self.protect_title.unwrap_or(false),
             protect_username: self.protect_username.unwrap_or(false),
@@ -414,7 +425,7 @@ impl XmlBridge for MemoryProtection {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
+    fn db_to_xml(db: &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
         Self {
             protect_title: Some(db.protect_title),
             protect_username: Some(db.protect_username),
@@ -445,7 +456,7 @@ pub struct Icon {
 impl XmlBridge for Icon {
     type DbType = (crate::db::IconId, crate::db::Icon);
 
-    fn xml_to_db(self, _: &dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
+    fn xml_to_db(self, _: &mut dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
         let key = crate::db::IconId::from_uuid(self.uuid.0);
         let value = crate::db::Icon {
             id: crate::db::IconId::from_uuid(self.uuid.0),
@@ -456,7 +467,7 @@ impl XmlBridge for Icon {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml((_, value): &Self::DbType, _: &dyn crate::crypt::ciphers::Cipher) -> Self {
+    fn db_to_xml((_, value): &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
         Self {
             uuid: UUID(value.id.to_uuid()),
             data: value.data.clone(),
