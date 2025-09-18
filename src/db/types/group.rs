@@ -30,6 +30,12 @@ impl std::fmt::Display for GroupId {
     }
 }
 
+/// A KeePass database group.
+///
+/// You will never construct or handle ownership of `Group` objects directly, but will be handed
+/// [GroupRef] and [GroupMut] handles through which you can access the entries.
+///
+/// See the [module-level documentation](crate::db) for an example.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Group {
