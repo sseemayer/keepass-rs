@@ -32,9 +32,7 @@ fn main() -> Result<(), DatabaseOpenError> {
     let db = Database::open(&mut file, key)?;
 
     for entry in db.iter_all_entries() {
-        if let Some(title) = entry.get(fields::TITLE) {
-            println!("Title: {}", title);
-        }
+        println!("Title: {}", entry.get_str(fields::TITLE).unwrap_or("<no title>"));
     }
 
     Ok(())
