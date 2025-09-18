@@ -1,6 +1,6 @@
 //! Standard field names for entries.
 //!
-//! This can be used with `Entry::get` and `Entry::set`.
+//! This can be used with [Entry::get][crate::db::Entry::get] and [Entry::set][crate::db::Entry::set].
 
 /// The title of the entry
 pub const TITLE: &str = "Title";

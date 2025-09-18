@@ -10,16 +10,17 @@ use crate::{
     Database,
 };
 
+/// Unique identifier for a [Group]. Stores [Uuid]s internally.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct GroupId(Uuid);
 
 impl GroupId {
-    pub fn new() -> GroupId {
+    pub(crate) fn new() -> GroupId {
         GroupId(Uuid::new_v4())
     }
 
-    pub fn with_uuid(uuid: Uuid) -> GroupId {
+    pub(crate) fn with_uuid(uuid: Uuid) -> GroupId {
         GroupId(uuid)
     }
 }
@@ -126,6 +127,7 @@ impl Group {
     }
 }
 
+/// Immutable reference to a [Group]. Can be dereferenced to get a [`&Group`][Group]
 pub struct GroupRef<'a> {
     database: &'a crate::db::Database,
     id: GroupId,
@@ -148,6 +150,7 @@ impl Deref for GroupRef<'_> {
     }
 }
 
+/// Mutable reference to a [Group]. Can be dereferenced to get a [`&mut Group`][Group]
 pub struct GroupMut<'a> {
     database: &'a mut crate::db::Database,
     id: GroupId,

@@ -9,6 +9,15 @@ pub enum Value {
     PString(SecretBox<String>),
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::String(data) => write!(f, "{}", data),
+            Value::PString(_) => write!(f, "[redacted]"),
+        }
+    }
+}
+
 impl Value {
     /// Create a new unprotected text data value
     pub fn string(data: impl Into<String>) -> Self {
@@ -32,11 +41,11 @@ impl Value {
         }
     }
 
-    /// Returns the value as a string slice, if it is either String or PString
-    pub fn as_string(&self) -> Option<&str> {
+    /// Returns the value as a string slice
+    pub fn as_str(&self) -> &str {
         match self {
-            Value::String(data) => Some(data),
-            Value::PString(data) => Some(data.expose_secret()),
+            Value::String(data) => data,
+            Value::PString(data) => data.expose_secret(),
         }
     }
 }
