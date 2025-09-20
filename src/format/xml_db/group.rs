@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{AttachmentId, EntryId, GroupId},
+    db::{EntryId, GroupId},
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         entry::{Entry, UnprotectError},
@@ -88,7 +86,7 @@ impl Group {
     pub(crate) fn db_to_xml(
         source: crate::db::GroupRef<'_>,
         inner_cipher: &mut dyn Cipher,
-        attachment_id_numbering: &HashMap<AttachmentId, usize>,
+        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, usize>,
     ) -> Self {
         Group {
             uuid: UUID(source.id().uuid()),

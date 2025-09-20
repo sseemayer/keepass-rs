@@ -1,6 +1,5 @@
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use cipher::block_padding::UnpadError;
-use std::collections::HashMap;
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
@@ -157,7 +156,7 @@ impl Entry {
     pub(crate) fn db_to_xml(
         db: crate::db::EntryRef<'_>,
         inner_encryptor: &mut dyn Cipher,
-        attachment_id_numbering: &HashMap<crate::db::AttachmentId, usize>,
+        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, usize>,
     ) -> Self {
         let string_fields = db
             .fields
@@ -220,16 +219,31 @@ impl Entry {
         }
     }
 
+    #[cfg(feature = "save_kdbx4")]
     fn db_to_xml_history(db: &crate::db::Entry, inner_encryptor: &mut dyn Cipher) -> Self {
         let string_fields = db
             .fields
             .iter()
-            .map(|(k, v)| StringField {
-                key: k.clone(),
-                value: StringValue {
-                    protected: v.is_protected(),
-                    value: Some(v.as_str().to_string()),
-                },
+            .map(|(k, v)| {
+                let value = if v.is_protected() {
+                    let encrypted = inner_encryptor.encrypt(v.as_str().as_bytes());
+                    let encoded = base64_engine::STANDARD.encode(&encrypted);
+
+                    StringValue {
+                        protected: true,
+                        value: Some(encoded),
+                    }
+                } else {
+                    StringValue {
+                        protected: false,
+                        value: Some(v.as_str().to_string()),
+                    }
+                };
+
+                StringField {
+                    key: k.clone(),
+                    value,
+                }
             })
             .collect();
 
