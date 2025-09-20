@@ -1,10 +1,7 @@
 mod file_read_tests {
 
     use anyhow::Result;
-    use keepass::{
-        db::{Database, GroupId},
-        DatabaseKey,
-    };
+    use keepass::{db::Database, DatabaseKey};
     use uuid::uuid;
 
     use std::{fs::File, path::Path};

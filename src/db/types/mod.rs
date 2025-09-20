@@ -112,6 +112,10 @@ impl Database {
         self.group_mut(recyclebin_id)
     }
 
+    pub fn num_attachments(&self) -> usize {
+        self.attachments.len()
+    }
+
     pub fn num_entries(&self) -> usize {
         self.entries.len()
     }
