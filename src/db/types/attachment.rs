@@ -9,7 +9,6 @@ pub struct AttachmentId(Uuid);
 
 /// Attachment associated with an entry
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Attachment {
     id: AttachmentId,
     pub name: String,
@@ -37,6 +36,24 @@ impl Attachment {
 
     pub fn set_data(&mut self, data: Vec<u8>) {
         self.data = SecretBox::new(data.into_boxed_slice());
+    }
+}
+
+#[cfg(feature = "serialization")]
+impl serde::Serialize for Attachment {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use base64::{engine::general_purpose as base64_engine, Engine as _};
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("Attachment", 4)?;
+        state.serialize_field("id", &self.id)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("protected", &self.protected)?;
+        state.serialize_field("data", &base64_engine::STANDARD.encode(self.data()))?;
+        state.end()
     }
 }
 

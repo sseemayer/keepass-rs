@@ -7,7 +7,7 @@ use crate::{
     db::{AttachmentId, EntryId, GroupId},
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
-        entry::Entry,
+        entry::{Entry, UnprotectError},
         times::Times,
         UUID,
     },
@@ -57,7 +57,8 @@ impl Group {
         self,
         mut target: crate::db::GroupMut,
         header_attachments: &[crate::db::Attachment],
-    ) {
+        inner_decryptor: &mut dyn Cipher,
+    ) -> Result<(), UnprotectError> {
         target.name = self.name;
         target.notes = self.notes;
         target.icon_id = self.icon_id;
@@ -72,15 +73,18 @@ impl Group {
 
         for entry in self.entries {
             let new_entry = target.add_entry_with_id(EntryId::with_uuid(entry.uuid.0));
-            entry.xml_to_db_handle(new_entry, header_attachments);
+            entry.xml_to_db_handle(new_entry, header_attachments, inner_decryptor)?;
         }
 
         for group in self.groups {
             let new_group = target.add_group_with_id(GroupId::with_uuid(group.uuid.0));
-            group.xml_to_db_handle(new_group, header_attachments);
+            group.xml_to_db_handle(new_group, header_attachments, inner_decryptor)?;
         }
+
+        Ok(())
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
         source: crate::db::GroupRef<'_>,
         inner_cipher: &mut dyn Cipher,

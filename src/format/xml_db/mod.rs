@@ -15,20 +15,32 @@ pub mod timestamp;
 use serde::{Deserialize, Serialize, Serializer};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
+use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
-    format::xml_db::{custom_serde::cs_opt_string, group::Group, meta::Meta, timestamp::Timestamp},
+    format::xml_db::{
+        custom_serde::cs_opt_string, entry::UnprotectError, group::Group, meta::Meta, timestamp::Timestamp,
+    },
 };
 
 pub fn parse_xml(
     data: &[u8],
     header_attachments: &[crate::db::Attachment],
     inner_decryptor: &mut dyn Cipher,
-) -> Result<crate::db::Database, quick_xml::DeError> {
+) -> Result<crate::db::Database, ParseXmlError> {
     let kdbx: KeePassFile = quick_xml::de::from_reader(data)?;
-    Ok(kdbx.xml_to_db(inner_decryptor, header_attachments))
+    Ok(kdbx.xml_to_db(inner_decryptor, header_attachments)?)
+}
+
+#[derive(Debug, Error)]
+pub enum ParseXmlError {
+    #[error("Error parsing XML inside KDBX: {0}")]
+    Xml(#[from] quick_xml::DeError),
+
+    #[error("Error unprotecting entry: {0}")]
+    Unprotect(#[from] UnprotectError),
 }
 
 #[cfg(feature = "save_kdbx4")]
@@ -62,7 +74,7 @@ impl KeePassFile {
         mut self,
         inner_decryptor: &mut dyn Cipher,
         header_attachments: &[crate::db::Attachment],
-    ) -> crate::db::Database {
+    ) -> Result<crate::db::Database, UnprotectError> {
         let mut db =
             crate::db::Database::new_with_root_id(crate::db::GroupId::with_uuid(self.root.group.uuid.0));
         let mut attachments = header_attachments.to_vec();
@@ -90,9 +102,11 @@ impl KeePassFile {
             })
             .unwrap_or_default();
 
-        self.root.group.xml_to_db_handle(db.root_mut(), &attachments);
+        self.root
+            .group
+            .xml_to_db_handle(db.root_mut(), &attachments, inner_decryptor)?;
 
-        db
+        Ok(db)
     }
 
     /// Convert from database representation to XML representation.

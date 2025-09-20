@@ -24,7 +24,7 @@ impl GroupId {
         GroupId(uuid)
     }
 
-    pub(crate) fn uuid(&self) -> Uuid {
+    pub fn uuid(&self) -> Uuid {
         self.0
     }
 }
@@ -132,6 +132,7 @@ impl Group {
 }
 
 /// Immutable reference to a [Group]. Can be dereferenced to get a [`&Group`][Group]
+#[derive(Clone)]
 pub struct GroupRef<'a> {
     database: &'a crate::db::Database,
     id: GroupId,
@@ -152,6 +153,38 @@ impl GroupRef<'_> {
         self.entries
             .iter()
             .map(move |id| EntryRef::new(self.database, *id))
+    }
+
+    /// Find a subgroup by name, case-insensitively.
+    pub fn group_by_name(&self, name: &str) -> Option<GroupRef<'_>> {
+        self.groups().find(|g| g.name.eq_ignore_ascii_case(name))
+    }
+
+    /// Find an entry by title, case-insensitively.
+    pub fn entry_by_name(&self, title: &str) -> Option<EntryRef<'_>> {
+        self.entries().find(|e| {
+            e.get(crate::db::fields::TITLE)
+                .map_or(false, |t| t.as_str().eq_ignore_ascii_case(title))
+        })
+    }
+
+    /// Find a subgroup by a path of names, case-insensitively.
+    pub fn group_by_path(&self, path: &[&str]) -> Option<GroupRef<'_>> {
+        let mut current = self.id;
+
+        for part in path {
+            current = self
+                .database
+                .groups
+                .get(&current)?
+                .groups
+                .iter()
+                .filter_map(|id| self.database.groups.get(id))
+                .find(|g| g.name.eq_ignore_ascii_case(part))?
+                .id;
+        }
+
+        Some(GroupRef::new(self.database, current))
     }
 }
 
