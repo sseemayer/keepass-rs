@@ -18,10 +18,10 @@ Rust KeePass database file parser for KDB, KDBX3 and KDBX4, with experimental su
 
 ```rust
 use keepass::{
-    db::NodeRef,
     Database,
     DatabaseKey,
-    error::DatabaseOpenError
+    DatabaseOpenError,
+    db::fields,
 };
 use std::fs::File;
 
@@ -31,19 +31,8 @@ fn main() -> Result<(), DatabaseOpenError> {
     let key = DatabaseKey::new().with_password("demopass");
     let db = Database::open(&mut file, key)?;
 
-    // Iterate over all `Group`s and `Entry`s
-    for node in &db.root {
-        match node {
-            NodeRef::Group(g) => {
-                println!("Saw group '{0}'", g.name);
-            },
-            NodeRef::Entry(e) => {
-                let title = e.get_title().unwrap_or("(no title)");
-                let user = e.get_username().unwrap_or("(no username)");
-                let pass = e.get_password().unwrap_or("(no password)");
-                println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
-            }
-        }
+    for entry in db.iter_all_entries() {
+        println!("Title: {}", entry.get_str(fields::TITLE).unwrap_or("<no title>"));
     }
 
     Ok(())
@@ -64,26 +53,25 @@ You can enable the experimental support for saving KDBX4 databases using the `sa
 
 ```rust
 use keepass::{
-    db::{Database, Entry, Group, Node, NodeRef, Value},
+    db::{Database, Value, fields},
     DatabaseKey,
 };
 use std::fs::File;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut db = Database::new(Default::default());
+    let mut db = Database::new();
 
     db.meta.database_name = Some("Demo database".to_string());
 
-    let mut group = Group::new("Demo group");
+    let mut root = db.root_mut();
 
-    let mut entry = Entry::new();
-    entry.fields.insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
-    entry.fields.insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
-    entry.fields.insert("Password".to_string(), Value::Protected("hunter2".as_bytes().into()));
+    let mut group = root.add_group();
+    group.name = "Demo group".to_string();
 
-    group.add_child(entry);
-
-    db.root.add_child(group);
+    let mut entry = group.add_entry();
+    entry.set_unprotected(fields::TITLE, "Demo entry");
+    entry.set_unprotected(fields::USERNAME, "jdoe");
+    entry.set_protected(fields::PASSWORD, "hunter2");
 
     #[cfg(feature = "save_kdbx4")]
     db.save(
@@ -119,13 +107,12 @@ cargo run --release --features "utilities" --bin kp-dump-xml -- path/to/database
 ## Installation
 Add the following to the `dependencies` section of your `Cargo.toml`:
 
-```ignore
+```toml
 [dependencies]
 keepass = "*" # TODO replace with current version
 ```
 
 ### Performance Notes
-
 For the best performance, this crate requires specific cargo configuration to enable CPU-specific optimizations, especially for AES key derivation.
 
 Please see the recommended settings in the [.cargo/config.toml](https://github.com/sseemayer/keepass-rs/blob/master/.cargo/config.toml) file in this repository.

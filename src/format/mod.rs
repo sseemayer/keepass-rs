@@ -2,6 +2,8 @@ pub(crate) mod kdb;
 pub(crate) mod kdbx3;
 pub(crate) mod kdbx4;
 
+pub(crate) mod xml_db;
+
 #[cfg(feature = "save_kdbx4")]
 use std::io::Write;
 
@@ -9,7 +11,7 @@ use std::io::Write;
 use byteorder::WriteBytesExt;
 use byteorder::{ByteOrder, LittleEndian};
 
-use crate::error::DatabaseIntegrityError;
+use thiserror::Error;
 
 const KDBX_IDENTIFIER: [u8; 4] = [0x03, 0xd9, 0xa2, 0x9a];
 
@@ -37,14 +39,14 @@ pub enum DatabaseVersion {
 }
 
 impl DatabaseVersion {
-    pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseIntegrityError> {
+    pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseVersionParseError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
-            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
+            return Err(DatabaseVersionParseError::InvalidKDBXIdentifier);
         }
 
         // check identifier
         if data[0..4] != KDBX_IDENTIFIER {
-            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
+            return Err(DatabaseVersionParseError::InvalidKDBXIdentifier);
         }
 
         let version = LittleEndian::read_u32(&data[4..8]);
@@ -61,7 +63,7 @@ impl DatabaseVersion {
                 DatabaseVersion::KDB4(file_minor_version)
             }
             _ => {
-                return Err(DatabaseIntegrityError::InvalidKDBXVersion {
+                return Err(DatabaseVersionParseError::InvalidKDBXVersion {
                     version,
                     file_major_version: file_major_version as u32,
                     file_minor_version: file_minor_version as u32,
@@ -89,6 +91,26 @@ impl DatabaseVersion {
     pub(crate) fn get_version_header_size() -> usize {
         12
     }
+}
+
+#[derive(Error, Debug)]
+pub enum DatabaseVersionParseError {
+    /// The database does not have a valid KDBX identifier
+    #[error("Invalid KDBX identifier")]
+    InvalidKDBXIdentifier,
+
+    /// The version of the KDBX file is invalid
+    #[error(
+        "Invalid KDBX version: {}.{}.{}",
+        version,
+        file_major_version,
+        file_minor_version
+    )]
+    InvalidKDBXVersion {
+        version: u32,
+        file_major_version: u32,
+        file_minor_version: u32,
+    },
 }
 
 impl std::fmt::Display for DatabaseVersion {

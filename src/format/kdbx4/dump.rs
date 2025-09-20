@@ -1,19 +1,16 @@
 use std::io::Write;
 
 use byteorder::{LittleEndian, WriteBytesExt};
+use thiserror::Error;
 
 use crate::{
     crypt,
-    db::{Database, HeaderAttachment},
-    error::DatabaseSaveError,
-    format::{
-        kdbx4::{
-            KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
-            HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_MASTER_SEED_SIZE, HEADER_OUTER_ENCRYPTION_ID,
-            INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END, INNER_HEADER_RANDOM_STREAM_ID,
-            INNER_HEADER_RANDOM_STREAM_KEY,
-        },
-        DatabaseVersion,
+    db::{Attachment, Database},
+    format::kdbx4::{
+        KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
+        HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_MASTER_SEED_SIZE, HEADER_OUTER_ENCRYPTION_ID,
+        HEADER_PUBLIC_CUSTOM_DATA, INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END,
+        INNER_HEADER_RANDOM_STREAM_ID, INNER_HEADER_RANDOM_STREAM_KEY,
     },
     hmac_block_stream,
     io::WriteLengthTaggedExt,
@@ -21,18 +18,8 @@ use crate::{
     variant_dictionary::VariantDictionary,
 };
 
-use super::HEADER_PUBLIC_CUSTOM_DATA;
-
 /// Dump a KeePass database using the key elements
-pub fn dump_kdbx4(
-    db: &Database,
-    db_key: &DatabaseKey,
-    writer: &mut dyn Write,
-) -> Result<(), DatabaseSaveError> {
-    if !matches!(db.config.version, DatabaseVersion::KDB4(_)) {
-        return Err(DatabaseSaveError::UnsupportedVersion);
-    }
-
+pub fn dump_kdbx4(db: &Database, db_key: &DatabaseKey, writer: &mut dyn Write) -> Result<(), SaveKdbx4Error> {
     // generate encryption keys and seeds on the fly when saving
     let mut master_seed = vec![0; HEADER_MASTER_SEED_SIZE];
     getrandom::fill(&mut master_seed)?;
@@ -62,7 +49,7 @@ pub fn dump_kdbx4(
     }
     .dump(&mut header_data)?;
 
-    let header_sha256 = crypt::calculate_sha256(&[&header_data])?;
+    let header_sha256 = crypt::calculate_sha256(&[&header_data]);
 
     // write out header and header hash
     writer.write_all(&header_data)?;
@@ -71,15 +58,17 @@ pub fn dump_kdbx4(
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
-    let composite_key = crypt::calculate_sha256(&key_elements)?;
-    let transformed_key = kdf.transform_key(&composite_key)?;
-    let master_key = crypt::calculate_sha256(&[&master_seed, &transformed_key])?;
+    let composite_key = crypt::calculate_sha256(&key_elements);
+    let transformed_key = kdf
+        .transform_key(&composite_key)
+        .map_err(|e| SaveKdbx4Error::KeyTransformationError(e.to_string()))?;
+    let master_key = crypt::calculate_sha256(&[&master_seed, &transformed_key]);
 
     // verify credentials
-    let hmac_key =
-        crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END])?;
-    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key)?;
-    let header_hmac = crypt::calculate_hmac(&[&header_data], &header_hmac_key)?;
+    let hmac_key = crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END]);
+    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+    let header_hmac =
+        crypt::calculate_hmac(&[&header_data], &header_hmac_key).expect("HMAC key has correct length");
 
     writer.write_all(&header_hmac)?;
 
@@ -87,7 +76,12 @@ pub fn dump_kdbx4(
     let mut inner_cipher = db
         .config
         .inner_cipher_config
-        .get_cipher(&inner_random_stream_key)?;
+        .get_cipher(&inner_random_stream_key)
+        .expect("Inner random stream key has correct length");
+
+    // Create a defined order of attachments to use both in the inner header and for referencing
+    // attachments by index within entries
+    let attachments: Vec<Attachment> = db.attachments.values().cloned().collect();
 
     // dump inner header into buffer
     let mut payload = Vec::new();
@@ -95,10 +89,14 @@ pub fn dump_kdbx4(
         inner_random_stream: db.config.inner_cipher_config.clone(),
         inner_random_stream_key,
     }
-    .dump(&db.header_attachments, &mut payload)?;
+    .dump(&attachments, &mut payload)?;
 
     // after inner header is one XML document
-    crate::xml_db::dump::dump(db, &mut *inner_cipher, &mut payload)?;
+    payload.extend_from_slice(&crate::format::xml_db::to_xml(
+        db,
+        &mut *inner_cipher,
+        &attachments,
+    )?);
 
     let payload_compressed = db
         .config
@@ -106,28 +104,43 @@ pub fn dump_kdbx4(
         .get_compression()
         .compress(&payload)?;
 
-    let payload_encrypted = db
+    let payload_encrypted: Vec<u8> = db
         .config
         .outer_cipher_config
-        .get_cipher(&master_key, &outer_iv)?
-        .encrypt(&payload_compressed)?;
+        .get_cipher(&master_key, &outer_iv)
+        .expect("Outer IV and master key have the correct length")
+        .encrypt(&payload_compressed);
 
-    let payload_hmac = hmac_block_stream::write_hmac_block_stream(&payload_encrypted, &hmac_key)?;
+    let payload_hmac = hmac_block_stream::write_hmac_block_stream(&payload_encrypted, &hmac_key);
     writer.write_all(&payload_hmac)?;
 
     Ok(())
 }
 
-impl HeaderAttachment {
-    fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
-        writer.write_u8(self.flags)?;
-        writer.write_all(&self.content)?;
-        Ok(())
-    }
+#[derive(Debug, Error)]
+pub enum SaveKdbx4Error {
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+
+    #[error("Error generating random data: {0}")]
+    RandomError(#[from] getrandom::Error),
+
+    #[cfg(feature = "challenge_response")]
+    #[error(transparent)]
+    ChallengeResponse(#[from] crate::key::KeyChallengeError),
+
+    #[error(transparent)]
+    KeyElements(#[from] crate::key::GetKeyElementsError),
+
+    #[error("Error transforming key: {0}")]
+    KeyTransformationError(String),
+
+    #[error("Error writing inner XML database: {0}")]
+    XmlSerialization(#[from] quick_xml::SeError),
 }
 
 impl KDBX4OuterHeader {
-    fn dump(&self, writer: &mut dyn Write) -> Result<(), DatabaseSaveError> {
+    fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
         self.version.dump(writer)?;
 
         writer.write_u8(HEADER_OUTER_ENCRYPTION_ID)?;
@@ -165,11 +178,11 @@ impl KDBX4OuterHeader {
 }
 
 impl KDBX4InnerHeader {
-    fn dump(
+    fn dump<'a>(
         &self,
-        header_attachments: &[HeaderAttachment],
+        header_attachments: &[Attachment],
         writer: &mut dyn Write,
-    ) -> Result<(), DatabaseSaveError> {
+    ) -> Result<(), std::io::Error> {
         writer.write_all(&[INNER_HEADER_RANDOM_STREAM_ID])?;
         writer.write_u32::<LittleEndian>(4)?;
         writer.write_u32::<LittleEndian>(self.inner_random_stream.dump())?;
@@ -178,9 +191,14 @@ impl KDBX4InnerHeader {
         writer.write_with_len(&self.inner_random_stream_key)?;
 
         for attachment in header_attachments {
+            let data = attachment.data();
             writer.write_u8(INNER_HEADER_BINARY_ATTACHMENTS)?;
-            writer.write_u32::<LittleEndian>((attachment.content.len() + 1) as u32)?;
-            attachment.dump(writer)?;
+            writer.write_u32::<LittleEndian>((data.len() + 1) as u32)?;
+
+            let flags = if attachment.protected { 0x01 } else { 0x00 };
+            writer.write_u8(flags)?;
+
+            writer.write_all(&data)?;
         }
 
         writer.write_u8(INNER_HEADER_END)?;
