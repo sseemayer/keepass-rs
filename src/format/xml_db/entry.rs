@@ -1,4 +1,7 @@
+use base64::{engine::general_purpose as base64_engine, Engine as _};
+use cipher::block_padding::UnpadError;
 use std::collections::HashMap;
+use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
 
@@ -54,27 +57,32 @@ impl Entry {
         self,
         mut target: crate::db::EntryMut,
         header_attachments: &[crate::db::Attachment],
-    ) {
+        inner_decryptor: &mut dyn Cipher,
+    ) -> Result<(), UnprotectError> {
         target.icon_id = self.icon_id;
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
         target.override_url = self.override_url;
         target.tags = self
             .tags
-            .map(|t| t.split(';').map(|s| s.to_string()).collect())
+            .map(|t| t.split(',').map(|s| s.to_string()).collect())
             .unwrap_or_default();
 
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
 
         for field in self.string_fields {
-            let fval = field.value.value.unwrap_or_default();
+            if let Some(fval) = &field.value.value {
+                let value = if field.value.protected {
+                    let fval = base64_engine::STANDARD.decode(fval)?;
+                    let fval = inner_decryptor.decrypt(&fval)?;
+                    let fval = String::from_utf8_lossy(&fval).to_string();
 
-            let value = if field.value.protected {
-                crate::db::Value::protected_string(fval)
-            } else {
-                crate::db::Value::string(fval)
-            };
-            target.fields.insert(field.key, value);
+                    crate::db::Value::protected_string(fval)
+                } else {
+                    crate::db::Value::string(fval)
+                };
+                target.fields.insert(field.key, value);
+            }
         }
 
         for field in self.binary_fields {
@@ -87,28 +95,36 @@ impl Entry {
 
         target.autotype = self.auto_type.map(|at| at.into());
 
-        target.history = self.history.map(|h| crate::db::History {
-            entries: h
-                .entries
-                .into_iter()
-                .map(|e| {
-                    let mut he = crate::db::Entry::new();
-                    e.xml_to_history(&mut he);
-                    he
-                })
-                .collect(),
-        });
+        if let Some(h) = self.history {
+            target.history = Some(crate::db::History {
+                entries: h
+                    .entries
+                    .into_iter()
+                    .map(|e| {
+                        let mut he = crate::db::Entry::new();
+                        e.xml_to_history(&mut he, inner_decryptor)?;
+                        Ok(he)
+                    })
+                    .collect::<Result<_, UnprotectError>>()?,
+            });
+        }
+
+        Ok(())
     }
 
     /// Like `xml_to_db_handle` but for history entries without binary fields and history
-    pub(crate) fn xml_to_history(self, target: &mut crate::db::Entry) {
+    pub(crate) fn xml_to_history(
+        self,
+        target: &mut crate::db::Entry,
+        inner_decryptor: &mut dyn Cipher,
+    ) -> Result<(), UnprotectError> {
         target.icon_id = self.icon_id;
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
         target.override_url = self.override_url;
         target.tags = self
             .tags
-            .map(|t| t.split(';').map(|s| s.to_string()).collect())
+            .map(|t| t.split(',').map(|s| s.to_string()).collect())
             .unwrap_or_default();
 
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
@@ -117,6 +133,10 @@ impl Entry {
             let fval = field.value.value.unwrap_or_default();
 
             let value = if field.value.protected {
+                let fval = base64_engine::STANDARD.decode(fval)?;
+                let fval = inner_decryptor.decrypt(&fval)?;
+                let fval = String::from_utf8_lossy(&fval).to_string();
+
                 crate::db::Value::protected_string(fval)
             } else {
                 crate::db::Value::string(fval)
@@ -129,8 +149,11 @@ impl Entry {
         target.autotype = self.auto_type.map(|at| at.into());
 
         // history cannot be handled here as this is already a history entry
+
+        Ok(())
     }
 
+    #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
         db: crate::db::EntryRef<'_>,
         inner_encryptor: &mut dyn Cipher,
@@ -139,12 +162,26 @@ impl Entry {
         let string_fields = db
             .fields
             .iter()
-            .map(|(k, v)| StringField {
-                key: k.clone(),
-                value: StringValue {
-                    protected: v.is_protected(),
-                    value: Some(v.as_str().to_string()),
-                },
+            .map(|(k, v)| {
+                let value = if v.is_protected() {
+                    let encrypted = inner_encryptor.encrypt(v.as_str().as_bytes());
+                    let encoded = base64_engine::STANDARD.encode(&encrypted);
+
+                    StringValue {
+                        protected: true,
+                        value: Some(encoded),
+                    }
+                } else {
+                    StringValue {
+                        protected: false,
+                        value: Some(v.as_str().to_string()),
+                    }
+                };
+
+                StringField {
+                    key: k.clone(),
+                    value,
+                }
             })
             .collect();
 
@@ -212,6 +249,15 @@ impl Entry {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum UnprotectError {
+    #[error("Error base64 decoding protected value: {0}")]
+    Base64(#[from] base64::DecodeError),
+
+    #[error("Error decrypting protected value: {0}")]
+    Decrypt(#[from] UnpadError),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct StringField {
@@ -224,7 +270,7 @@ pub struct StringValue {
     #[serde(default, rename = "@Protected", with = "cs_bool")]
     protected: bool,
 
-    #[serde(default, rename = "$value")]
+    #[serde(default, rename = "$value", with = "cs_opt_string")]
     value: Option<String>,
 }
 

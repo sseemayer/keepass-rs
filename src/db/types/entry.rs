@@ -20,7 +20,7 @@ impl EntryId {
         EntryId(uuid)
     }
 
-    pub(crate) fn uuid(&self) -> Uuid {
+    pub fn uuid(&self) -> Uuid {
         self.0
     }
 }

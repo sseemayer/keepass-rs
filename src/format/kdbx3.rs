@@ -2,7 +2,7 @@ use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{calculate_sha256, ciphers::Cipher},
     db::Database,
-    format::DatabaseVersion,
+    format::{xml_db::ParseXmlError, DatabaseVersion},
     key::DatabaseKey,
 };
 
@@ -194,7 +194,7 @@ pub enum KDBX3ParseError {
     Decryption(#[from] KDBX3DecryptError),
 
     #[error("Error parsing XML inside KDBX3 database: {0}")]
-    Xml(#[from] quick_xml::DeError),
+    Xml(#[from] ParseXmlError),
 }
 
 /// Open and decrypt a KeePass KDBX3 database from a source and a password
