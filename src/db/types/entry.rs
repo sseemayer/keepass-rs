@@ -19,6 +19,10 @@ impl EntryId {
     pub(crate) fn with_uuid(uuid: Uuid) -> EntryId {
         EntryId(uuid)
     }
+
+    pub(crate) fn uuid(&self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for EntryId {
@@ -171,6 +175,12 @@ impl EntryRef<'_> {
         } else {
             None
         }
+    }
+
+    pub fn attachments(&self) -> impl Iterator<Item = AttachmentRef<'_>> {
+        self.attachments
+            .iter()
+            .map(move |id| AttachmentRef::new(self.database, *id))
     }
 
     pub fn custom_icon(&self) -> Option<IconRef<'_>> {

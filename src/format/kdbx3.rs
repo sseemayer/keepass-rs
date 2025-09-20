@@ -211,7 +211,7 @@ pub(crate) fn decrypt_kdbx3(
 
     let inner_decryptor = header
         .inner_cipher
-        .get_decryptor(&stream_key)
+        .get_cipher(&stream_key)
         .expect("Stream key length should be valid for inner cipher");
 
     let config = DatabaseConfig {

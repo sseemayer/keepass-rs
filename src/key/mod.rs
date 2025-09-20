@@ -2,7 +2,7 @@
 mod yubikey;
 
 #[cfg(feature = "challenge_response")]
-pub use yubikey::ChallengeResponseKey;
+pub use yubikey::{ChallengeResponseKey, KeyChallengeError};
 
 use std::io::Read;
 

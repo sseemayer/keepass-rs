@@ -8,7 +8,7 @@ use crate::{
     format::xml_db::{
         custom_serde::{cs_base64, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         timestamp::Timestamp,
-        XmlBridge, UUID,
+        UUID,
     },
 };
 
@@ -94,14 +94,8 @@ pub struct Meta {
     custom_data: Option<CustomData>,
 }
 
-impl XmlBridge for Meta {
-    type DbType = crate::db::Meta;
-
-    fn xml_to_db(
-        self,
-        inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-        header_attachments: &[crate::db::Attachment],
-    ) -> Self::DbType {
+impl Into<crate::db::Meta> for Meta {
+    fn into(self) -> crate::db::Meta {
         // NOTE: custom icons and binary attachments are moved out of the Meta into the main
         // databsase, so they are not converted here.
         crate::db::Meta {
@@ -117,9 +111,7 @@ impl XmlBridge for Meta {
             master_key_changed: self.master_key_changed.map(|t| t.time),
             master_key_change_rec: self.master_key_change_rec,
             master_key_change_force: self.master_key_change_force,
-            memory_protection: self
-                .memory_protection
-                .map(|mp| mp.xml_to_db(inner_decryptor, header_attachments)),
+            memory_protection: self.memory_protection.map(|mp| mp.into()),
             recyclebin_enabled: self.recycle_bin_enabled,
             recyclebin_uuid: self.recycle_bin_uuid.map(|u| u.0),
             recyclebin_changed: self.recycle_bin_changed.map(|t| t.time),
@@ -132,73 +124,48 @@ impl XmlBridge for Meta {
             settings_changed: self.settings_changed.map(|t| t.time),
             custom_data: self
                 .custom_data
-                .map(|cd| {
-                    cd.xml_to_db(inner_decryptor, header_attachments)
-                        .into_iter()
-                        .collect()
-                })
+                .map(|cd| cd.xml_to_db().into_iter().collect())
                 .unwrap_or_default(),
         }
     }
+}
 
-    #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, inner_encryptor: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+impl From<crate::db::Meta> for Meta {
+    fn from(db: crate::db::Meta) -> Self {
         Self {
             generator: db.generator.clone(),
             database_name: db.database_name.clone(),
-            database_name_changed: db
-                .database_name_changed
-                .as_ref()
-                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            database_name_changed: db.database_name_changed.as_ref().map(|t| t.clone().into()),
             database_description: db.database_description.clone(),
-            database_description_changed: db
-                .database_description_changed
-                .as_ref()
-                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            database_description_changed: db.database_description_changed.as_ref().map(|t| t.clone().into()),
             default_username: db.default_username.clone(),
-            default_username_changed: db
-                .default_username_changed
-                .as_ref()
-                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            default_username_changed: db.default_username_changed.as_ref().map(|t| t.clone().into()),
             maintenance_history_days: db.maintenance_history_days,
             color: db.color.clone(),
-            master_key_changed: db
-                .master_key_changed
-                .as_ref()
-                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            master_key_changed: db.master_key_changed.as_ref().map(|t| t.clone().into()),
             master_key_change_rec: db.master_key_change_rec,
             master_key_change_force: db.master_key_change_force,
-            memory_protection: db
-                .memory_protection
-                .as_ref()
-                .map(|mp| MemoryProtection::db_to_xml(mp, inner_encryptor)),
+            memory_protection: db.memory_protection.as_ref().map(|mp| mp.clone().into()),
             custom_icons: None, // Handled separately
             recycle_bin_enabled: db.recyclebin_enabled,
             recycle_bin_uuid: db.recyclebin_uuid.map(|u| UUID(u)),
-            recycle_bin_changed: db
-                .recyclebin_changed
-                .as_ref()
-                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            recycle_bin_changed: db.recyclebin_changed.as_ref().map(|t| t.clone().into()),
             entry_templates_group: db.entry_templates_group.map(|u| UUID(u)),
             entry_templates_group_changed: db
                 .entry_templates_group_changed
                 .as_ref()
-                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+                .map(|t| t.clone().into()),
             last_selected_group: db.last_selected_group.map(|u| UUID(u)),
             last_top_visible_group: db.last_top_visible_group.map(|u| UUID(u)),
             history_max_items: db.history_max_items,
             history_max_size: db.history_max_size,
-            settings_changed: db
-                .settings_changed
-                .as_ref()
-                .map(|t| Timestamp::db_to_xml(t, inner_encryptor)),
+            settings_changed: db.settings_changed.as_ref().map(|t| t.clone().into()),
             binaries: None, // Handled separately
             custom_data: Some(CustomData::db_to_xml(
                 &db.custom_data
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect(),
-                inner_encryptor,
             )),
         }
     }
@@ -229,14 +196,12 @@ pub struct Binary {
     pub protected: Option<bool>,
 }
 
-impl XmlBridge for Binary {
-    type DbType = crate::db::Attachment;
-
-    fn xml_to_db(
+impl Binary {
+    pub fn xml_to_db(
         self,
         inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
         _header_attachments: &[crate::db::Attachment],
-    ) -> Self::DbType {
+    ) -> crate::db::Attachment {
         let mut data = base64_engine::STANDARD.decode(self.value).unwrap_or_default();
 
         if self.protected.unwrap_or(false) {
@@ -255,12 +220,6 @@ impl XmlBridge for Binary {
 
         attachment
     }
-
-    #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(_: &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
-        // we only support KDBX4 saving, which uses header attachments, not Meta/Binaries
-        unreachable!()
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -270,22 +229,14 @@ struct CustomData {
     items: Vec<CustomDataItem>,
 }
 
-impl XmlBridge for CustomData {
-    type DbType = Vec<(String, crate::db::CustomDataItem)>;
-
-    fn xml_to_db(
-        self,
-        inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-        header_attachments: &[crate::db::Attachment],
-    ) -> Self::DbType {
+impl CustomData {
+    fn xml_to_db(self) -> Vec<(String, crate::db::CustomDataItem)> {
         self.items
             .into_iter()
             .map(|item| {
-                let value = item.value.xml_to_db(inner_decryptor, header_attachments);
+                let value = item.value.into();
 
-                let last_modification_time = item
-                    .last_modification_time
-                    .map(|t| t.xml_to_db(inner_decryptor, header_attachments));
+                let last_modification_time = item.last_modification_time.map(|t| t.into());
 
                 (
                     item.key,
@@ -299,20 +250,17 @@ impl XmlBridge for CustomData {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, inner_encryptor: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+    fn db_to_xml(db: &Vec<(String, crate::db::CustomDataItem)>) -> Self {
         let items = db
             .iter()
             .map(|(key, item)| {
                 let value = item
                     .value
                     .as_ref()
-                    .map(|v| CustomDataValue::db_to_xml(v, inner_encryptor))
+                    .map(|v| v.clone().into())
                     .unwrap_or(CustomDataValue::String(String::new()));
 
-                let last_modification_time = item
-                    .last_modification_time
-                    .as_ref()
-                    .map(|t| Timestamp::db_to_xml(t, inner_encryptor));
+                let last_modification_time = item.last_modification_time.as_ref().map(|t| t.clone().into());
 
                 CustomDataItem {
                     key: key.clone(),
@@ -342,22 +290,20 @@ pub enum CustomDataValue {
     Binary(Vec<u8>),
 }
 
-impl XmlBridge for CustomDataValue {
-    type DbType = crate::db::CustomDataValue;
-
-    fn xml_to_db(self, _: &mut dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
+impl Into<crate::db::CustomDataValue> for CustomDataValue {
+    fn into(self) -> crate::db::CustomDataValue {
         match self {
             CustomDataValue::String(s) => crate::db::CustomDataValue::String(s),
             CustomDataValue::Binary(b) => crate::db::CustomDataValue::Binary(b),
         }
     }
+}
 
-    #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+impl From<crate::db::CustomDataValue> for CustomDataValue {
+    fn from(db: crate::db::CustomDataValue) -> Self {
         match db {
-            crate::db::CustomDataValue::String(s) => CustomDataValue::String(s.clone()),
-            crate::db::CustomDataValue::Binary(b) => CustomDataValue::Binary(b.clone()),
-            _ => panic!("Cannot serialize protected CustomData values"),
+            crate::db::CustomDataValue::String(s) => CustomDataValue::String(s),
+            crate::db::CustomDataValue::Binary(b) => CustomDataValue::Binary(b),
         }
     }
 }
@@ -411,10 +357,8 @@ struct MemoryProtection {
     protect_notes: Option<bool>,
 }
 
-impl XmlBridge for MemoryProtection {
-    type DbType = crate::db::MemoryProtection;
-
-    fn xml_to_db(self, _: &mut dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
+impl Into<crate::db::MemoryProtection> for MemoryProtection {
+    fn into(self) -> crate::db::MemoryProtection {
         crate::db::MemoryProtection {
             protect_title: self.protect_title.unwrap_or(false),
             protect_username: self.protect_username.unwrap_or(false),
@@ -423,9 +367,10 @@ impl XmlBridge for MemoryProtection {
             protect_notes: self.protect_notes.unwrap_or(false),
         }
     }
+}
 
-    #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+impl From<crate::db::MemoryProtection> for MemoryProtection {
+    fn from(db: crate::db::MemoryProtection) -> Self {
         Self {
             protect_title: Some(db.protect_title),
             protect_username: Some(db.protect_username),
@@ -439,7 +384,7 @@ impl XmlBridge for MemoryProtection {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct CustomIcons {
-    #[serde(default)]
+    #[serde(rename = "Icon", default)]
     pub icons: Vec<Icon>,
 }
 
@@ -453,24 +398,20 @@ pub struct Icon {
     data: Vec<u8>,
 }
 
-impl XmlBridge for Icon {
-    type DbType = (crate::db::IconId, crate::db::Icon);
-
-    fn xml_to_db(self, _: &mut dyn crate::crypt::ciphers::Cipher, _: &[crate::db::Attachment]) -> Self::DbType {
-        let key = crate::db::IconId::from_uuid(self.uuid.0);
-        let value = crate::db::Icon {
+impl Into<crate::db::Icon> for Icon {
+    fn into(self) -> crate::db::Icon {
+        crate::db::Icon {
             id: crate::db::IconId::from_uuid(self.uuid.0),
             data: self.data,
-        };
-
-        (key, value)
+        }
     }
+}
 
-    #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml((_, value): &Self::DbType, _: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+impl From<crate::db::Icon> for Icon {
+    fn from(db: crate::db::Icon) -> Self {
         Self {
-            uuid: UUID(value.id.to_uuid()),
-            data: value.data.clone(),
+            uuid: UUID(db.id.to_uuid()),
+            data: db.data,
         }
     }
 }
@@ -731,6 +672,7 @@ mod tests {
         assert!(serialized.contains("<CustomData>"));
     }
 
+    #[test]
     fn test_deserialize_meta() {
         let xml = r#"<Meta>
             <Generator>TestGenerator</Generator>

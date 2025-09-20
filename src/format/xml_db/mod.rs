@@ -3,9 +3,6 @@
 //! This module provides types that mirror the ones in `crate::db`, but are tailored to closely fit
 //! the XMl structure of KeePass databases for easy `#[derive(Serialize, Deserialize)]`.
 //!
-//! The `XmlBridge` trait provides conversion methods between these XML-specific types and the
-//! user-facing types in `crate::db`.
-//!
 //! See <https://keepass.info/help/download/KDBX_XML.xsd> for an XML schema.
 
 pub mod custom_serde;
@@ -22,12 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
-    format::xml_db::{
-        custom_serde::cs_opt_string,
-        group::Group,
-        meta::{Icon, Meta},
-        timestamp::Timestamp,
-    },
+    format::xml_db::{custom_serde::cs_opt_string, group::Group, meta::Meta, timestamp::Timestamp},
 };
 
 pub fn parse_xml(
@@ -43,28 +35,18 @@ pub fn parse_xml(
 pub fn to_xml(
     db: &crate::db::Database,
     inner_encryptor: &mut dyn Cipher,
+    header_attachments: &[crate::db::Attachment],
 ) -> Result<Vec<u8>, quick_xml::SeError> {
-    let kdbx = KeePassFile::db_to_xml(db, inner_encryptor);
+    let attachment_id_numbering: std::collections::HashMap<crate::db::AttachmentId, usize> = header_attachments
+        .iter()
+        .enumerate()
+        .map(|(i, att)| (att.id(), i))
+        .collect();
+
+    let kdbx = KeePassFile::db_to_xml(db, inner_encryptor, &attachment_id_numbering);
     Ok(quick_xml::se::to_string_with_root("KeePassFile", &kdbx)?
         .as_bytes()
         .to_vec())
-}
-
-/// Bridge between the XML representation of a KeePass database and the user-facing types in `crate::db`.
-///
-/// The trait should be implemented for types in `crate::format::xml_db`, and `DbType` should be
-/// the corresponding type in `crate::db`.
-pub trait XmlBridge {
-    type DbType;
-
-    fn xml_to_db(
-        self,
-        inner_decryptor: &mut dyn Cipher,
-        header_attachments: &[crate::db::Attachment],
-    ) -> Self::DbType;
-
-    #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, inner_encryptor: &mut dyn Cipher) -> Self;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,15 +56,15 @@ struct KeePassFile {
     root: Root,
 }
 
-impl XmlBridge for KeePassFile {
-    type DbType = crate::db::Database;
-
+impl KeePassFile {
+    /// Convert from XML representation to database representation.
     fn xml_to_db(
         mut self,
         inner_decryptor: &mut dyn Cipher,
         header_attachments: &[crate::db::Attachment],
-    ) -> Self::DbType {
-        let mut db = crate::db::Database::new();
+    ) -> crate::db::Database {
+        let mut db =
+            crate::db::Database::new_with_root_id(crate::db::GroupId::with_uuid(self.root.group.uuid.0));
         let mut attachments = header_attachments.to_vec();
 
         let custom_icons = self.meta.custom_icons.take();
@@ -94,13 +76,16 @@ impl XmlBridge for KeePassFile {
             }
         }
 
-        db.meta = Meta::xml_to_db(self.meta, inner_decryptor, &attachments);
+        db.meta = self.meta.into();
 
         db.custom_icons = custom_icons
             .map(|ci| {
                 ci.icons
                     .into_iter()
-                    .map(|icon| Icon::xml_to_db(icon, inner_decryptor, &attachments))
+                    .map(|icon| {
+                        let db_icon: crate::db::Icon = icon.into();
+                        (db_icon.id, db_icon)
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -110,9 +95,37 @@ impl XmlBridge for KeePassFile {
         db
     }
 
+    /// Convert from database representation to XML representation.
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(_: &Self::DbType, _: &mut dyn Cipher) -> Self {
-        todo!()
+    fn db_to_xml(
+        db: &crate::db::Database,
+        inner_cipher: &mut dyn Cipher,
+        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, usize>,
+    ) -> Self {
+        KeePassFile {
+            meta: db.meta.clone().into(),
+            root: Root {
+                group: Group::db_to_xml(db.root(), inner_cipher, &attachment_id_numbering),
+                deleted_objects: if db.deleted_entries.is_empty() && db.deleted_groups.is_empty() {
+                    None
+                } else {
+                    Some(DeletedObjects {
+                        objects: db
+                            .deleted_groups
+                            .iter()
+                            .map(|gid| DeletedObject {
+                                uuid: UUID(gid.uuid()),
+                                deletion_time: None,
+                            })
+                            .chain(db.deleted_entries.iter().map(|eid| DeletedObject {
+                                uuid: UUID(eid.uuid()),
+                                deletion_time: None,
+                            }))
+                            .collect(),
+                    })
+                },
+            },
+        }
     }
 }
 
