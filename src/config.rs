@@ -136,7 +136,7 @@ pub enum InnerCipherConfig {
 }
 
 impl InnerCipherConfig {
-    pub(crate) fn get_decryptor(&self, key: &[u8]) -> Result<Box<dyn Cipher>, InvalidLength> {
+    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn Cipher>, InvalidLength> {
         match self {
             InnerCipherConfig::Plain => Ok(Box::new(ciphers::PlainCipher::new(key)?)),
             InnerCipherConfig::Salsa20 => Ok(Box::new(ciphers::Salsa20Cipher::new(key)?)),

@@ -29,11 +29,11 @@ pub struct Times {
 impl Into<crate::db::Times> for Times {
     fn into(self) -> crate::db::Times {
         crate::db::Times {
-            creation: self.creation_time.map(|t| t.time),
-            last_modification: self.last_modification_time.map(|t| t.time),
-            last_access: self.last_access_time.map(|t| t.time),
-            expiry: self.expiry_time.map(|t| t.time),
-            location_changed: self.location_changed.map(|t| t.time),
+            creation: self.creation_time.as_ref().map(|t| t.time),
+            last_modification: self.last_modification_time.as_ref().map(|t| t.time),
+            last_access: self.last_access_time.as_ref().map(|t| t.time),
+            expiry: self.expiry_time.as_ref().map(|t| t.time),
+            location_changed: self.location_changed.as_ref().map(|t| t.time),
             expires: self.expires,
             usage_count: self.usage_count,
         }
