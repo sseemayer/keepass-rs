@@ -53,8 +53,11 @@ pub struct Database {
 
 impl Database {
     pub fn new() -> Self {
-        let root = Group::new();
-        let root_id = root.id();
+        Self::new_with_root_id(GroupId::new())
+    }
+
+    pub(crate) fn new_with_root_id(root_id: GroupId) -> Self {
+        let root = Group::with_id(root_id);
 
         let mut groups = HashMap::new();
         groups.insert(root_id, root);

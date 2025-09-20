@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[cfg(feature = "save_kdbx4")]
-pub(crate) use crate::format::kdbx4::dump::dump_kdbx4;
+pub(crate) use crate::format::kdbx4::dump::{dump_kdbx4, SaveKdbx4Error};
 pub(crate) use crate::format::kdbx4::parse::{get_xml, parse_kdbx4, ParseKdbx4Error};
 
 #[cfg(feature = "save_kdbx4")]

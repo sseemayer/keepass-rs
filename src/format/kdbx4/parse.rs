@@ -126,7 +126,7 @@ pub(crate) fn decrypt_kdbx4(
     // initialize the inner decryptor
     let inner_decryptor = inner_header
         .inner_random_stream
-        .get_decryptor(&inner_header.inner_random_stream_key)?;
+        .get_cipher(&inner_header.inner_random_stream_key)?;
 
     let config = DatabaseConfig {
         version: outer_header.version,

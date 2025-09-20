@@ -6,7 +6,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    db::{CustomDataItem, Entry, EntryId, EntryMut, IconId, Times},
+    db::{CustomDataItem, Entry, EntryId, EntryMut, EntryRef, IconId, Times},
     Database,
 };
 
@@ -22,6 +22,10 @@ impl GroupId {
 
     pub(crate) fn with_uuid(uuid: Uuid) -> GroupId {
         GroupId(uuid)
+    }
+
+    pub(crate) fn uuid(&self) -> Uuid {
+        self.0
     }
 }
 
@@ -137,6 +141,18 @@ impl GroupRef<'_> {
     pub(crate) fn new(database: &Database, id: GroupId) -> GroupRef<'_> {
         GroupRef { database, id }
     }
+
+    pub fn groups(&self) -> impl Iterator<Item = GroupRef<'_>> + '_ {
+        self.groups
+            .iter()
+            .map(move |id| GroupRef::new(self.database, *id))
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = EntryRef<'_>> + '_ {
+        self.entries
+            .iter()
+            .map(move |id| EntryRef::new(self.database, *id))
+    }
 }
 
 impl Deref for GroupRef<'_> {
@@ -180,6 +196,30 @@ impl GroupMut<'_> {
         self.database.entries.insert(id, new_entry);
 
         EntryMut::new(self.database, id)
+    }
+
+    pub(crate) fn add_entry_with_id(&mut self, id: EntryId) -> EntryMut<'_> {
+        if self.database.entries.contains_key(&id) {
+            panic!("Entry with ID {} already exists", id);
+        }
+
+        let new_entry = Entry::with_id(id);
+        self.entries.insert(id);
+        self.database.entries.insert(id, new_entry);
+
+        EntryMut::new(self.database, id)
+    }
+
+    pub(crate) fn add_group_with_id(&mut self, id: GroupId) -> GroupMut<'_> {
+        if self.database.groups.contains_key(&id) {
+            panic!("Group with ID {} already exists", id);
+        }
+
+        let new_group = Group::with_id(id);
+        self.groups.insert(id);
+        self.database.groups.insert(id, new_group);
+
+        GroupMut::new(self.database, id)
     }
 }
 

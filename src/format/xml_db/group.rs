@@ -1,10 +1,16 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
-use crate::format::xml_db::{
-    custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
-    entry::Entry,
-    times::Times,
-    UUID,
+use crate::{
+    crypt::ciphers::Cipher,
+    db::{AttachmentId, EntryId, GroupId},
+    format::xml_db::{
+        custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
+        entry::Entry,
+        times::Times,
+        UUID,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -65,13 +71,40 @@ impl Group {
             .map(|u| crate::db::EntryId::with_uuid(u.0));
 
         for entry in self.entries {
-            let new_entry = target.add_entry();
+            let new_entry = target.add_entry_with_id(EntryId::with_uuid(entry.uuid.0));
             entry.xml_to_db_handle(new_entry, header_attachments);
         }
 
         for group in self.groups {
-            let new_group = target.add_group();
+            let new_group = target.add_group_with_id(GroupId::with_uuid(group.uuid.0));
             group.xml_to_db_handle(new_group, header_attachments);
+        }
+    }
+
+    pub(crate) fn db_to_xml(
+        source: crate::db::GroupRef<'_>,
+        inner_cipher: &mut dyn Cipher,
+        attachment_id_numbering: &HashMap<AttachmentId, usize>,
+    ) -> Self {
+        Group {
+            uuid: UUID(source.id().uuid()),
+            name: source.name.clone(),
+            notes: source.notes.clone(),
+            icon_id: source.icon_id,
+            times: Some(source.times.clone().into()),
+            is_expanded: source.is_expanded,
+            default_auto_type_sequence: source.default_autotype_sequence.clone(),
+            enable_auto_type: source.enable_autotype,
+            enable_searching: source.enable_searching,
+            last_top_visible_entry: source.last_top_visible_entry.map(|eid| UUID(eid.uuid())),
+            groups: source
+                .groups()
+                .map(|g| Group::db_to_xml(g, inner_cipher, attachment_id_numbering))
+                .collect(),
+            entries: source
+                .entries()
+                .map(|e| Entry::db_to_xml(e, inner_cipher, attachment_id_numbering))
+                .collect(),
         }
     }
 }

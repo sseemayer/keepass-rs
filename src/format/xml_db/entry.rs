@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    crypt::ciphers::Cipher,
     db::Color,
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_fromstr, cs_opt_string},
@@ -16,7 +19,7 @@ pub struct Entry {
     pub uuid: UUID,
 
     #[serde(default, rename = "IconID", with = "cs_opt_fromstr")]
-    pub icon_id: Option<u32>,
+    pub icon_id: Option<usize>,
 
     #[serde(default, with = "cs_opt_string")]
     pub foreground_color: Option<Color>,
@@ -52,7 +55,7 @@ impl Entry {
         mut target: crate::db::EntryMut,
         header_attachments: &[crate::db::Attachment],
     ) {
-        target.icon_id = self.icon_id.map(|id| id as usize);
+        target.icon_id = self.icon_id;
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
         target.override_url = self.override_url;
@@ -82,25 +85,14 @@ impl Entry {
             }
         }
 
-        target.autotype = self.auto_type.map(|at| crate::db::AutoType {
-            enabled: at.enabled,
-            sequence: at.default_sequence,
-            associations: at
-                .association
-                .into_iter()
-                .map(|a| crate::db::AutoTypeAssociation {
-                    window: a.window,
-                    sequence: a.keystroke_sequence,
-                })
-                .collect(),
-        });
+        target.autotype = self.auto_type.map(|at| at.into());
 
         target.history = self.history.map(|h| crate::db::History {
             entries: h
                 .entries
                 .into_iter()
                 .map(|e| {
-                    let mut he = crate::db::Entry::with_id(crate::db::EntryId::with_uuid(e.uuid.0));
+                    let mut he = crate::db::Entry::new();
                     e.xml_to_history(&mut he);
                     he
                 })
@@ -110,7 +102,7 @@ impl Entry {
 
     /// Like `xml_to_db_handle` but for history entries without binary fields and history
     pub(crate) fn xml_to_history(self, target: &mut crate::db::Entry) {
-        target.icon_id = self.icon_id.map(|id| id as usize);
+        target.icon_id = self.icon_id;
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
         target.override_url = self.override_url;
@@ -134,20 +126,89 @@ impl Entry {
 
         // binary fields cannot be handled here as we don't have access to header attachments
 
-        target.autotype = self.auto_type.map(|at| crate::db::AutoType {
-            enabled: at.enabled,
-            sequence: at.default_sequence,
-            associations: at
-                .association
-                .into_iter()
-                .map(|a| crate::db::AutoTypeAssociation {
-                    window: a.window,
-                    sequence: a.keystroke_sequence,
-                })
+        target.autotype = self.auto_type.map(|at| at.into());
+
+        // history cannot be handled here as this is already a history entry
+    }
+
+    pub(crate) fn db_to_xml(
+        db: crate::db::EntryRef<'_>,
+        inner_encryptor: &mut dyn Cipher,
+        attachment_id_numbering: &HashMap<crate::db::AttachmentId, usize>,
+    ) -> Self {
+        let string_fields = db
+            .fields
+            .iter()
+            .map(|(k, v)| StringField {
+                key: k.clone(),
+                value: StringValue {
+                    protected: v.is_protected(),
+                    value: Some(v.as_str().to_string()),
+                },
+            })
+            .collect();
+
+        let binary_fields = db
+            .attachments()
+            .map(|a| BinaryField {
+                key: a.name.clone(),
+                value: BinaryValue {
+                    value_ref: *attachment_id_numbering
+                        .get(&a.id())
+                        .expect("Attachment in entry not found in header attachments"),
+                },
+            })
+            .collect();
+
+        let history = db.history.as_ref().map(|h| History {
+            entries: h
+                .entries
+                .iter()
+                .map(|e| Entry::db_to_xml_history(e, inner_encryptor))
                 .collect(),
         });
 
-        // history cannot be handled here as this is already a history entry
+        Entry {
+            uuid: UUID(db.id().uuid()),
+            icon_id: db.icon_id,
+            foreground_color: db.foreground_color.clone(),
+            background_color: db.background_color.clone(),
+            override_url: db.override_url.clone(),
+            tags: db.tags.iter().cloned().reduce(|a, b| format!("{a};{b}")),
+            times: Some(db.times().clone().into()),
+            string_fields,
+            binary_fields,
+            auto_type: db.autotype.as_ref().map(|at| at.clone().into()),
+            history,
+        }
+    }
+
+    fn db_to_xml_history(db: &crate::db::Entry, inner_encryptor: &mut dyn Cipher) -> Self {
+        let string_fields = db
+            .fields
+            .iter()
+            .map(|(k, v)| StringField {
+                key: k.clone(),
+                value: StringValue {
+                    protected: v.is_protected(),
+                    value: Some(v.as_str().to_string()),
+                },
+            })
+            .collect();
+
+        Entry {
+            uuid: UUID(db.id().uuid()),
+            icon_id: db.icon_id,
+            foreground_color: db.foreground_color.clone(),
+            background_color: db.background_color.clone(),
+            override_url: db.override_url.clone(),
+            tags: db.tags.iter().cloned().reduce(|a, b| format!("{a};{b}")),
+            times: Some(db.times.clone().into()),
+            string_fields,
+            binary_fields: vec![], // binary fields cannot be handled here as we don't have access to header attachments
+            auto_type: db.autotype.as_ref().map(|at| at.clone().into()),
+            history: None, // history cannot be handled here as this is already a history entry
+        }
     }
 }
 
@@ -219,7 +280,29 @@ pub struct AutoType {
     pub default_sequence: Option<String>,
 
     #[serde(rename = "Association", default)]
-    pub association: Vec<AutoTypeAssociation>,
+    pub associations: Vec<AutoTypeAssociation>,
+}
+
+impl Into<crate::db::AutoType> for AutoType {
+    fn into(self) -> crate::db::AutoType {
+        crate::db::AutoType {
+            enabled: self.enabled,
+            default_sequence: self.default_sequence,
+            data_transfer_obfuscation: self.data_transfer_obfuscation,
+            associations: self.associations.into_iter().map(|a| a.into()).collect(),
+        }
+    }
+}
+
+impl From<crate::db::AutoType> for AutoType {
+    fn from(value: crate::db::AutoType) -> Self {
+        Self {
+            enabled: value.enabled,
+            data_transfer_obfuscation: value.data_transfer_obfuscation,
+            default_sequence: value.default_sequence,
+            associations: value.associations.into_iter().map(|a| a.into()).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -227,6 +310,24 @@ pub struct AutoType {
 pub struct AutoTypeAssociation {
     pub window: String,
     pub keystroke_sequence: String,
+}
+
+impl Into<crate::db::AutoTypeAssociation> for AutoTypeAssociation {
+    fn into(self) -> crate::db::AutoTypeAssociation {
+        crate::db::AutoTypeAssociation {
+            window: self.window,
+            sequence: self.keystroke_sequence,
+        }
+    }
+}
+
+impl From<crate::db::AutoTypeAssociation> for AutoTypeAssociation {
+    fn from(value: crate::db::AutoTypeAssociation) -> Self {
+        Self {
+            window: value.window,
+            keystroke_sequence: value.sequence,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -346,7 +447,7 @@ mod tests {
             enabled: true,
             data_transfer_obfuscation: Some(0),
             default_sequence: Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string()),
-            association: vec![AutoTypeAssociation {
+            associations: vec![AutoTypeAssociation {
                 window: "Example Window".to_string(),
                 keystroke_sequence: "{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string(),
             }],

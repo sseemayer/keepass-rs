@@ -2,8 +2,6 @@ use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize, Serializer};
 
-use crate::format::xml_db::XmlBridge;
-
 /// In KDBX4, timestamps are stored as seconds, Base64 encoded, since 0001-01-01 00:00:00.
 /// This function returns the epoch baseline used by KDBX for date serialization.
 pub fn get_epoch_baseline() -> chrono::NaiveDateTime {
@@ -38,22 +36,17 @@ impl Timestamp {
     }
 }
 
-impl XmlBridge for Timestamp {
-    type DbType = NaiveDateTime;
-
-    fn xml_to_db(
-        self,
-        _inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-        _: &[crate::db::Attachment],
-    ) -> Self::DbType {
+impl Into<NaiveDateTime> for Timestamp {
+    fn into(self) -> NaiveDateTime {
         self.time
     }
+}
 
-    #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Self::DbType, _inner_encryptor: &mut dyn crate::crypt::ciphers::Cipher) -> Self {
+impl From<NaiveDateTime> for Timestamp {
+    fn from(t: NaiveDateTime) -> Self {
         // NOTE: always use ISO8601 for serialization. We could remember the original format to
         // have more faithful round-tripping
-        Timestamp::new_iso8601(*db)
+        Timestamp::new_iso8601(t)
     }
 }
 

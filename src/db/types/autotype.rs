@@ -3,7 +3,8 @@
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoType {
     pub enabled: bool,
-    pub sequence: Option<String>,
+    pub default_sequence: Option<String>,
+    pub data_transfer_obfuscation: Option<isize>,
     pub associations: Vec<AutoTypeAssociation>,
 }
 
