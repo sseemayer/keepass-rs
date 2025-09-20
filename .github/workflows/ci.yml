@@ -43,13 +43,11 @@ jobs:
       RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-hack
+      - uses: DeterminateSystems/nix-installer-action@v11
       - name: typecheck the tests
-        run: cargo check --tests
+        run: nix develop --command cargo check --tests
       - name: run cargo check on all feature combinations
-        run: cargo hack check --feature-powerset --no-dev-deps
+        run: nix develop --command cargo hack check --feature-powerset --no-dev-deps
 
   build-windows:
     name: Build the project (Windows)

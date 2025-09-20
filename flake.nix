@@ -26,6 +26,7 @@
               rust-analyzer
               cargo-tarpaulin
               cargo-msrv
+              cargo-hack
             ];
           };
         }
