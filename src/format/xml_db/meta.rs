@@ -130,6 +130,7 @@ impl Into<crate::db::Meta> for Meta {
     }
 }
 
+#[cfg(feature = "save_kdbx4")]
 impl From<crate::db::Meta> for Meta {
     fn from(db: crate::db::Meta) -> Self {
         Self {
