@@ -15,6 +15,7 @@ use crate::{
             INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END, INNER_HEADER_RANDOM_STREAM_ID,
             INNER_HEADER_RANDOM_STREAM_KEY,
         },
+        xml_db::ParseXmlError,
         DatabaseVersion, DatabaseVersionParseError,
     },
     hmac_block_stream,
@@ -45,8 +46,8 @@ pub enum ParseKdbx4Error {
     #[error("Error opening or decrypting KDBX4 database: {0}")]
     Decrypt(#[from] DecryptKdbx4Error),
 
-    #[error("Error parsing XML data: {0}")]
-    Xml(#[from] quick_xml::DeError),
+    #[error("Error loading internal database: {0}")]
+    Xml(#[from] ParseXmlError),
 }
 
 /// Open and decrypt a KeePass KDBX4 database from a source and key elements
