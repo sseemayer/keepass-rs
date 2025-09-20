@@ -89,6 +89,7 @@ fn parse_groups(
 
     // current branch of the group tree being parsed
     let mut branch: Vec<GroupId> = Vec::new();
+    branch.push(db.root().id());
 
     // state variables for the current group being parsed
     let mut parsing_name: Option<String> = None;
@@ -143,7 +144,6 @@ fn parse_groups(
 
                 let parent_id: GroupId = if (level as usize) <= branch.len() {
                     branch.truncate(level);
-
                     *branch.last().unwrap_or(&db.root().id())
                 } else {
                     // Level is beyond the current depth, missing intermediate levels?
@@ -163,6 +163,8 @@ fn parse_groups(
                 parsing_level = None;
 
                 gid_map.insert(group_id, group.id());
+
+                branch.push(group.id());
 
                 num_groups += 1;
             }
@@ -444,7 +446,7 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, P
 
     let mut db = Database::with_data(config, GroupId::new());
 
-    let mut pos = data;
+    let mut pos = payload;
 
     let gid_map = parse_groups(&mut db, header.num_groups, &mut pos)?;
     parse_entries(&mut db, gid_map, header.num_entries, &mut pos)?;

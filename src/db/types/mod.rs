@@ -102,6 +102,16 @@ impl Database {
         GroupMut::new(self, self.root)
     }
 
+    pub fn recycle_bin(&self) -> Option<GroupRef<'_>> {
+        let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::with_uuid)?;
+        self.group(recyclebin_id)
+    }
+
+    pub fn recycle_bin_mut(&mut self) -> Option<GroupMut<'_>> {
+        let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::with_uuid)?;
+        self.group_mut(recyclebin_id)
+    }
+
     pub fn num_entries(&self) -> usize {
         self.entries.len()
     }

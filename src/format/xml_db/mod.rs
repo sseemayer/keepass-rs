@@ -164,13 +164,13 @@ pub struct Root {
     #[serde(rename = "Group")]
     pub group: Group,
 
-    #[serde(rename = "DeletedObjects")]
+    #[serde(default, rename = "DeletedObjects")]
     pub deleted_objects: Option<DeletedObjects>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeletedObjects {
-    #[serde(rename = "DeletedObject")]
+    #[serde(default, rename = "DeletedObject")]
     pub objects: Vec<DeletedObject>,
 }
 
