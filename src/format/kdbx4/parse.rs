@@ -167,7 +167,7 @@ pub enum DecryptKdbx4Error {
 
     #[cfg(feature = "challenge_response")]
     #[error(transparent)]
-    ChallengeResponse(#[from] crate::key::ChallengeResponseError),
+    ChallengeResponse(#[from] crate::key::KeyChallengeError),
 
     #[error("Incorrect key")]
     IncorrectKey,
