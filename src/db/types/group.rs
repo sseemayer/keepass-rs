@@ -47,6 +47,9 @@ pub struct Group {
     /// The unique identifier for the group
     id: GroupId,
 
+    /// The unique identifier for the parent group
+    parent: Option<GroupId>,
+
     /// The name of the group
     pub name: String,
 
@@ -63,7 +66,7 @@ pub struct Group {
     groups: HashSet<GroupId>,
 
     /// Unique identifiers for entries in the group
-    entries: HashSet<EntryId>,
+    pub(crate) entries: HashSet<EntryId>,
 
     /// Time fields for the group
     pub times: Times,
@@ -92,9 +95,10 @@ impl Group {
         self.id
     }
 
-    pub(crate) fn new() -> Group {
+    pub(crate) fn new(parent: Option<GroupId>) -> Group {
         Group {
             id: GroupId::new(),
+            parent,
             name: String::new(),
             notes: None,
             icon_id: None,
@@ -111,9 +115,10 @@ impl Group {
         }
     }
 
-    pub(crate) fn with_id(id: GroupId) -> Group {
+    pub(crate) fn with_id(id: GroupId, parent: Option<GroupId>) -> Group {
         Group {
             id,
+            parent,
             name: String::new(),
             notes: None,
             icon_id: None,
@@ -143,24 +148,44 @@ impl GroupRef<'_> {
         GroupRef { database, id }
     }
 
+    /// Get a contained group by ID
+    pub fn group(&self, id: GroupId) -> Option<GroupRef<'_>> {
+        if self.groups.contains(&id) {
+            Some(GroupRef::new(self.database, id))
+        } else {
+            None
+        }
+    }
+
+    /// Get a contained entry by ID
+    pub fn entry(&self, id: EntryId) -> Option<EntryRef<'_>> {
+        if self.entries.contains(&id) {
+            Some(EntryRef::new(self.database, id))
+        } else {
+            None
+        }
+    }
+
+    /// Get an iterator over all contained groups
     pub fn groups(&self) -> impl Iterator<Item = GroupRef<'_>> + '_ {
         self.groups
             .iter()
             .map(move |id| GroupRef::new(self.database, *id))
     }
 
+    /// Get an iterator over all contained entries
     pub fn entries(&self) -> impl Iterator<Item = EntryRef<'_>> + '_ {
         self.entries
             .iter()
             .map(move |id| EntryRef::new(self.database, *id))
     }
 
-    /// Find a subgroup by name, case-insensitively.
+    /// Find a contained group by name, case-insensitively.
     pub fn group_by_name(&self, name: &str) -> Option<GroupRef<'_>> {
         self.groups().find(|g| g.name.eq_ignore_ascii_case(name))
     }
 
-    /// Find an entry by title, case-insensitively.
+    /// Find a contained entry by title, case-insensitively.
     pub fn entry_by_name(&self, title: &str) -> Option<EntryRef<'_>> {
         self.entries().find(|e| {
             e.get(crate::db::fields::TITLE)
@@ -168,7 +193,7 @@ impl GroupRef<'_> {
         })
     }
 
-    /// Find a subgroup by a path of names, case-insensitively.
+    /// Find a contained group by a path of names, case-insensitively.
     pub fn group_by_path(&self, path: &[&str]) -> Option<GroupRef<'_>> {
         let mut current = self.id;
 
@@ -185,6 +210,11 @@ impl GroupRef<'_> {
         }
 
         Some(GroupRef::new(self.database, current))
+    }
+
+    /// Get the database this group belongs to
+    pub fn database(&self) -> &Database {
+        self.database
     }
 }
 
@@ -210,9 +240,29 @@ impl GroupMut<'_> {
         GroupMut { database, id }
     }
 
+    pub fn as_ref(&self) -> GroupRef<'_> {
+        GroupRef::new(self.database, self.id)
+    }
+
+    pub fn group_mut(&mut self, id: GroupId) -> Option<GroupMut<'_>> {
+        if self.groups.contains(&id) {
+            Some(GroupMut::new(self.database, id))
+        } else {
+            None
+        }
+    }
+
+    pub fn entry_mut(&mut self, id: EntryId) -> Option<EntryMut<'_>> {
+        if self.entries.contains(&id) {
+            Some(EntryMut::new(self.database, id))
+        } else {
+            None
+        }
+    }
+
     /// Adds a new subgroup to this group and returns a mutable reference to it.
     pub fn add_group(&mut self) -> GroupMut<'_> {
-        let new_group = Group::new();
+        let new_group = Group::new(Some(self.id));
         let id = new_group.id;
 
         self.groups.insert(id);
@@ -222,7 +272,7 @@ impl GroupMut<'_> {
     }
 
     pub fn add_entry(&mut self) -> EntryMut<'_> {
-        let new_entry = Entry::new();
+        let new_entry = Entry::new(self.id);
         let id = new_entry.id();
 
         self.entries.insert(id);
@@ -236,7 +286,7 @@ impl GroupMut<'_> {
             panic!("Entry with ID {} already exists", id);
         }
 
-        let new_entry = Entry::with_id(id);
+        let new_entry = Entry::with_id(id, self.id);
         self.entries.insert(id);
         self.database.entries.insert(id, new_entry);
 
@@ -248,11 +298,15 @@ impl GroupMut<'_> {
             panic!("Group with ID {} already exists", id);
         }
 
-        let new_group = Group::with_id(id);
+        let new_group = Group::with_id(id, Some(self.id));
         self.groups.insert(id);
         self.database.groups.insert(id, new_group);
 
         GroupMut::new(self.database, id)
+    }
+
+    pub fn database_mut(&mut self) -> &mut Database {
+        self.database
     }
 }
 

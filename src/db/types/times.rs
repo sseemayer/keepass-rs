@@ -16,3 +16,16 @@ pub struct Times {
     pub expires: Option<bool>,
     pub usage_count: Option<usize>,
 }
+
+impl Times {
+    /// Returns the current time, without nanoseconds since the last leap second
+    pub fn now() -> NaiveDateTime {
+        let now = chrono::Utc::now().timestamp();
+        chrono::DateTime::from_timestamp(now, 0).unwrap().naive_utc()
+    }
+
+    /// Returns the Unix epoch time: 1970-01-01 00:00:00
+    pub fn epoch() -> NaiveDateTime {
+        chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
+    }
+}
