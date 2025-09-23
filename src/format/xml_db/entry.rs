@@ -100,7 +100,7 @@ impl Entry {
                     .entries
                     .into_iter()
                     .map(|e| {
-                        let mut he = crate::db::Entry::new();
+                        let mut he = crate::db::Entry::new(target.as_ref().parent().id());
                         e.xml_to_history(&mut he, inner_decryptor)?;
                         Ok(he)
                     })

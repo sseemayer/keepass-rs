@@ -57,7 +57,7 @@ impl Database {
     }
 
     pub(crate) fn new_with_root_id(root_id: GroupId) -> Self {
-        let root = Group::with_id(root_id);
+        let root = Group::with_id(root_id, None);
 
         let mut groups = HashMap::new();
         groups.insert(root_id, root);
@@ -76,7 +76,7 @@ impl Database {
     }
 
     pub(crate) fn with_data(config: DatabaseConfig, root_id: GroupId) -> Self {
-        let root = Group::with_id(root_id);
+        let root = Group::with_id(root_id, None);
 
         let mut groups = HashMap::new();
         groups.insert(root_id, root);
