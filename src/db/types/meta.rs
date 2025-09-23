@@ -1,10 +1,13 @@
+use std::collections::HashMap;
+
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::db::{Color, CustomData};
+use crate::db::{Color, CustomDataItem};
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
+#[non_exhaustive]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Meta {
     /// the program that generated the database file.
@@ -44,9 +47,6 @@ pub struct Meta {
     /// memory protection settings
     pub memory_protection: Option<MemoryProtection>,
 
-    /// custom icons
-    pub custom_icons: CustomIcons,
-
     /// whether the recycle bin is enabled
     pub recyclebin_enabled: Option<bool>,
 
@@ -77,11 +77,8 @@ pub struct Meta {
     /// Last time the settings were changed
     pub settings_changed: Option<NaiveDateTime>,
 
-    /// Binary attachments in the Metadata header
-    pub binaries: BinaryAttachments,
-
     /// Additional custom data fields
-    pub custom_data: CustomData,
+    pub custom_data: HashMap<String, CustomDataItem>,
 }
 
 /// Database memory protection settings
@@ -114,38 +111,4 @@ impl Default for MemoryProtection {
             protect_notes: false,
         }
     }
-}
-
-/// Collection of custom icons
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct CustomIcons {
-    pub icons: Vec<Icon>,
-}
-
-/// A custom icon
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct Icon {
-    /// UUID, to reference the icon
-    pub uuid: Uuid,
-
-    /// Image data
-    pub data: Vec<u8>,
-}
-
-/// Collection of binary attachments in the metadata of an XML database
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachments {
-    pub binaries: Vec<BinaryAttachment>,
-}
-
-/// Binary attachment in the metadata of a XML database
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachment {
-    pub identifier: Option<String>,
-    pub compressed: bool,
-    pub content: Vec<u8>,
 }

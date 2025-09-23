@@ -9,8 +9,8 @@ use crate::{
 };
 
 #[cfg(feature = "save_kdbx4")]
-pub(crate) use crate::format::kdbx4::dump::dump_kdbx4;
-pub(crate) use crate::format::kdbx4::parse::{decrypt_kdbx4, parse_kdbx4};
+pub(crate) use crate::format::kdbx4::dump::{dump_kdbx4, SaveKdbx4Error};
+pub(crate) use crate::format::kdbx4::parse::{get_xml, parse_kdbx4, ParseKdbx4Error};
 
 #[cfg(feature = "save_kdbx4")]
 /// Size for a master seed in bytes
@@ -63,10 +63,11 @@ struct KDBX4InnerHeader {
 mod kdbx4_tests {
     use super::*;
 
+    use crate::db::fields;
     use crate::format::kdbx4::dump::dump_kdbx4;
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-        db::{Database, Entry, Group, HeaderAttachment, NodeRef, Value},
+        db::{Database, Entry, Group, Value},
         format::KDBX4_CURRENT_MINOR_VERSION,
         key::DatabaseKey,
     };
@@ -74,13 +75,12 @@ mod kdbx4_tests {
     #[cfg(feature = "challenge_response")]
     #[test]
     fn test_with_challenge_response() {
-        let mut db = Database::new(DatabaseConfig::default());
+        let mut db = Database::new();
 
-        let mut root_group = Group::new("Root");
-        root_group.add_child(Entry::new());
-        root_group.add_child(Entry::new());
-        root_group.add_child(Entry::new());
-        db.root = root_group;
+        let mut root = db.root_mut();
+        root.add_entry();
+        root.add_entry();
+        root.add_entry();
 
         let mut password_bytes: Vec<u8> = vec![];
         let mut password: String = "".to_string();
@@ -101,27 +101,21 @@ mod kdbx4_tests {
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.children.len(), 3);
+        assert_eq!(decrypted_db.num_entries(), 3);
     }
 
     fn test_with_config(config: DatabaseConfig) {
-        let mut db = Database::new(config);
+        let mut db = Database::new();
+        db.config = config;
 
-        let mut root_group = Group::new("Root");
+        let mut root = db.root_mut();
 
-        let mut entry_with_password = Entry::new();
-        entry_with_password
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("Demo Entry".into()));
+        let mut entry_with_password = root.add_entry();
+        entry_with_password.set_unprotected(fields::TITLE, "Demo Entry");
+        entry_with_password.set_protected(fields::PASSWORD, "secret");
 
-        entry_with_password
-            .fields
-            .insert("Password".to_string(), Value::Protected("secret".into()));
-
-        root_group.add_child(entry_with_password);
-        root_group.add_child(Entry::new());
-        root_group.add_child(Entry::new());
-        db.root = root_group;
+        root.add_entry();
+        root.add_entry();
 
         let mut password_bytes: Vec<u8> = vec![];
         let mut password: String = "".to_string();
@@ -138,13 +132,14 @@ mod kdbx4_tests {
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.children.len(), 3);
+        assert_eq!(decrypted_db.num_entries(), 3);
 
-        if let Some(NodeRef::Entry(e)) = decrypted_db.root.get(&["Demo Entry"]) {
-            assert_eq!(e.get_password(), Some("secret"));
-        } else {
-            panic!("Could not get NodeRef")
-        }
+        let decrypted_root = decrypted_db.root();
+        let the_entry = decrypted_root
+            .entry_by_name("Demo Entry")
+            .expect("Could not find entry");
+
+        assert_eq!(the_entry.get_str(fields::PASSWORD), Some("secret"));
     }
 
     #[test]
@@ -203,28 +198,21 @@ mod kdbx4_tests {
 
     #[test]
     pub fn header_attachments() {
-        let mut root_group = Group::new("Root");
-        root_group.add_child(Entry::new());
+        let mut db = Database::new();
 
-        let mut db = Database::new(DatabaseConfig::default());
+        let mut root = db.root_mut();
 
-        db.header_attachments = vec![
-            HeaderAttachment {
-                flags: 1,
-                content: vec![0x01, 0x02, 0x03, 0x04],
-            },
-            HeaderAttachment {
-                flags: 2,
-                content: vec![0x04, 0x03, 0x02, 0x01],
-            },
-        ];
+        let mut entry = root.add_entry();
+        entry.set_unprotected(fields::TITLE, "Demo entry");
+        entry.set_protected(fields::PASSWORD, "secret");
 
-        let mut entry = Entry::new();
-        entry
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
+        let mut attachment1 = entry.add_attachment();
+        attachment1.name = "hello.txt".to_string();
+        attachment1.set_data(b"Hello, World!".to_vec());
 
-        db.root.add_child(entry);
+        let mut attachment2 = entry.add_attachment();
+        attachment2.name = "image.png".to_string();
+        attachment2.set_data(vec![0x89, 0x50, 0x4E, 0x47]);
 
         let db_key = DatabaseKey::new().with_password("test");
 
@@ -233,11 +221,18 @@ mod kdbx4_tests {
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.children.len(), 1);
+        assert_eq!(decrypted_db.num_entries(), 1);
+        assert_eq!(decrypted_db.num_attachments(), 2);
 
-        let header_attachments = &decrypted_db.header_attachments;
-        assert_eq!(header_attachments.len(), 2);
-        assert_eq!(header_attachments[0].flags, 1);
-        assert_eq!(header_attachments[0].content, [0x01, 0x02, 0x03, 0x04]);
+        let decrypted_root = decrypted_db.root();
+        let the_entry = decrypted_root
+            .entry_by_name("Demo entry")
+            .expect("Could not find entry");
+
+        the_entry.attachments().for_each(|a| match a.name.as_str() {
+            "hello.txt" => assert_eq!(a.data(), &b"Hello, World!"[..]),
+            "image.png" => assert_eq!(a.data(), &[0x89, 0x50, 0x4E, 0x47][..]),
+            _ => panic!("Unexpected attachment name"),
+        });
     }
 }
