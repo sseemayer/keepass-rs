@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256, Sha512};
 use crate::error::CryptographyError;
 
 pub(crate) mod ciphers;
-pub(crate) mod kdf;
+pub mod kdf;
 
 pub(crate) fn calculate_hmac(
     elements: &[&[u8]],
