@@ -132,3 +132,7 @@ required-features = ["utilities", "save_kdbx4", "challenge_response"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
+
+[[example]]
+name = "save_database"
+required-features = ["save_kdbx4"]
