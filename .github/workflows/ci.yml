@@ -4,6 +4,9 @@ name: CI on Pull Requests
 on:
   pull_request:
 
+env:
+  RUSTFLAGS: -D warnings -A deprecated
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -23,8 +26,6 @@ jobs:
   doc:
     name: Build Doc
     runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,8 +40,6 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v11
@@ -52,8 +51,6 @@ jobs:
   build-windows:
     name: Build the project (Windows)
     runs-on: windows-latest
-    env:
-      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -88,8 +85,6 @@ jobs:
           #   name: armv8
           #   with_cross_compilation: false
 
-    env:
-      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
