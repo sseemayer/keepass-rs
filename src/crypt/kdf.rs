@@ -55,8 +55,15 @@ impl Kdf for Argon2Kdf {
         &self,
         composite_key: &GenericArray<u8, U32>,
     ) -> Result<GenericArray<u8, U32>, CryptographyError> {
+        // Disable Argon2 multithreading on wasm32 targets to avoid panics on platforms without thread support.
+        let thread_mode = if cfg!(target_arch = "wasm32") {
+            argon2::ThreadMode::Sequential
+        } else {
+            argon2::ThreadMode::Parallel
+        };
+
         let config = argon2::Config {
-            thread_mode: argon2::ThreadMode::Parallel,
+            thread_mode,
             ad: &[],
             hash_length: 32,
             lanes: self.parallelism,
