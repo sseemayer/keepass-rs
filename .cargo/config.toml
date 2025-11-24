@@ -1,3 +1,6 @@
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]
+
 [build]
 # Enable CPU-specific optimizations.
 # This can greatly improve performance for AES key derivation.

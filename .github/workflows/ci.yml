@@ -156,3 +156,31 @@ jobs:
       - name: Generate code coverage
         run: |
           nix develop --command cargo tarpaulin --verbose --timeout 120
+
+  wasm32-tests:
+    name: WASM32 Tests (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Add wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+      - name: Run wasm tests (Node)
+        run: wasm-pack test --node
+
+  wasm32-check:
+    name: WASM32 Compile Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Add wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+      - name: Cargo check keepass lib for wasm32 (no default features)
+        run: cargo check --target wasm32-unknown-unknown --no-default-features --lib -p keepass
