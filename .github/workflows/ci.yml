@@ -30,12 +30,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: nightly
-          components: rustfmt
+      - uses: DeterminateSystems/nix-installer-action@v11
       - name: run cargo doc
-        run: cargo doc
+        run: nix develop --command cargo doc
 
   check:
     name: Check
