@@ -34,6 +34,7 @@ use crate::config::DatabaseConfig;
 /// traverse the group hierarchy from there.
 ///
 /// See the [module-level documentation](crate::db) for an example.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Database {
     pub config: DatabaseConfig,
     pub meta: Meta,

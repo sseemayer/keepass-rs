@@ -21,7 +21,7 @@ impl GroupId {
         GroupId(Uuid::new_v4())
     }
 
-    pub(crate) fn with_uuid(uuid: Uuid) -> GroupId {
+    pub(crate) const fn with_uuid(uuid: Uuid) -> GroupId {
         GroupId(uuid)
     }
 
@@ -263,6 +263,12 @@ impl GroupMut<'_> {
         } else {
             None
         }
+    }
+
+    /// Convenience method to edit the group in a closure.
+    pub fn edit(&mut self, f: impl FnOnce(&mut GroupMut)) -> &mut Self {
+        f(self);
+        self
     }
 
     /// Adds a new subgroup to this group and returns a mutable reference to it.

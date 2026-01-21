@@ -17,7 +17,7 @@ use crate::db::{
 pub struct EntryId(Uuid);
 
 impl EntryId {
-    pub(crate) fn with_uuid(uuid: Uuid) -> EntryId {
+    pub(crate) const fn with_uuid(uuid: Uuid) -> EntryId {
         EntryId(uuid)
     }
 
@@ -229,6 +229,21 @@ impl EntryMut<'_> {
 
     pub fn as_ref(&self) -> EntryRef<'_> {
         EntryRef::new(self.database, self.id)
+    }
+
+    /// Convenience method to edit the entry in a closure.
+    pub fn edit(&mut self, f: impl FnOnce(&mut EntryMut)) -> &mut Self {
+        f(self);
+        self
+    }
+
+    /// Convenience method to edit the entry in a closure, tracking changes.
+    pub fn edit_tracking(&mut self, f: impl FnOnce(&mut EntryTrack)) -> &mut Self {
+        {
+            let mut tracked = self.track_changes();
+            f(&mut tracked);
+        }
+        self
     }
 
     /// Convert this mutable reference into a history-tracking variant that will persist the

@@ -39,6 +39,17 @@ impl Attachment {
     }
 }
 
+impl PartialEq for Attachment {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.name == other.name
+            && self.protected == other.protected
+            && self.data.expose_secret() == other.data.expose_secret()
+    }
+}
+
+impl Eq for Attachment {}
+
 #[cfg(feature = "serialization")]
 impl serde::Serialize for Attachment {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
