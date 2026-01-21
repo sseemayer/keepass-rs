@@ -501,54 +501,56 @@ fn have_entries_diverged(a: &Entry, b: &Entry) -> bool {
 #[cfg(test)]
 mod merge_tests {
     use std::{thread, time};
-    use uuid::Uuid;
+    use uuid::{uuid, Uuid};
 
-    use crate::db::{Entry, Group, Times};
+    use crate::db::{Entry, EntryId, Group, GroupId, Times};
     use crate::Database;
 
-    const ROOT_GROUP_ID: &str = "00000000-0000-0000-0000-000000000001";
-    const GROUP1_ID: &str = "00000000-0000-0000-0000-000000000002";
-    const GROUP2_ID: &str = "00000000-0000-0000-0000-000000000003";
-    const SUBGROUP1_ID: &str = "00000000-0000-0000-0000-000000000004";
-    const SUBGROUP2_ID: &str = "00000000-0000-0000-0000-000000000005";
+    const ROOT_GROUP_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000001"));
+    const GROUP1_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000002"));
+    const GROUP2_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000003"));
+    const SUBGROUP1_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000004"));
+    const SUBGROUP2_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000005"));
+    const ENTRY1_ID: EntryId = EntryId::with_uuid(uuid!("00000000-0000-0000-0000-000000000006"));
+    const ENTRY2_ID: EntryId = EntryId::with_uuid(uuid!("00000000-0000-0000-0000-000000000007"));
 
-    const ENTRY1_ID: &str = "00000000-0000-0000-0000-000000000006";
-    const ENTRY2_ID: &str = "00000000-0000-0000-0000-000000000007";
-
+    /// Build up an example database for testing
+    ///
+    /// The database structure is as follows:
+    ///
+    /// root (ROOT_GROUP_ID)
+    /// ├── entry1 (ENTRY1_ID)
+    /// ├── group1 (GROUP1_ID)
+    /// │   └── subgroup1 (SUBGROUP1_ID)
+    /// │       └── entry2 (ENTRY2_ID)
+    /// └── group2 (GROUP2_ID)
+    ///    └── subgroup2 (SUBGROUP2_ID)
+    ///
     fn create_test_database() -> Database {
-        let mut db = Database::new(Default::default());
-        let mut root_group = Group::new("root");
-        root_group.uuid = Uuid::parse_str(ROOT_GROUP_ID).unwrap();
+        let mut db = Database::new_with_root_id(ROOT_GROUP_ID);
 
-        let mut group1 = Group::new("group1");
-        group1.uuid = Uuid::parse_str(GROUP1_ID).unwrap();
-        let mut group2 = Group::new("group2");
-        group2.uuid = Uuid::parse_str(GROUP2_ID).unwrap();
+        // build up root -> group1 -> subgroup1 -> entry2
+        db.root_mut()
+            .add_group_with_id(GROUP1_ID)
+            .edit(|g| g.name = "group1".to_string())
+            .add_group_with_id(SUBGROUP1_ID)
+            .edit(|sg| sg.name = "subgroup1".to_string())
+            .add_entry_with_id(ENTRY2_ID)
+            .edit(|e| e.track_changes().set_unprotected("Title", "entry2"));
 
-        let mut subgroup1 = Group::new("subgroup1");
-        subgroup1.uuid = Uuid::parse_str(SUBGROUP1_ID).unwrap();
-        let mut subgroup2 = Group::new("subgroup2");
-        subgroup2.uuid = Uuid::parse_str(SUBGROUP2_ID).unwrap();
+        // build up root -> group2 -> subgroup2
+        db.root_mut()
+            .add_group_with_id(GROUP2_ID)
+            .edit(|g| g.name = "group2".to_string())
+            .add_group_with_id(SUBGROUP2_ID)
+            .edit(|sg| sg.name = "subgroup2".to_string());
 
         // Placing the first entry in the root group
-        let mut entry1 = Entry::new();
-        entry1.uuid = Uuid::parse_str(ENTRY1_ID).unwrap();
-        entry1.set_field_and_commit("Title", "entry1");
-        root_group.add_child(entry1);
+        db.root_mut()
+            .add_entry_with_id(ENTRY1_ID)
+            .track_changes()
+            .set_unprotected("Title", "entry1");
 
-        // Placing the second entry in a subgroup
-        let mut entry2 = Entry::new();
-        entry2.uuid = Uuid::parse_str(ENTRY2_ID).unwrap();
-        entry2.set_field_and_commit("Title", "entry2");
-        subgroup1.add_child(entry2);
-
-        group1.add_child(subgroup1);
-        group2.add_child(subgroup2);
-
-        root_group.add_child(group1);
-        root_group.add_child(group2);
-
-        db.root = root_group;
         db
     }
 
@@ -557,24 +559,27 @@ mod merge_tests {
         let mut destination_db = create_test_database();
         let source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
-        assert_eq!(destination_db.root.children.len(), 3);
+        assert_eq!(destination_db.root().entries().count(), 1);
+        assert_eq!(destination_db.root().groups().count(), 2);
+
+        assert_eq!(destination_db.entries.len(), entry_count_before);
+        assert_eq!(destination_db.groups.len(), group_count_before);
+
         // The 2 groups should be exactly the same after merging, since
         // nothing was performed during the merge.
         assert_eq!(destination_db, source_db);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
-        assert_eq!(entry_count_after, entry_count_before);
-        assert_eq!(group_count_after, group_count_before);
-
-        let entry = &mut destination_db.root.entries_mut()[0];
-        entry.set_field_and_commit("Title", "entry1_updated");
+        // Now modify an entry in the destination database, and merge again.
+        destination_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .edit_tracking(|e| e.set_unprotected("Title", "entry1_updated"));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -584,6 +589,7 @@ mod merge_tests {
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
+
         // Merging twice in a row, even if the first merge updated the destination group,
         // should not create more changes.
         assert_eq!(destination_db_just_after_merge, destination_db);
@@ -594,71 +600,80 @@ mod merge_tests {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let mut new_entry = Entry::new();
-        new_entry.set_field_and_commit("Title", "new_entry");
-        source_db.root.add_child(new_entry);
+        // create a new entry in source_db and retain its id
+        let new_entry_id = source_db
+            .root_mut()
+            .add_entry()
+            .edit_tracking(|e| e.set_unprotected("Title", "new_entry"))
+            .id();
 
+        // merge source_db into destination_db -- this should add the new entry
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before + 1);
         assert_eq!(group_count_after, group_count_before);
 
-        let root_entries = destination_db.root.entries();
-        assert_eq!(root_entries.len(), 2);
+        let root_entries_count = destination_db.root().entries().count();
+        assert_eq!(root_entries_count, 2);
 
-        let new_entry = get_entry(&destination_db, &["new_entry"]);
-        assert_eq!(new_entry.get_title().unwrap(), "new_entry".to_string());
+        let new_entry = destination_db
+            .entry(new_entry_id)
+            .expect("New entry should exist");
+        assert_eq!(new_entry.get_str("Title"), Some("new_entry"));
 
         // Merging the same group again should not create a duplicate entry.
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before + 1);
         assert_eq!(group_count_after, group_count_before);
+
+        let root_entries_count = destination_db.root().entries().count();
+        assert_eq!(root_entries_count, 2);
     }
 
+    /// Test that an entry that is marked as deleted in the destination database is not re-added
+    /// when merging from source
     #[test]
     fn test_deleted_entry_in_destination() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let mut deleted_entry = Entry::new();
-        let deleted_entry_uuid = deleted_entry.uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
-        source_db.root.add_child(deleted_entry);
+        // add a new entry in source_db that will be marked as deleted in destination_db
+        let deleted_entry_id = source_db
+            .root_mut()
+            .add_entry()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "deleted_entry");
+            })
+            .id();
 
-        destination_db
-            .deleted_objects
-            .objects
-            .push(crate::db::DeletedObject {
-                uuid: deleted_entry_uuid,
-                deletion_time: Times::now(),
-            });
+        destination_db.deleted_entries.insert(deleted_entry_id);
 
+        // merge source_db into destination_db -- the entry should not be added
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let new_entry = destination_db.root.find_node_location(deleted_entry_uuid);
-        assert!(new_entry.is_none());
+        assert!(destination_db.entry(deleted_entry_id).is_none());
     }
 
     #[test]
