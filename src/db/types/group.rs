@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
@@ -216,6 +217,10 @@ impl GroupRef<'_> {
     pub fn database(&self) -> &Database {
         self.database
     }
+
+    pub fn parent(&self) -> Option<GroupRef<'_>> {
+        self.parent.map(|id| GroupRef::new(self.database, id))
+    }
 }
 
 impl Deref for GroupRef<'_> {
@@ -308,6 +313,83 @@ impl GroupMut<'_> {
     pub fn database_mut(&mut self) -> &mut Database {
         self.database
     }
+
+    pub fn parent_mut(&mut self) -> Option<GroupMut<'_>> {
+        if let Some(parent_id) = self.parent {
+            if self.database.groups.contains_key(&parent_id) {
+                return Some(GroupMut::new(self.database, parent_id));
+            }
+        }
+        None
+    }
+
+    pub fn move_to(&mut self, new_parent_id: GroupId) -> Result<(), MoveGroupError> {
+        let old_parent_id = self.parent.ok_or(MoveGroupError::CannotMoveRoot)?;
+
+        if !self.database.groups.contains_key(&new_parent_id) {
+            return Err(MoveGroupError::NotFound(new_parent_id));
+        }
+
+        // Check for cycles
+        let mut current = Some(new_parent_id);
+        while let Some(curr_id) = current {
+            if curr_id == self.id {
+                return Err(MoveGroupError::WouldCreateCycle);
+            }
+            current = self.database.groups.get(&curr_id).and_then(|g| g.parent);
+        }
+
+        // Remove from old parent
+        let mut old_parent = self.database.group_mut(old_parent_id).unwrap();
+        old_parent.groups.remove(&self.id);
+
+        let mut new_parent = self.database.group_mut(new_parent_id).unwrap();
+        new_parent.groups.insert(self.id);
+
+        // Update parent reference
+        self.parent = Some(new_parent_id);
+
+        Ok(())
+    }
+
+    /// Deletes this group and all its child groups and entries from the database.
+    pub fn remove(mut self) {
+        // Remove from parent
+        if let Some(parent_id) = self.parent {
+            if let Some(mut parent) = self.database.group_mut(parent_id) {
+                parent.groups.remove(&self.id);
+            }
+        }
+
+        // Delete entries
+        let entry_ids: Vec<EntryId> = self.entries.iter().cloned().collect();
+        for entry_id in entry_ids {
+            self.entry_mut(entry_id).unwrap().remove();
+        }
+
+        // Recursively delete child groups
+        let child_group_ids: Vec<GroupId> = self.groups.iter().cloned().collect();
+        for child_id in child_group_ids {
+            if let Some(child_group) = self.database.group_mut(child_id) {
+                child_group.remove();
+            }
+        }
+
+        // Finally, remove this group from the database
+        self.database.groups.remove(&self.id);
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum MoveGroupError {
+    #[error("Cannot move the root group")]
+    CannotMoveRoot,
+
+    #[error("Destination group with ID {0} not found")]
+    NotFound(GroupId),
+
+    #[error("Cannot move a group into itself or one of its descendants")]
+    WouldCreateCycle,
 }
 
 impl Deref for GroupMut<'_> {

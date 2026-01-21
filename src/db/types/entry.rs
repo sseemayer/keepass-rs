@@ -288,6 +288,23 @@ impl EntryMut<'_> {
     pub fn database_mut(&mut self) -> &mut Database {
         self.database
     }
+
+    /// Remove this entry from the database, including all its attachments.
+    pub fn remove(self) {
+        let entry = self.database.entries.remove(&self.id).expect("Entry not found");
+
+        // Remove from parent group
+        let mut parent = self
+            .database
+            .group_mut(entry.parent)
+            .expect("Parent group not found");
+        parent.entries.remove(&self.id);
+
+        // Remove attachments
+        for attachment_id in entry.attachments {
+            self.database.attachments.remove(&attachment_id);
+        }
+    }
 }
 
 #[derive(Error, Debug)]
