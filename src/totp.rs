@@ -1,3 +1,9 @@
+//! Time-based One-Time Password (TOTP) implementation
+//!
+//! This module provides functionality to parse TOTP specifications from otpauth:// URLs,
+//! generate one-time passwords based on the current time, and handle different hash algorithms.
+//!
+//! You most likely want to use this together with [Entry::get_otp](crate::db::Entry::get_otp)
 use base32;
 use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
 use thiserror::Error;
@@ -168,6 +174,19 @@ impl TOTP {
 
 impl Entry {
     /// Convenience method for getting a TOTP from this entry
+    ///
+    /// ```
+    /// use keepass::{Database, DatabaseKey};
+    /// use keepass::totp::TOTP;
+    ///
+    /// let db = Database::open(&mut std::fs::File::open("tests/resources/test_db_kdbx4_with_totp_entry.kdbx").unwrap(), DatabaseKey::new().with_password("test")).unwrap();
+    /// let entry = db.iter_all_entries()
+    ///     .find(|e| e.get_str("Title") == Some("this entry has totp"))
+    ///     .expect("Entry not found");
+    ///
+    /// let totp = entry.get_otp().unwrap();
+    /// println!("TOTP code is {}", totp.value_now().unwrap().code);
+    /// ```
     pub fn get_otp(&self) -> Result<TOTP, TOTPError> {
         self.get_str(crate::db::fields::OTP)
             .ok_or(TOTPError::NoRecord)?
