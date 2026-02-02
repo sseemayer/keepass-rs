@@ -3,7 +3,7 @@ use std::fs::File;
 
 use anyhow::Result;
 use clap::Parser;
-use keepass::{db::NodeRef, Database, DatabaseKey};
+use keepass::{Database, DatabaseKey};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -43,11 +43,15 @@ pub fn main() -> Result<()> {
 
     let db = Database::open(&mut source, key)?;
 
-    if let Some(NodeRef::Entry(e)) = db.root.get(&[&args.entry]) {
-        let totp = e.get_otp().unwrap();
-        println!("Token is {}", totp.value_now().unwrap().code);
-        Ok(())
-    } else {
-        panic!("Could not find entry with provided name")
-    }
+    let entry_name = args.entry.as_str();
+
+    let entry = db
+        .iter_all_entries()
+        .find(|e| e.get_str("Title").map_or(false, |title| title == entry_name))
+        .ok_or_else(|| anyhow::format_err!("Could not find entry with provided name"))?;
+
+    let totp = entry.get_otp()?;
+    println!("Token is {}", totp.value_now().unwrap().code);
+
+    Ok(())
 }

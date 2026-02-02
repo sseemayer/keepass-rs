@@ -4,9 +4,6 @@
 mod compression;
 mod key;
 
-#[cfg(feature = "save_kdbx4")]
-mod io;
-
 pub mod config;
 pub mod db;
 
@@ -14,6 +11,12 @@ pub(crate) mod crypt;
 pub(crate) mod format;
 pub(crate) mod hmac_block_stream;
 pub(crate) mod variant_dictionary;
+
+#[cfg(feature = "save_kdbx4")]
+mod io;
+
+#[cfg(feature = "totp")]
+pub mod totp;
 
 pub use self::db::{Database, DatabaseOpenError, Value};
 pub use self::key::DatabaseKey;

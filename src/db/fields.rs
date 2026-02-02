@@ -11,6 +11,9 @@ pub const USERNAME: &str = "UserName";
 /// The password associated with the entry
 pub const PASSWORD: &str = "Password";
 
+/// TOTP data associated with the entry
+pub const OTP: &str = "otp";
+
 /// The primary URL associated with the entry
 pub const URL: &str = "URL";
 
