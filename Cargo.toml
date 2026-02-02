@@ -95,11 +95,6 @@ uuid = { version = "1.18.1", features = ["js"] }
 wasm-bindgen-test = "0.3"
 
 [[bin]]
-# parse a KeePass database and output as a JSON document
-name = "kp-dump-json"
-required-features = ["utilities"]
-
-[[bin]]
 # decrypt a KeePass database and output the inner XML document
 name = "kp-dump-xml"
 required-features = ["utilities"]
