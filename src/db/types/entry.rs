@@ -360,6 +360,15 @@ impl EntryTrack<'_> {
         self.times.location_changed = Some(Times::now());
         Ok(())
     }
+
+    pub fn remove(mut self) {
+        let this = self.as_mut();
+        this.database
+            .deleted_objects
+            .insert(this.id.uuid(), Some(Times::now()));
+
+        this.remove();
+    }
 }
 
 impl Deref for EntryTrack<'_> {

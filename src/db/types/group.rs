@@ -384,6 +384,15 @@ impl GroupMut<'_> {
         // Finally, remove this group from the database
         self.database.groups.remove(&self.id);
     }
+
+    /// Convert this mutable group reference into a history-tracking variant that will record
+    /// changes such as deletions and moves.
+    pub fn track_changes(&mut self) -> GroupTrack<'_> {
+        GroupTrack {
+            database: self.database,
+            id: self.id,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -415,5 +424,68 @@ impl DerefMut for GroupMut<'_> {
             .groups
             .get_mut(&self.id)
             .expect("GroupMut points to a non-existing group")
+    }
+}
+
+pub struct GroupTrack<'a> {
+    database: &'a mut crate::db::Database,
+    id: GroupId,
+}
+
+impl GroupTrack<'_> {
+    pub fn as_mut(&mut self) -> GroupMut<'_> {
+        GroupMut::new(self.database, self.id)
+    }
+
+    /// Move this group to a new parent group, updating the location changed time.
+    pub fn move_to(&mut self, new_parent_id: GroupId) -> Result<(), MoveGroupError> {
+        self.as_mut().move_to(new_parent_id)?;
+        self.times.location_changed = Some(Times::now());
+        Ok(())
+    }
+
+    /// Deletes this group and all its child groups and entries from the database,
+    /// adding them to the deleted entries and groups sets.
+    pub fn remove(mut self) {
+        // Remove from parent
+        if let Some(parent_id) = self.parent {
+            if let Some(mut parent) = self.database.group_mut(parent_id) {
+                parent.groups.remove(&self.id);
+            }
+        }
+
+        // Delete entries
+        let entry_ids: Vec<EntryId> = self.entries.iter().cloned().collect();
+        for entry_id in entry_ids {
+            self.as_mut().entry_mut(entry_id).unwrap().remove();
+        }
+
+        // Recursively delete child groups
+        let child_group_ids: Vec<GroupId> = self.groups.iter().cloned().collect();
+        for child_id in child_group_ids {
+            if let Some(child_group) = self.database.group_mut(child_id) {
+                child_group.remove();
+            }
+        }
+
+        // Finally, remove this group from the database and add to deleted groups
+        self.database.groups.remove(&self.id);
+        self.database
+            .deleted_objects
+            .insert(self.id.uuid(), Some(Times::now()));
+    }
+}
+
+impl Deref for GroupTrack<'_> {
+    type Target = Group;
+
+    fn deref(&self) -> &Self::Target {
+        self.database.groups.get(&self.id).expect("Group not found")
+    }
+}
+
+impl DerefMut for GroupTrack<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.database.groups.get_mut(&self.id).expect("Group not found")
     }
 }
