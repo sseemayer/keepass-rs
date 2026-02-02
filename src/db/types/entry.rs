@@ -369,6 +369,34 @@ impl EntryTrack<'_> {
 
         this.remove();
     }
+
+    /// Convenience method to edit the entry in a closure, tracking changes.
+    pub fn edit(&mut self, f: impl FnOnce(&mut EntryTrack)) -> &mut Self {
+        f(self);
+        self.times.last_modification = Some(Times::now());
+        self
+    }
+
+    /// Set a field value, tracking changes. See [crate::db::fields] for common field names.
+    pub fn set(&mut self, key: impl Into<String>, value: Value) {
+        let mut this = self.as_mut();
+        this.set(key, value);
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set a protected field value, tracking changes. See [crate::db::fields] for common field names.
+    pub fn set_protected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        let mut this = self.as_mut();
+        this.set_protected(key, value);
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set an unprotected field value, tracking changes. See [crate::db::fields] for common field names.
+    pub fn set_unprotected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        let mut this = self.as_mut();
+        this.set_unprotected(key, value);
+        this.times.last_modification = Some(Times::now());
+    }
 }
 
 impl Deref for EntryTrack<'_> {

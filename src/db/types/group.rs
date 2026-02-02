@@ -271,6 +271,14 @@ impl GroupMut<'_> {
         self
     }
 
+    /// Convenience method to edit the group in a closure that tracks changes.
+    pub fn edit_tracking(&mut self, f: impl FnOnce(&mut GroupTrack)) -> &mut Self {
+        let mut tracker = self.track_changes();
+        f(&mut tracker);
+        tracker.as_mut().times.last_modification = Some(Times::now());
+        self
+    }
+
     /// Adds a new subgroup to this group and returns a mutable reference to it.
     pub fn add_group(&mut self) -> GroupMut<'_> {
         let new_group = Group::new(Some(self.id));
@@ -473,6 +481,13 @@ impl GroupTrack<'_> {
         self.database
             .deleted_objects
             .insert(self.id.uuid(), Some(Times::now()));
+    }
+
+    /// Convenience method to edit the group in a closure, updating the last modification time.
+    pub fn edit(&mut self, f: impl FnOnce(&mut GroupTrack)) -> &mut Self {
+        f(self);
+        self.as_mut().times.last_modification = Some(Times::now());
+        self
     }
 }
 

@@ -77,32 +77,62 @@ impl Database {
 
 /// Merge deletions from `source` into `dest`, appending to a log of the merge process.
 fn merge_deletions(dest: &mut Database, source: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
-    for &deleted_group_id in source.deleted_groups.iter() {
-        if !dest.deleted_groups.contains(&deleted_group_id) {
-            if let Some(group) = dest.group_mut(deleted_group_id) {
-                group.remove();
-                log.events.push(MergeEvent {
-                    target: MergeEventTarget::Group(deleted_group_id),
-                    event_type: MergeEventType::Deleted,
-                });
+    for (&id, source_timestamp) in source.deleted_objects.iter() {
+        // compare deletion timestamps to determine which deletion is more recent and whether we
+        // need to delete objects in dest
+        let merged_timestamp = match (source_timestamp, dest.deleted_objects.get(&id)) {
+            (None, None) => {
+                // no timestamp in source, no deletion event in dest. add a blank deletion event
+                // and delete the object
+                None
             }
-
-            dest.deleted_groups.insert(deleted_group_id);
-        }
-    }
-
-    for &deleted_entry_id in source.deleted_entries.iter() {
-        if !dest.deleted_entries.contains(&deleted_entry_id) {
-            if let Some(entry) = dest.entry_mut(deleted_entry_id) {
-                entry.remove();
-                log.events.push(MergeEvent {
-                    target: MergeEventTarget::Entry(deleted_entry_id),
-                    event_type: MergeEventType::Deleted,
-                });
+            (None, Some(None)) => {
+                // no timestamp in source, dest has a blank deletion event - delete the object
+                None
             }
+            (None, Some(Some(_d))) => {
+                // no timestamp in source, but dest has a timestamped deletion event, which we
+                // assume is newer - don't perform additional deletions
+                continue;
+            }
+            (Some(s), None) => {
+                // timestamped deletion in source, no deletion event in dest - use source timestamp
+                Some(s.clone())
+            }
+            (Some(s), Some(None)) => {
+                // timestamped deletion in source, blank deletion event in dest - use source timestamp
+                Some(s.clone())
+            }
+            (Some(s), Some(Some(d))) => {
+                if s > d {
+                    // timestamped deletion in source is newer than dest - use source timestamp
+                    Some(s.clone())
+                } else {
+                    // timestamped deletion in dest is newer than source - don't delete again
+                    continue;
+                }
+            }
+        };
 
-            dest.deleted_entries.insert(deleted_entry_id);
+        let group_id = GroupId::with_uuid(id);
+        if let Some(group) = dest.group_mut(group_id) {
+            group.remove();
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Group(group_id),
+                event_type: MergeEventType::Deleted,
+            });
         }
+
+        let entry_id = EntryId::with_uuid(id);
+        if let Some(entry) = dest.entry_mut(entry_id) {
+            entry.remove();
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Entry(entry_id),
+                event_type: MergeEventType::Deleted,
+            });
+        }
+
+        dest.deleted_objects.insert(id, merged_timestamp);
     }
 
     Ok(())
@@ -124,7 +154,7 @@ fn merge_group_entries(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLo
     // Handle entries that exist only in source.
     for &id in source_entries.difference(&dest_entries) {
         // was the entry deleted in dest? then do not re-add it
-        if dest.as_ref().database().deleted_entries.contains(&id) {
+        if dest.as_ref().database().deleted_objects.contains_key(&id.uuid()) {
             continue;
         }
 
@@ -142,9 +172,9 @@ fn merge_group_entries(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLo
     // Handle entries that exist only in destination.
     for &id in dest_entries.difference(&source_entries) {
         // was the entry deleted in source? then delete it from dest
-        if source.database().deleted_entries.contains(&id) {
+        if let Some(timestamp) = source.database().deleted_objects.get(&id.uuid()) {
             let db = dest.database_mut();
-            db.deleted_entries.insert(id);
+            db.deleted_objects.insert(id.uuid(), timestamp.clone());
             db.entry_mut(id).expect("Entry must exist").remove();
 
             log.events.push(MergeEvent {
@@ -172,7 +202,7 @@ fn merge_group_groups(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog
     // Handle groups that exist only in source.
     for &id in source_groups.difference(&dest_groups) {
         // was the group deleted in dest? then do not re-add it
-        if dest.as_ref().database().deleted_groups.contains(&id) {
+        if dest.as_ref().database().deleted_objects.contains_key(&id.uuid()) {
             continue;
         }
 
@@ -189,9 +219,9 @@ fn merge_group_groups(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog
     // Handle groups that exist only in destination.
     for &id in dest_groups.difference(&source_groups) {
         // was the group deleted in source? then delete it from dest
-        if source.database().deleted_groups.contains(&id) {
+        if let Some(timestamp) = source.database().deleted_objects.get(&id.uuid()) {
             let db = dest.database_mut();
-            db.deleted_groups.insert(id);
+            db.deleted_objects.insert(id.uuid(), timestamp.clone());
             db.group_mut(id).expect("Group must exist").remove();
 
             log.events.push(MergeEvent {
@@ -501,9 +531,9 @@ fn have_entries_diverged(a: &Entry, b: &Entry) -> bool {
 #[cfg(test)]
 mod merge_tests {
     use std::{thread, time};
-    use uuid::{uuid, Uuid};
+    use uuid::uuid;
 
-    use crate::db::{Entry, EntryId, Group, GroupId, Times};
+    use crate::db::{EntryId, GroupId, Times};
     use crate::Database;
 
     const ROOT_GROUP_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000001"));
@@ -965,565 +995,696 @@ mod merge_tests {
             .contains_key(&deleted_group_id.uuid()));
     }
 
+    /// Test that a tree that was deleted in source, but contains a group that is newer in
+    /// destination is only partially deleted.
     #[test]
     fn test_group_subtree_partial_deletion() {
         let mut destination_db = create_test_database();
+
+        let deleted_group_id = destination_db
+            .root_mut()
+            .add_group()
+            .edit(|g| {
+                g.name = "deleted_group".to_string();
+            })
+            .id();
+
+        let deleted_subgroup_id = destination_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .add_group()
+            .edit(|g| {
+                g.name = "deleted_subgroup".to_string();
+            })
+            .id();
+
+        let deleted_entry_id = destination_db
+            .group_mut(deleted_subgroup_id)
+            .unwrap()
+            .add_entry()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "deleted_entry");
+            })
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        let deleted_entry_uuid = Uuid::new_v4();
-        let deleted_group_uuid = Uuid::new_v4();
-        let deleted_subgroup_uuid = Uuid::new_v4();
-
+        // mark the entire group subtree as deleted in source_db
         thread::sleep(time::Duration::from_secs(1));
-        let mut deleted_entry = Entry::new();
-        deleted_entry.uuid = deleted_entry_uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
+        source_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .track_changes()
+            .remove();
 
-        let mut deleted_subgroup = Group::new("deleted_subgroup");
-        deleted_subgroup.uuid = deleted_subgroup_uuid;
-        deleted_subgroup.add_child(deleted_entry);
-
+        // modify the deleted subgroup in destination_db to be newer than the deletion time
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_subgroup_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        destination_db
+            .group_mut(deleted_subgroup_id)
+            .unwrap()
+            .track_changes()
+            .edit(|g| {
+                g.notes = Some("modified in destination".to_string());
+            });
 
-        thread::sleep(time::Duration::from_secs(1));
-        let mut deleted_group = Group::new("deleted_group");
-        deleted_group.uuid = deleted_group_uuid;
-        deleted_group.add_child(deleted_subgroup);
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        destination_db.root.add_child(deleted_group);
-
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
-
+        // perform the merge - the entry and subgroup should be deleted, but the group should
+        // remain
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 2);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before - 1);
         assert_eq!(group_count_after, group_count_before - 1);
 
-        let deleted_entry = destination_db.root.find_node_location(deleted_entry_uuid);
-        assert!(deleted_entry.is_none());
-        let deleted_subgroup = destination_db.root.find_node_location(deleted_subgroup_uuid);
-        assert!(deleted_subgroup.is_none());
-        let deleted_group = destination_db.root.find_node_location(deleted_group_uuid);
-        assert!(deleted_group.is_some());
+        assert!(destination_db.entry(deleted_entry_id).is_none());
+        assert!(destination_db.group(deleted_subgroup_id).is_none());
+        assert!(destination_db.group(deleted_group_id).is_some());
 
-        assert!(destination_db.deleted_objects.contains(deleted_entry_uuid));
-        assert!(destination_db.deleted_objects.contains(deleted_subgroup_uuid));
-        assert!(!destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_entry_id.uuid()));
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_subgroup_id.uuid()));
+        assert!(!destination_db
+            .deleted_objects
+            .contains_key(&deleted_group_id.uuid()));
     }
 
+    /// Test that a group that is marked as deleted in the source database but modified in
+    /// destination is not deleted
     #[test]
     fn test_deleted_group_in_source_modified_in_destination() {
         let mut destination_db = create_test_database();
+
+        let deleted_group_id = destination_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "deleted_group".to_string())
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        let deleted_group_uuid = Uuid::new_v4();
-
+        // mark the group as deleted in source_db
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .track_changes()
+            .remove();
 
+        // modify the group in destination_db
         thread::sleep(time::Duration::from_secs(1));
-        let mut deleted_group = Group::new("deleted_group");
-        deleted_group.uuid = deleted_group_uuid;
-        destination_db.root.add_child(deleted_group);
+        destination_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .track_changes()
+            .edit(|g| g.notes = Some("modified_in_destination".to_string()));
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
+        // perform the merge - the group should not be deleted
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let deleted_group = destination_db.root.find_node_location(deleted_group_uuid);
-        assert!(deleted_group.is_some());
+        assert!(destination_db.group(deleted_group_id).is_some());
 
-        assert!(!destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(!destination_db
+            .deleted_objects
+            .contains_key(&deleted_group_id.uuid()));
     }
 
+    /// Test that a group that is marked as deleted in the source database but has new entries
+    /// added in destination is not deleted
     #[test]
     fn test_deleted_group_has_new_entries() {
         let mut destination_db = create_test_database();
+
+        let deleted_group_id = destination_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "deleted_group".to_string())
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        let mut deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid;
-
-        let mut new_entry = Entry::new();
-        let new_entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "new_entry");
-        deleted_group.add_child(new_entry);
-        destination_db.root.add_child(deleted_group);
-
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
-
+        // mark the group as deleted in source_db
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .track_changes()
+            .remove();
 
+        // add a new entry to the deleted group in destination_db
+        thread::sleep(time::Duration::from_secs(1));
+        let new_entry_id = destination_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .add_entry()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "new_entry_in_deleted_group");
+            })
+            .id();
+
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
+
+        // perform the merge - the group should not be deleted
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let deleted_group = destination_db.root.find_node_location(deleted_group_uuid);
-        assert!(deleted_group.is_some());
-        let new_entry = destination_db.root.find_node_location(new_entry_uuid);
-        assert!(new_entry.is_some());
+        assert!(destination_db.group(deleted_group_id).is_some());
+        assert!(destination_db.entry(new_entry_id).is_some());
 
-        assert!(!destination_db.deleted_objects.contains(deleted_group_uuid));
-        assert!(!destination_db.deleted_objects.contains(new_entry_uuid));
+        assert!(!destination_db
+            .deleted_objects
+            .contains_key(&deleted_group_id.uuid()));
+        assert!(!destination_db.deleted_objects.contains_key(&new_entry_id.uuid()));
     }
 
+    /// Test that a new entry in a non-root group in source is added to destination when merging.
     #[test]
     fn test_add_new_non_root_entry() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let source_sub_group = &mut source_db.root.groups_mut()[0];
+        let new_entry_id = source_db
+            .group_mut(GROUP1_ID)
+            .unwrap()
+            .add_entry()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "new_entry");
+            })
+            .id();
 
-        let mut new_entry = Entry::new();
-        let new_entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "new_entry");
-        source_sub_group.add_child(new_entry);
-
+        // perform the merge - this should add the new entry
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before + 1);
         assert_eq!(group_count_after, group_count_before);
 
-        let created_entry_location = destination_db.root.find_node_location(new_entry_uuid).unwrap();
-        assert_eq!(created_entry_location.len(), 2);
+        assert!(destination_db.entry(new_entry_id).is_some());
     }
 
+    // Test that a new entry in source under a new group/subgroup is added to destination when
+    // merging.
     #[test]
     fn test_add_new_entry_new_group() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let group_count_before = get_all_groups(&destination_db.root).len();
-        let entry_count_before = get_all_entries(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let mut source_group = Group::new("new_group");
-        let mut source_sub_group = Group::new("new_subgroup");
+        let new_group_id = source_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "new_group".to_string())
+            .id();
 
-        let mut new_entry = Entry::new();
-        let new_entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "new_entry");
-        source_sub_group.add_child(new_entry);
-        source_group.add_child(source_sub_group);
-        source_db.root.add_child(source_group);
+        let new_subgroup_id = source_db
+            .group_mut(new_group_id)
+            .unwrap()
+            .add_group()
+            .edit(|g| g.name = "new_subgroup".to_string())
+            .id();
 
+        let new_entry_id = source_db
+            .group_mut(new_subgroup_id)
+            .unwrap()
+            .add_entry()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "new_entry");
+            })
+            .id();
+
+        // perform the merge - this should add the new entry along with the new group and subgroup
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 3);
 
-        let group_count_after = get_all_groups(&destination_db.root).len();
-        let entry_count_after = get_all_entries(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before + 1);
         assert_eq!(group_count_after, group_count_before + 2);
 
-        let created_entry_location = destination_db.root.find_node_location(new_entry_uuid).unwrap();
-        assert_eq!(created_entry_location.len(), 3);
+        assert!(destination_db.group(new_group_id).is_some());
+        assert!(destination_db.group(new_subgroup_id).is_some());
+        assert!(destination_db.entry(new_entry_id).is_some());
     }
 
+    /// Test that an entry is relocated from one group to another in source and the relocation
+    /// is reflected in destination when merging.
     #[test]
     fn test_entry_relocation_existing_group() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let group_count_before = get_all_groups(&destination_db.root).len();
-        let entry_count_before = get_all_entries(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
         thread::sleep(time::Duration::from_secs(1));
-        let new_location_changed_timestamp = Times::now();
 
+        // before
+        // root (ROOT_GROUP_ID)
+        // ├── entry1 (ENTRY1_ID)
+        // ├── group1 (GROUP1_ID)
+        // │   └── subgroup1 (SUBGROUP1_ID)
+        // │       └── entry2 (ENTRY2_ID)   <-- this entry
+        // └── group2 (GROUP2_ID)
+        //    └── subgroup2 (SUBGROUP2_ID)
+        //
+        // after
+        // root (ROOT_GROUP_ID)
+        // ├── entry1 (ENTRY1_ID)
+        // ├── group1 (GROUP1_ID)
+        // │   └── subgroup1 (SUBGROUP1_ID)
+        // └── group2 (GROUP2_ID)
+        //     ├── entry2 (ENTRY2_ID)   <-- moved here
+        //     └── subgroup2 (SUBGROUP2_ID)
+        //
         source_db
-            .relocate_node(
-                &Uuid::parse_str(ENTRY2_ID).unwrap(),
-                &vec![
-                    Uuid::parse_str(GROUP1_ID).unwrap(),
-                    Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                ],
-                &vec![Uuid::parse_str(GROUP2_ID).unwrap()],
-                new_location_changed_timestamp,
-            )
+            .entry_mut(ENTRY2_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        let location_changed_timestamp = source_db
+            .entry(ENTRY2_ID)
+            .unwrap()
+            .times
+            .location_changed
             .unwrap();
 
+        // perform the merge - this should relocate the entry in destination_db
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let group_count_after = get_all_groups(&destination_db.root).len();
-        let entry_count_after = get_all_entries(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(group_count_after, group_count_before);
         assert_eq!(entry_count_after, entry_count_before);
 
-        let moved_entry_location = destination_db
-            .root
-            .find_node_location(Uuid::parse_str(ENTRY2_ID).unwrap())
-            .unwrap();
-        assert_eq!(moved_entry_location.len(), 2);
-        assert_eq!(&moved_entry_location[0].to_string(), ROOT_GROUP_ID);
-        assert_eq!(&moved_entry_location[1].to_string(), GROUP2_ID);
+        assert!(destination_db.entry(ENTRY2_ID).is_some());
 
-        let moved_entry = get_entry(&destination_db, &["group2", "entry2"]);
-        assert_eq!(
-            *moved_entry.times.get_location_changed().unwrap(),
-            new_location_changed_timestamp
-        );
+        let entry = destination_db.entry(ENTRY2_ID).unwrap();
+        assert_eq!(entry.parent().id(), GROUP2_ID);
+        assert_eq!(entry.times.location_changed, Some(location_changed_timestamp));
     }
 
+    /// Test that an entry is relocated in source and modified in both source and destination
+    /// and the correct content is kept after merging.
     #[test]
     fn test_entry_relocation_and_update() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let group_count_before = get_all_groups(&destination_db.root).len();
-        let entry_count_before = get_all_entries(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let entry2 = source_db
-            .root
-            .find_entry_mut(&[
-                Uuid::parse_str(GROUP1_ID).unwrap(),
-                Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                Uuid::parse_str(ENTRY2_ID).unwrap(),
-            ])
-            .unwrap();
-        entry2.set_field_and_commit("Title", "entry2_modified_in_source");
+        // perform first edit of entry in source
+        source_db.entry_mut(ENTRY2_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "entry2_modified_in_source");
+        });
 
+        // relocate entry in source
         thread::sleep(time::Duration::from_secs(1));
-        let new_location_changed_timestamp = Times::now();
         source_db
-            .relocate_node(
-                &Uuid::parse_str(ENTRY2_ID).unwrap(),
-                &vec![
-                    Uuid::parse_str(GROUP1_ID).unwrap(),
-                    Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                ],
-                &vec![Uuid::parse_str(GROUP2_ID).unwrap()],
-                new_location_changed_timestamp,
-            )
+            .entry_mut(ENTRY2_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        let location_changed_timestamp = source_db
+            .entry(ENTRY2_ID)
+            .unwrap()
+            .times
+            .location_changed
             .unwrap();
 
-        let entry2 = destination_db
-            .root
-            .find_entry_mut(&[
-                Uuid::parse_str(GROUP1_ID).unwrap(),
-                Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                Uuid::parse_str(ENTRY2_ID).unwrap(),
-            ])
-            .unwrap();
-        entry2.set_field_and_commit("Title", "entry2_modified_in_destination");
-        let entry_modified_timestamp = *entry2.times.get_last_modification().unwrap();
+        // perform second edit of entry in destination
+        destination_db.entry_mut(ENTRY2_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "entry2_modified_in_destination");
+        });
 
+        let entry_modified_timestamp = destination_db
+            .entry(ENTRY2_ID)
+            .unwrap()
+            .times
+            .last_modification
+            .unwrap();
+
+        // perform the merge - this should relocate the entry in destination_db and keep the
+        // content from destination_db since it was modified later
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 2);
 
-        let group_count_after = get_all_groups(&destination_db.root).len();
-        let entry_count_after = get_all_entries(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(group_count_after, group_count_before);
         assert_eq!(entry_count_after, entry_count_before);
 
-        let moved_entry_location = destination_db
-            .root
-            .find_node_location(Uuid::parse_str(ENTRY2_ID).unwrap())
-            .unwrap();
-        assert_eq!(moved_entry_location.len(), 2);
-        assert_eq!(&moved_entry_location[0].to_string(), ROOT_GROUP_ID);
-        assert_eq!(&moved_entry_location[1].to_string(), GROUP2_ID);
+        // check that move occurred
+        assert!(destination_db.entry(ENTRY2_ID).is_some());
+        let entry = destination_db.entry(ENTRY2_ID).unwrap();
+        assert_eq!(entry.parent().id(), GROUP2_ID);
+        assert_eq!(entry.times.location_changed, Some(location_changed_timestamp));
 
-        let moved_entry = get_entry(&destination_db, &["group2", "entry2_modified_in_destination"]);
-        assert_eq!(
-            *moved_entry.times.get_last_modification().unwrap(),
-            entry_modified_timestamp,
-        );
-        assert_eq!(
-            *moved_entry.times.get_location_changed().unwrap(),
-            new_location_changed_timestamp
-        );
+        // check that content from destination is kept
+        assert_eq!(entry.get_str("Title"), Some("entry2_modified_in_destination"));
+        assert_eq!(entry.times.last_modification, Some(entry_modified_timestamp));
     }
 
+    /// Test that if an entry is moved in source and modified in destination, the entry ends up
+    /// in the new location and with the modifications kept.
     #[test]
     fn test_entry_relocation_in_destination_and_update() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let group_count_before = get_all_groups(&destination_db.root).len();
-        let entry_count_before = get_all_entries(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let entry2 = source_db
-            .root
-            .find_entry_mut(&[
-                Uuid::parse_str(GROUP1_ID).unwrap(),
-                Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                Uuid::parse_str(ENTRY2_ID).unwrap(),
-            ])
+        // edit entry in source
+        source_db.entry_mut(ENTRY2_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "entry2_modified_in_source");
+        });
+
+        let entry_modified_timestamp = source_db
+            .entry(ENTRY2_ID)
+            .unwrap()
+            .times
+            .last_modification
             .unwrap();
-        entry2.set_field_and_commit("Title", "entry2_modified_in_source");
-        let entry_modified_timestamp = *entry2.times.get_last_modification().unwrap();
 
+        // relocate entry in destination
         thread::sleep(time::Duration::from_secs(1));
-        let new_location_changed_timestamp = Times::now();
         destination_db
-            .relocate_node(
-                &Uuid::parse_str(ENTRY2_ID).unwrap(),
-                &vec![
-                    Uuid::parse_str(GROUP1_ID).unwrap(),
-                    Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                ],
-                &vec![Uuid::parse_str(GROUP2_ID).unwrap()],
-                new_location_changed_timestamp,
-            )
+            .entry_mut(ENTRY2_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        let location_changed_timestamp = destination_db
+            .entry(ENTRY2_ID)
+            .unwrap()
+            .times
+            .location_changed
             .unwrap();
 
+        // perform the merge - this should keep the location from destination and the content from
+        // source
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let group_count_after = get_all_groups(&destination_db.root).len();
-        let entry_count_after = get_all_entries(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(group_count_after, group_count_before);
         assert_eq!(entry_count_after, entry_count_before);
 
-        let moved_entry_location = destination_db
-            .root
-            .find_node_location(Uuid::parse_str(ENTRY2_ID).unwrap())
-            .unwrap();
-        assert_eq!(moved_entry_location.len(), 2);
-        assert_eq!(&moved_entry_location[0].to_string(), ROOT_GROUP_ID);
-        assert_eq!(&moved_entry_location[1].to_string(), GROUP2_ID);
+        // check that move occurred
+        assert!(destination_db.entry(ENTRY2_ID).is_some());
 
-        let moved_entry = get_entry(&destination_db, &["group2", "entry2_modified_in_source"]);
-        assert_eq!(
-            *moved_entry.times.get_last_modification().unwrap(),
-            entry_modified_timestamp,
-        );
-        assert_eq!(
-            *moved_entry.times.get_location_changed().unwrap(),
-            new_location_changed_timestamp
-        );
+        let entry = destination_db.entry(ENTRY2_ID).unwrap();
+        assert_eq!(entry.parent().id(), GROUP2_ID);
+        assert_eq!(entry.times.location_changed, Some(location_changed_timestamp));
+
+        // check that content from source is kept
+        assert_eq!(entry.get_str("Title"), Some("entry2_modified_in_source"));
+        assert_eq!(entry.times.last_modification, Some(entry_modified_timestamp));
     }
 
+    /// Test that an entry can be relocated into a newly created group
     #[test]
     fn test_entry_relocation_new_group() {
         let mut destination_db = create_test_database();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let new_entry_id = destination_db
+            .root_mut()
+            .add_entry()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "new_entry");
+            })
+            .id();
+
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
         let mut source_db = destination_db.clone();
-        let mut new_group = Group::new("new_group");
-        let new_group_uuid = new_group.uuid;
 
-        let mut new_entry = Entry::new();
-        let entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "entry1");
+        let new_group_id = source_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "new_group".to_string())
+            .id();
 
+        // modify the entry in source
         thread::sleep(time::Duration::from_secs(1));
-        new_entry.times.set_location_changed(Times::now());
-        // FIXME we should not have to update the history here. We should
-        // have a better compare function in the merge function instead.
-        new_entry.update_history();
-        new_group.add_child(new_entry.clone());
-        source_db.root.add_child(new_group);
+        source_db.entry_mut(new_entry_id).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "new_entry_modified_in_source");
+        });
 
+        // relocate the entry to the new group in source
+        thread::sleep(time::Duration::from_secs(1));
+        source_db
+            .entry_mut(new_entry_id)
+            .unwrap()
+            .track_changes()
+            .move_to(new_group_id)
+            .expect("move successful");
+
+        // perform the merge - this should create the new group and update and relocate the entry there
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 2);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
-        assert_eq!(entry_count_after, entry_count_before + 1);
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
+        assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before + 1);
 
-        let created_entry_location = destination_db.root.find_node_location(entry_uuid).unwrap();
-        assert_eq!(created_entry_location.len(), 2);
-        assert_eq!(&created_entry_location[0].to_string(), ROOT_GROUP_ID);
-        assert_eq!(created_entry_location[1], new_group_uuid);
+        assert!(destination_db.entry(new_entry_id).is_some());
+        let entry = destination_db.entry(new_entry_id).unwrap();
+        assert_eq!(entry.parent().id(), new_group_id);
+        assert_eq!(entry.get_str("Title"), Some("new_entry_modified_in_source"));
     }
 
+    /// Test that a group relocation in source is reflected in destination when merging.
     #[test]
     fn test_group_relocation() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let source_group_1 = get_group_mut(&mut source_db, &["group1"]);
-        let mut source_sub_group_1 = match source_group_1
-            .remove_node(&Uuid::parse_str(SUBGROUP1_ID).unwrap())
-            .unwrap()
-        {
-            Node::Group(g) => g,
-            _ => panic!("This should not happen."),
-        };
         thread::sleep(time::Duration::from_secs(1));
-        let new_location_changed_timestamp = Times::now();
-        source_sub_group_1
+
+        // before
+        // root (ROOT_GROUP_ID)
+        // ├── entry1 (ENTRY1_ID)
+        // ├── group1 (GROUP1_ID)
+        // │   └── subgroup1 (SUBGROUP1_ID) <-- this group
+        // │       └── entry2 (ENTRY2_ID)
+        // └── group2 (GROUP2_ID)
+        //    └── subgroup2 (SUBGROUP2_ID)
+        //
+        // after
+        // root (ROOT_GROUP_ID)
+        // ├── entry1 (ENTRY1_ID)
+        // ├── group1 (GROUP1_ID)
+        // └── group2 (GROUP2_ID)
+        //    └── subgroup2 (SUBGROUP2_ID)
+        //        └── subgroup1 (SUBGROUP1_ID) <-- moved here
+        //            └── entry2 (ENTRY2_ID)
+
+        source_db
+            .group_mut(SUBGROUP1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        let location_changed_timestamp = source_db
+            .group(SUBGROUP1_ID)
+            .unwrap()
             .times
-            .set_location_changed(new_location_changed_timestamp);
+            .location_changed
+            .unwrap();
 
-        let source_group_2 = get_group_mut(&mut source_db, &["group2"]);
-        source_group_2.add_child(source_sub_group_1);
-
+        // perform the merge - this should relocate the group in destination_db
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let created_entry_location = destination_db
-            .root
-            .find_node_location(Uuid::parse_str(ENTRY2_ID).unwrap())
-            .unwrap();
-        assert_eq!(created_entry_location.len(), 3);
-        assert_eq!(created_entry_location[0], destination_db.root.uuid);
-        assert_eq!(&created_entry_location[1].to_string(), GROUP2_ID);
-        assert_eq!(&created_entry_location[2].to_string(), SUBGROUP1_ID);
+        assert!(destination_db.group(SUBGROUP1_ID).is_some());
+        assert!(destination_db.entry(ENTRY2_ID).is_some());
 
-        let relocated_group = get_group(&destination_db, &["group2", "subgroup1"]);
-        assert_eq!(
-            *relocated_group.times.get_location_changed().unwrap(),
-            new_location_changed_timestamp
-        );
+        let group = destination_db.group(SUBGROUP1_ID).unwrap();
+        assert_eq!(group.parent().unwrap().id(), GROUP2_ID);
+        assert_eq!(group.times.location_changed, Some(location_changed_timestamp));
     }
 
+    /// Test that an entry updated in destination is not touched when merging.
     #[test]
     fn test_update_in_destination_no_conflict() {
         let mut destination_db = create_test_database();
         let source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let entry = &mut destination_db.root.entries_mut()[0];
-        entry.set_field_and_commit("Title", "entry1_updated");
+        // update entry in destination
+        destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "entry1_updated");
+        });
 
+        // perform the merge - this should not change anything since source is older
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry = &mut destination_db.root.entries()[0];
-        let merged_history = entry.history.clone().unwrap();
+        // check that history is preserved
+        let merged_history = destination_db.entry(ENTRY1_ID).unwrap().history.clone().unwrap();
         assert!(merged_history.is_ordered());
         assert_eq!(merged_history.entries.len(), 2);
-        let merged_entry = &merged_history.entries[1];
-        assert_eq!(merged_entry.get_title(), Some("entry1"));
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        // check that we can find the old version of the entry
+        let merged_entry = &merged_history.entries[1];
+        assert_eq!(merged_entry.get_str("Title"), Some("entry1"));
+
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let entry = destination_db.root.entries()[0];
-        assert_eq!(entry.get_title(), Some("entry1_updated"));
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get_str("Title"),
+            Some("entry1_updated")
+        );
     }
 
+    /// Test that an entry updated in source is merged into destination when merging.
     #[test]
     fn test_update_in_source_no_conflict() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let entry = &mut source_db.root.entries_mut()[0];
-        entry.set_field_and_commit("Title", "entry1_updated");
+        // update entry in source
+        source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "entry1_updated");
+        });
 
+        // perform the merge - this should update the entry in destination_db
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry = &mut destination_db.root.entries()[0];
-        let merged_history = entry.history.clone().unwrap();
+        // check that history is preserved
+        let merged_history = destination_db.entry(ENTRY1_ID).unwrap().history.clone().unwrap();
         assert!(merged_history.is_ordered());
         assert_eq!(merged_history.entries.len(), 2);
-        let merged_entry = &merged_history.entries[1];
-        assert_eq!(merged_entry.get_title(), Some("entry1"));
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        // check that we can find the old version of the entry
+        let merged_entry = &merged_history.entries[1];
+        assert_eq!(merged_entry.get_str("Title"), Some("entry1"));
+
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let entry = destination_db.root.entries()[0];
-        assert_eq!(entry.get_title(), Some("entry1_updated"));
+        // check that the entry was updated
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get_str("Title"),
+            Some("entry1_updated")
+        );
     }
 
+    /// Test that an entry updated in both source and destination is merged correctly.
     #[test]
     fn test_update_with_conflicts() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let entry = &mut destination_db.root.entries_mut()[0];
-        entry.set_field_and_commit("Title", "entry1_updated_from_destination");
+        // update entry in destination
+        destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "entry1_updated_from_destination");
+        });
 
-        let entry = &mut source_db.root.entries_mut()[0];
-        entry.set_field_and_commit("Title", "entry1_updated_from_source");
+        thread::sleep(time::Duration::from_secs(1));
 
+        // update entry in source
+        source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected("Title", "entry1_updated_from_source");
+        });
+
+        // perform the merge - this should merge the changes from both databases, keeping the newer
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let entry = destination_db.root.entries()[0];
-        assert_eq!(entry.get_title(), Some("entry1_updated_from_source"));
+        // check that the entry was updated with the source change (newer)
+        let entry = destination_db.entry(ENTRY1_ID).unwrap();
+        assert_eq!(entry.get_str("Title"), Some("entry1_updated_from_source"));
 
+        // check that history is preserved and contains both older versions
         let merged_history = entry.history.clone().unwrap();
         assert!(merged_history.is_ordered());
         assert_eq!(merged_history.entries.len(), 3);
-        let merged_entry = &merged_history.entries[1];
-        assert_eq!(merged_entry.get_title(), Some("entry1_updated_from_destination"));
+        assert_eq!(
+            merged_history.entries[1].get_str("Title"),
+            Some("entry1_updated_from_destination")
+        );
+        assert_eq!(merged_history.entries[1].get_str("Title"), Some("entry1"));
 
         // Merging again should not result in any additional change.
         let merge_result = destination_db.merge(&destination_db.clone()).unwrap();
@@ -1531,159 +1692,209 @@ mod merge_tests {
         assert_eq!(merge_result.events.len(), 0);
     }
 
+    /// Test that a group updated in source is merged into destination when merging.
     #[test]
     fn test_group_update_in_source() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let group = get_group_mut(&mut source_db, &["group1", "subgroup1"]);
-        group.name = "subgroup1_updated_name".to_string();
-        // Making sure to wait 1 sec before update the timestamp, to make
-        // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
-        let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
+        source_db.group_mut(SUBGROUP1_ID).unwrap().edit_tracking(|g| {
+            g.name = "subgroup1_updated_name".to_string();
+        });
 
+        let modification_timestamp = source_db
+            .group(SUBGROUP1_ID)
+            .unwrap()
+            .times
+            .last_modification
+            .unwrap();
+
+        // perform the merge - this should update the group in destination
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&destination_db, &["group1", "subgroup1_updated_name"]);
-        assert_eq!(modified_group.name, "subgroup1_updated_name");
+        assert!(destination_db.group(SUBGROUP1_ID).is_some());
+
         assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
+            destination_db.group(SUBGROUP1_ID).unwrap().name,
+            "subgroup1_updated_name"
+        );
+        assert_eq!(
+            destination_db
+                .group(SUBGROUP1_ID)
+                .unwrap()
+                .times
+                .last_modification,
+            Some(modification_timestamp)
         );
     }
 
+    /// Test that a group updated in destination is not changed when merging.
     #[test]
     fn test_group_update_in_destination() {
         let mut destination_db = create_test_database();
         let source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let group = get_group_mut(&mut destination_db, &["group1", "subgroup1"]);
-        group.name = "subgroup1_updated_name".to_string();
-        // Making sure to wait 1 sec before update the timestamp, to make
-        // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
-        let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
+        destination_db
+            .group_mut(SUBGROUP1_ID)
+            .unwrap()
+            .edit_tracking(|g| {
+                g.name = "subgroup1_updated_name".to_string();
+            });
 
+        let last_modification = destination_db
+            .group(SUBGROUP1_ID)
+            .unwrap()
+            .times
+            .last_modification
+            .unwrap();
+
+        // perform the merge - this should not change anything since source is older
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&destination_db, &["group1", "subgroup1_updated_name"]);
-        assert_eq!(modified_group.name, "subgroup1_updated_name");
+        assert!(destination_db.group(SUBGROUP1_ID).is_some());
         assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
+            destination_db.group(SUBGROUP1_ID).unwrap().name,
+            "subgroup1_updated_name"
+        );
+
+        assert_eq!(
+            destination_db
+                .group(SUBGROUP1_ID)
+                .unwrap()
+                .times
+                .last_modification,
+            Some(last_modification)
         );
     }
 
+    /// Test that a group updated in source and relocated is merged correctly.
     #[test]
     fn test_group_update_and_relocation() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let group = get_group_mut(&mut source_db, &["group1", "subgroup1"]);
-        group.name = "subgroup1_updated_name".to_string();
-        // Making sure to wait 1 sec before update the timestamp, to make
-        // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
-        let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
 
         source_db
-            .relocate_node(
-                &Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                &vec![Uuid::parse_str(GROUP1_ID).unwrap()],
-                &vec![Uuid::parse_str(GROUP2_ID).unwrap()],
-                new_modification_timestamp,
-            )
+            .group_mut(SUBGROUP1_ID)
+            .unwrap()
+            .edit_tracking(|g| {
+                g.name = "subgroup1_updated_name".to_string();
+            })
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        let modification_timestamp = source_db
+            .group(SUBGROUP1_ID)
+            .unwrap()
+            .times
+            .last_modification
             .unwrap();
 
+        let location_changed_timestamp = source_db
+            .group(SUBGROUP1_ID)
+            .unwrap()
+            .times
+            .location_changed
+            .unwrap();
+
+        // perform the merge - this should update and relocate the group in destination
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 2);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&destination_db, &["group2", "subgroup1_updated_name"]);
-        assert_eq!(modified_group.name, "subgroup1_updated_name");
-        assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
-        );
+        assert!(destination_db.group(SUBGROUP1_ID).is_some());
+        let group = destination_db.group(SUBGROUP1_ID).unwrap();
+        assert_eq!(group.name, "subgroup1_updated_name");
+        assert_eq!(group.parent().unwrap().id(), GROUP2_ID);
+        assert_eq!(group.times.last_modification, Some(modification_timestamp));
+        assert_eq!(group.times.location_changed, Some(location_changed_timestamp));
     }
 
+    /// Test that a group updated in source and relocated in destionation is merged correctly.
     #[test]
     fn test_group_update_in_destination_and_relocation_in_source() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let group = get_group_mut(&mut source_db, &["group1", "subgroup1"]);
-        group.name = "subgroup1_updated_name".to_string();
-        // Making sure to wait 1 sec before update the timestamp, to make
-        // sure that we get a different modification timestamp.
+        // rename group in source
         thread::sleep(time::Duration::from_secs(1));
-        let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
+        source_db.group_mut(SUBGROUP1_ID).unwrap().edit_tracking(|g| {
+            g.name = "subgroup1_updated_name".to_string();
+        });
 
-        thread::sleep(time::Duration::from_secs(1));
-        let new_location_changed_timestamp = Times::now();
-        destination_db
-            .relocate_node(
-                &Uuid::parse_str(SUBGROUP1_ID).unwrap(),
-                &vec![Uuid::parse_str(GROUP1_ID).unwrap()],
-                &vec![Uuid::parse_str(GROUP2_ID).unwrap()],
-                new_location_changed_timestamp,
-            )
+        let modification_timestamp = source_db
+            .group(SUBGROUP1_ID)
+            .unwrap()
+            .times
+            .last_modification
             .unwrap();
 
+        // relocate group in destination
+        thread::sleep(time::Duration::from_secs(1));
+        destination_db
+            .group_mut(SUBGROUP1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        let location_changed_timestamp = destination_db
+            .group(SUBGROUP1_ID)
+            .unwrap()
+            .times
+            .location_changed
+            .unwrap();
+
+        // perform the merge - this should update the group name from source and keep the new
+        // location from destination
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let modified_group = get_group(&destination_db, &["group2", "subgroup1_updated_name"]);
-        assert_eq!(modified_group.name, "subgroup1_updated_name");
-        assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
-        );
-        assert_eq!(
-            modified_group.times.get_location_changed(),
-            Some(new_location_changed_timestamp).as_ref(),
-        );
+        assert!(destination_db.group(SUBGROUP1_ID).is_some());
+        let group = destination_db.group(SUBGROUP1_ID).unwrap();
+        assert_eq!(group.name, "subgroup1_updated_name");
+        assert_eq!(group.parent().unwrap().id(), GROUP2_ID);
+        assert_eq!(group.times.last_modification, Some(modification_timestamp));
+        assert_eq!(group.times.location_changed, Some(location_changed_timestamp));
     }
 }
