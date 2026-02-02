@@ -10,10 +10,11 @@ mod meta;
 mod times;
 mod value;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub use attachment::{Attachment, AttachmentId, AttachmentMut, AttachmentRef};
 pub use autotype::{AutoType, AutoTypeAssociation};
+use chrono::NaiveDateTime;
 pub use color::Color;
 pub use custom_data::{CustomDataItem, CustomDataValue};
 pub use entry::{DestinationGroupNotFoundError, Entry, EntryId, EntryMut, EntryRef};
@@ -22,6 +23,7 @@ pub use history::History;
 pub use icon::{Icon, IconId, IconMut, IconRef};
 pub use meta::{MemoryProtection, Meta};
 pub use times::Times;
+use uuid::Uuid;
 pub use value::Value;
 
 use crate::config::DatabaseConfig;
@@ -48,8 +50,11 @@ pub struct Database {
 
     pub(crate) attachments: HashMap<AttachmentId, Attachment>,
 
-    pub(crate) deleted_entries: HashSet<EntryId>,
-    pub(crate) deleted_groups: HashSet<GroupId>,
+    /// Map of deleted object UUIDs to their deletion time (or None if unknown).
+    ///
+    /// These cannot be `EntryId`s or `GroupId`s because the internal XML representation uses raw
+    /// UUIDs without specifying the type of object.
+    pub(crate) deleted_objects: HashMap<Uuid, Option<NaiveDateTime>>,
 }
 
 impl Database {
@@ -71,8 +76,7 @@ impl Database {
             groups: groups,
             custom_icons: HashMap::new(),
             attachments: HashMap::new(),
-            deleted_entries: HashSet::new(),
-            deleted_groups: HashSet::new(),
+            deleted_objects: HashMap::new(),
         }
     }
 
@@ -90,8 +94,7 @@ impl Database {
             groups: groups,
             custom_icons: HashMap::new(),
             attachments: HashMap::new(),
-            deleted_entries: HashSet::new(),
-            deleted_groups: HashSet::new(),
+            deleted_objects: HashMap::new(),
         }
     }
 

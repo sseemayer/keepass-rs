@@ -102,6 +102,18 @@ impl KeePassFile {
             })
             .unwrap_or_default();
 
+        db.deleted_objects = self
+            .root
+            .deleted_objects
+            .map(|del_objs| {
+                del_objs
+                    .objects
+                    .into_iter()
+                    .map(|obj| (obj.uuid.0, obj.deletion_time.map(|ts| ts.time)))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         self.root
             .group
             .xml_to_db_handle(db.root_mut(), &attachments, inner_decryptor)?;
@@ -120,21 +132,17 @@ impl KeePassFile {
             meta: db.meta.clone().into(),
             root: Root {
                 group: Group::db_to_xml(db.root(), inner_cipher, &attachment_id_numbering),
-                deleted_objects: if db.deleted_entries.is_empty() && db.deleted_groups.is_empty() {
+                deleted_objects: if db.deleted_objects.is_empty() {
                     None
                 } else {
                     Some(DeletedObjects {
                         objects: db
-                            .deleted_groups
+                            .deleted_objects
                             .iter()
-                            .map(|gid| DeletedObject {
-                                uuid: UUID(gid.uuid()),
-                                deletion_time: None,
+                            .map(|(uuid, deletion_time)| DeletedObject {
+                                uuid: UUID(*uuid),
+                                deletion_time: deletion_time.map(|dt| Timestamp::new_iso8601(dt)),
                             })
-                            .chain(db.deleted_entries.iter().map(|eid| DeletedObject {
-                                uuid: UUID(eid.uuid()),
-                                deletion_time: None,
-                            }))
                             .collect(),
                     })
                 },
