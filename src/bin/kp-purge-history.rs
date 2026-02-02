@@ -4,7 +4,7 @@ use std::fs::File;
 use anyhow::Result;
 use clap::Parser;
 
-use keepass::{Database, DatabaseKey};
+use keepass::{db::EntryId, Database, DatabaseKey};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -41,7 +41,13 @@ pub fn main() -> Result<()> {
 
     let mut db = Database::open(&mut source, key.clone())?;
 
-    purge_history(&mut db.root)?;
+    let entry_ids: Vec<EntryId> = db.iter_all_entries().map(|e| e.id()).collect();
+
+    for entry_id in entry_ids {
+        if let Some(mut entry) = db.entry_mut(entry_id) {
+            purge_history_for_entry(&mut entry)?;
+        }
+    }
 
     db.save(&mut File::options().write(true).open(&args.in_kdbx)?, key)?;
 
@@ -52,19 +58,9 @@ fn purge_history_for_entry(entry: &mut keepass::db::Entry) -> Result<()> {
     if let Some(history) = &entry.history {
         let history_size = history.get_entries().len();
         if history_size != 0 {
-            println!("Removing {} history entries from {}", history_size, entry.uuid);
+            println!("Removing {} history entries from {}", history_size, entry.id());
         }
     }
     entry.history = None;
-    Ok(())
-}
-
-fn purge_history(group: &mut keepass::db::Group) -> Result<()> {
-    for node in &mut group.children {
-        match node {
-            keepass::db::Node::Entry(ref mut e) => purge_history_for_entry(e)?,
-            keepass::db::Node::Group(ref mut g) => purge_history(g)?,
-        };
-    }
     Ok(())
 }
