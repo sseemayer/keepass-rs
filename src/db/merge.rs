@@ -554,6 +554,7 @@ mod merge_tests {
         db
     }
 
+    /// Test that merging a database with itself results in no changes.
     #[test]
     fn test_idempotence() {
         let mut destination_db = create_test_database();
@@ -595,6 +596,7 @@ mod merge_tests {
         assert_eq!(destination_db_just_after_merge, destination_db);
     }
 
+    /// Test that a new entry in source is added to destination when merging.
     #[test]
     fn test_add_new_entry() {
         let mut destination_db = create_test_database();
@@ -661,7 +663,11 @@ mod merge_tests {
             })
             .id();
 
-        destination_db.deleted_entries.insert(deleted_entry_id);
+        // mark the entry as deleted in destination_db
+        thread::sleep(time::Duration::from_secs(1));
+        destination_db
+            .deleted_objects
+            .insert(deleted_entry_id.uuid(), Some(Times::now()));
 
         // merge source_db into destination_db -- the entry should not be added
         let merge_result = destination_db.merge(&source_db).unwrap();
@@ -676,249 +682,287 @@ mod merge_tests {
         assert!(destination_db.entry(deleted_entry_id).is_none());
     }
 
+    /// Test that an entry that is updated in source under a group that is deleted in destination
+    /// will be deleted and not re-added.
     #[test]
     fn test_updated_entry_under_deleted_group() {
         let mut destination_db = create_test_database();
+
+        let deleted_group_id = destination_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "deleted_group".to_string())
+            .id();
+
+        let modified_entry_id = destination_db
+            .root_mut()
+            .add_entry()
+            .edit_tracking(|e| e.set_unprotected("Title", "original_title"))
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        let mut modified_entry = Entry::new();
-        modified_entry.set_field_and_commit("Title", "original_title");
-        destination_db.root.add_child(modified_entry.clone());
-
-        let mut deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid;
-        let modified_entry_uuid = modified_entry.uuid;
-        modified_entry.set_field_and_commit("Title", "modified_title");
-        deleted_group.add_child(modified_entry);
-        source_db.root.add_child(deleted_group);
-
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
-
-        destination_db
-            .deleted_objects
-            .objects
-            .push(crate::db::DeletedObject {
-                uuid: deleted_group_uuid,
-                deletion_time: Times::now(),
+        // perform the update of the entry in source_db
+        source_db
+            .entry_mut(modified_entry_id)
+            .unwrap()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "modified_title");
             });
 
+        // delete the group in destination_db
+        destination_db.group_mut(deleted_group_id).unwrap().remove();
+
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
+
+        // perform the merge - the entry should not be re-added since its parent group was deleted
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let deleted_group = destination_db.root.find_node_location(deleted_group_uuid);
-        assert!(deleted_group.is_none());
-
-        let modified_entry_location = destination_db.root.find_node_location(modified_entry_uuid);
-        assert!(modified_entry_location.is_some());
-
-        let modified_entry = destination_db.root.find_entry(&[modified_entry_uuid]).unwrap();
-        assert_eq!(modified_entry.get_title(), Some("modified_title"));
+        assert!(destination_db.group(deleted_group_id).is_none());
+        assert!(destination_db.entry(modified_entry_id).is_none());
     }
 
+    /// Test that a group that is marked as deleted in the destination database is not re-added
+    /// when merging from source
     #[test]
     fn test_deleted_group_in_destination() {
         let mut destination_db = create_test_database();
         let mut source_db = destination_db.clone();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid;
-        source_db.root.add_child(deleted_group);
+        // add a new group in source_db
+        let deleted_group_id = source_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "deleted_group".to_string())
+            .id();
 
+        thread::sleep(time::Duration::from_secs(1));
+
+        // mark the group as deleted in destination_db
         destination_db
             .deleted_objects
-            .objects
-            .push(crate::db::DeletedObject {
-                uuid: deleted_group_uuid,
-                deletion_time: Times::now(),
-            });
+            .insert(deleted_group_id.uuid(), Some(Times::now()));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let deleted_group = destination_db.root.find_node_location(deleted_group_uuid);
-        assert!(deleted_group.is_none());
+        assert!(destination_db.group(deleted_group_id).is_none());
     }
 
+    /// Test that an entry that is marked as deleted in the source database is deleted from destination
     #[test]
     fn test_deleted_entry_in_source() {
         let mut destination_db = create_test_database();
+
+        let deleted_entry_id = destination_db
+            .root_mut()
+            .add_entry()
+            .edit_tracking(|e| e.set_unprotected("Title", "deleted_entry"))
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        let mut deleted_entry = Entry::new();
-        let deleted_entry_uuid = deleted_entry.uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
-        destination_db.root.add_child(deleted_entry);
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
-
+        // mark the entry as deleted in source_db
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .entry_mut(deleted_entry_id)
+            .unwrap()
+            .track_changes()
+            .remove();
 
+        // perform the merge - the entry should be deleted
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        // verify that the entry was deleted
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before - 1);
         assert_eq!(group_count_after, group_count_before);
 
-        let new_entry = destination_db.root.find_node_location(deleted_entry_uuid);
-        assert!(new_entry.is_none());
-
-        assert!(destination_db.deleted_objects.contains(deleted_entry_uuid));
+        assert!(destination_db.entry(deleted_entry_id).is_none());
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_entry_id.uuid()));
     }
 
+    /// Test that a group that is marked as deleted in the source database is deleted from destination
     #[test]
     fn test_deleted_group_in_source() {
         let mut destination_db = create_test_database();
+
+        let deleted_group_id = destination_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "deleted_group".to_string())
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        let deleted_group = Group::new("deleted_group");
-        let deleted_group_uuid = deleted_group.uuid;
-        destination_db.root.add_child(deleted_group);
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
-
+        // mark the entry as deleted in source_db
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .track_changes()
+            .remove();
 
+        // perform the merge - the entry should be deleted
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 1);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        // verify that the entry was deleted
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before - 1);
 
-        let deleted_group = destination_db.root.find_node_location(deleted_group_uuid);
-        assert!(deleted_group.is_none());
-
-        assert!(destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(destination_db.group(deleted_group_id).is_none());
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_group_id.uuid()));
     }
 
+    /// Test that an entry that is marked as deleted in the source database but modified in
+    /// destination is not deleted
     #[test]
     fn test_deleted_entry_in_source_modified_in_destination() {
         let mut destination_db = create_test_database();
+
+        let deleted_entry_id = destination_db
+            .root_mut()
+            .add_entry()
+            .edit_tracking(|e| e.set_unprotected("Title", "deleted_entry"))
+            .id();
+
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
+
         let mut source_db = destination_db.clone();
 
-        let deleted_entry_uuid = Uuid::new_v4();
-
+        // mark the entry as deleted in source_db
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_entry_id.uuid(), Some(Times::now()));
 
+        // modify the entry in destination_db
         thread::sleep(time::Duration::from_secs(1));
-        let mut deleted_entry = Entry::new();
-        deleted_entry.uuid = deleted_entry_uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
-        destination_db.root.add_child(deleted_entry);
-
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
+        destination_db
+            .entry_mut(deleted_entry_id)
+            .unwrap()
+            .edit_tracking(|e| e.set_unprotected("Title", "modified_in_destination"));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
         assert_eq!(group_count_after, group_count_before);
 
-        let new_entry = destination_db.root.find_node_location(deleted_entry_uuid);
-        assert!(new_entry.is_some());
-
-        assert!(!destination_db.deleted_objects.contains(deleted_entry_uuid));
+        assert!(destination_db.entry(deleted_entry_id).is_some());
+        assert!(!destination_db
+            .deleted_objects
+            .contains_key(&deleted_entry_id.uuid()));
     }
 
+    /// Test that a group subtree that is marked as deleted in the source database is deleted from
+    /// destination
     #[test]
     fn test_group_subtree_deletion() {
         let mut destination_db = create_test_database();
+
+        let deleted_group_id = destination_db
+            .root_mut()
+            .add_group()
+            .edit(|g| {
+                g.name = "deleted_group".to_string();
+            })
+            .id();
+
+        let deleted_subgroup_id = destination_db
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .add_group()
+            .edit(|g| {
+                g.name = "deleted_subgroup".to_string();
+            })
+            .id();
+
+        let deleted_entry_id = destination_db
+            .group_mut(deleted_subgroup_id)
+            .unwrap()
+            .add_entry()
+            .edit_tracking(|e| {
+                e.set_unprotected("Title", "deleted_entry");
+            })
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        let deleted_entry_uuid = Uuid::new_v4();
-        let deleted_group_uuid = Uuid::new_v4();
-        let deleted_subgroup_uuid = Uuid::new_v4();
-
         thread::sleep(time::Duration::from_secs(1));
-        let mut deleted_entry = Entry::new();
-        deleted_entry.uuid = deleted_entry_uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
 
-        let mut deleted_subgroup = Group::new("deleted_subgroup");
-        deleted_subgroup.uuid = deleted_subgroup_uuid;
-        deleted_subgroup.add_child(deleted_entry);
+        // mark the entire group subtree as deleted in source_db
+        source_db
+            .root_mut()
+            .group_mut(deleted_group_id)
+            .unwrap()
+            .track_changes()
+            .remove();
 
-        let mut deleted_group = Group::new("deleted_group");
-        deleted_group.uuid = deleted_group_uuid;
-        deleted_group.add_child(deleted_subgroup);
+        let entry_count_before = destination_db.entries.len();
+        let group_count_before = destination_db.groups.len();
 
-        destination_db.root.add_child(deleted_group);
-
-        thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_subgroup_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
-
-        let entry_count_before = get_all_entries(&destination_db.root).len();
-        let group_count_before = get_all_groups(&destination_db.root).len();
-
+        // perform the merge - the entire subtree should be deleted
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 3);
 
-        let entry_count_after = get_all_entries(&destination_db.root).len();
-        let group_count_after = get_all_groups(&destination_db.root).len();
+        let entry_count_after = destination_db.entries.len();
+        let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before - 1);
         assert_eq!(group_count_after, group_count_before - 2);
 
-        let deleted_entry = destination_db.root.find_node_location(deleted_entry_uuid);
-        assert!(deleted_entry.is_none());
-        let deleted_subgroup = destination_db.root.find_node_location(deleted_subgroup_uuid);
-        assert!(deleted_subgroup.is_none());
-        let deleted_group = destination_db.root.find_node_location(deleted_group_uuid);
-        assert!(deleted_group.is_none());
+        assert!(destination_db.entry(deleted_entry_id).is_none());
+        assert!(destination_db.group(deleted_subgroup_id).is_none());
+        assert!(destination_db.group(deleted_group_id).is_none());
 
-        assert!(destination_db.deleted_objects.contains(deleted_entry_uuid));
-        assert!(destination_db.deleted_objects.contains(deleted_subgroup_uuid));
-        assert!(destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_entry_id.uuid()));
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_subgroup_id.uuid()));
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_group_id.uuid()));
     }
 
     #[test]
