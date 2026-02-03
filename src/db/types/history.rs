@@ -21,25 +21,4 @@ impl History {
     pub fn get_entries(&self) -> &Vec<Entry> {
         &self.entries
     }
-
-    // Determines if the entries of the history are
-    // ordered by last modification time.
-    #[cfg(test)]
-    pub(crate) fn is_ordered(&self) -> bool {
-        let mut last_modification_time: Option<&chrono::NaiveDateTime> = None;
-        for entry in &self.entries {
-            if last_modification_time.is_none() {
-                last_modification_time = entry.times.last_modification.as_ref();
-            }
-
-            if let Some(entry_modification_time) = entry.times.last_modification.as_ref() {
-                if last_modification_time.unwrap() < entry_modification_time {
-                    return false;
-                }
-                last_modification_time = Some(entry_modification_time);
-                continue;
-            }
-        }
-        true
-    }
 }

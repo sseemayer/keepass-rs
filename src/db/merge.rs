@@ -669,7 +669,7 @@ mod merge_tests {
     use std::{thread, time};
     use uuid::uuid;
 
-    use crate::db::{EntryId, GroupId, Times};
+    use crate::db::{EntryId, GroupId, History, Times};
     use crate::Database;
 
     const ROOT_GROUP_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000001"));
@@ -717,6 +717,25 @@ mod merge_tests {
             .edit_tracking(|e| e.set_unprotected("Title", "entry1"));
 
         db
+    }
+
+    fn assert_history_ordered(history: &History) {
+        let mut last_modification_time: Option<&chrono::NaiveDateTime> = None;
+        for entry in &history.entries {
+            if last_modification_time.is_none() {
+                last_modification_time = entry.times.last_modification.as_ref();
+            }
+
+            if let Some(entry_modification_time) = entry.times.last_modification.as_ref() {
+                if last_modification_time.unwrap() < entry_modification_time {
+                    panic!(
+                        "History entries are not ordered by last modification time: {:?} came after {:?}",
+                        last_modification_time, entry_modification_time
+                    );
+                }
+                last_modification_time = Some(entry_modification_time);
+            }
+        }
     }
 
     /// Test that merging a database with itself results in no changes.
@@ -1728,7 +1747,7 @@ mod merge_tests {
 
         // check that history is preserved
         let merged_history = destination_db.entry(ENTRY1_ID).unwrap().history.clone().unwrap();
-        assert!(merged_history.is_ordered());
+        assert_history_ordered(&merged_history);
         assert_eq!(merged_history.entries.len(), 2);
 
         // check that we can find the old version of the entry
@@ -1767,7 +1786,7 @@ mod merge_tests {
 
         // check that history is preserved
         let merged_history = destination_db.entry(ENTRY1_ID).unwrap().history.clone().unwrap();
-        assert!(merged_history.is_ordered());
+        assert_history_ordered(&merged_history);
         assert_eq!(merged_history.entries.len(), 2);
 
         // check that we can find the old version of the entry
@@ -1823,7 +1842,7 @@ mod merge_tests {
 
         // check that history is preserved and contains both older versions
         let merged_history = entry.history.clone().unwrap();
-        assert!(merged_history.is_ordered());
+        assert_history_ordered(&merged_history);
         assert_eq!(merged_history.entries.len(), 3);
         assert_eq!(
             merged_history.entries[0].get_str("Title"),
