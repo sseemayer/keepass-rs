@@ -152,6 +152,7 @@ impl KeePassFile {
 }
 
 /// A UUID deserialized from a Base64 string.
+#[allow(clippy::upper_case_acronyms)] // Keep the name consistent with KeePass XML schema
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct UUID(Uuid);
 

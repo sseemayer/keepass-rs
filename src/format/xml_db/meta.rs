@@ -94,35 +94,35 @@ pub struct Meta {
     custom_data: Option<CustomData>,
 }
 
-impl Into<crate::db::Meta> for Meta {
-    fn into(self) -> crate::db::Meta {
+impl From<Meta> for crate::db::Meta {
+    fn from(val: Meta) -> Self {
         // NOTE: custom icons and binary attachments are moved out of the Meta into the main
         // databsase, so they are not converted here.
         crate::db::Meta {
-            generator: self.generator,
-            database_name: self.database_name,
-            database_name_changed: self.database_name_changed.map(|t| t.time),
-            database_description: self.database_description,
-            database_description_changed: self.database_description_changed.map(|t| t.time),
-            default_username: self.default_username,
-            default_username_changed: self.default_username_changed.map(|t| t.time),
-            maintenance_history_days: self.maintenance_history_days,
-            color: self.color,
-            master_key_changed: self.master_key_changed.map(|t| t.time),
-            master_key_change_rec: self.master_key_change_rec,
-            master_key_change_force: self.master_key_change_force,
-            memory_protection: self.memory_protection.map(|mp| mp.into()),
-            recyclebin_enabled: self.recycle_bin_enabled,
-            recyclebin_uuid: self.recycle_bin_uuid.map(|u| u.0),
-            recyclebin_changed: self.recycle_bin_changed.map(|t| t.time),
-            entry_templates_group: self.entry_templates_group.map(|u| u.0),
-            entry_templates_group_changed: self.entry_templates_group_changed.map(|t| t.time),
-            last_selected_group: self.last_selected_group.map(|u| u.0),
-            last_top_visible_group: self.last_top_visible_group.map(|u| u.0),
-            history_max_items: self.history_max_items,
-            history_max_size: self.history_max_size,
-            settings_changed: self.settings_changed.map(|t| t.time),
-            custom_data: self
+            generator: val.generator,
+            database_name: val.database_name,
+            database_name_changed: val.database_name_changed.map(|t| t.time),
+            database_description: val.database_description,
+            database_description_changed: val.database_description_changed.map(|t| t.time),
+            default_username: val.default_username,
+            default_username_changed: val.default_username_changed.map(|t| t.time),
+            maintenance_history_days: val.maintenance_history_days,
+            color: val.color,
+            master_key_changed: val.master_key_changed.map(|t| t.time),
+            master_key_change_rec: val.master_key_change_rec,
+            master_key_change_force: val.master_key_change_force,
+            memory_protection: val.memory_protection.map(|mp| mp.into()),
+            recyclebin_enabled: val.recycle_bin_enabled,
+            recyclebin_uuid: val.recycle_bin_uuid.map(|u| u.0),
+            recyclebin_changed: val.recycle_bin_changed.map(|t| t.time),
+            entry_templates_group: val.entry_templates_group.map(|u| u.0),
+            entry_templates_group_changed: val.entry_templates_group_changed.map(|t| t.time),
+            last_selected_group: val.last_selected_group.map(|u| u.0),
+            last_top_visible_group: val.last_top_visible_group.map(|u| u.0),
+            history_max_items: val.history_max_items,
+            history_max_size: val.history_max_size,
+            settings_changed: val.settings_changed.map(|t| t.time),
+            custom_data: val
                 .custom_data
                 .map(|cd| cd.xml_to_db().into_iter().collect())
                 .unwrap_or_default(),
@@ -198,7 +198,7 @@ pub struct Binary {
 }
 
 impl Binary {
-    pub fn xml_to_db(
+    pub(crate) fn xml_to_db(
         self,
         inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
         _header_attachments: &[crate::db::Attachment],
@@ -291,9 +291,9 @@ pub enum CustomDataValue {
     Binary(Vec<u8>),
 }
 
-impl Into<crate::db::CustomDataValue> for CustomDataValue {
-    fn into(self) -> crate::db::CustomDataValue {
-        match self {
+impl From<CustomDataValue> for crate::db::CustomDataValue {
+    fn from(val: CustomDataValue) -> Self {
+        match val {
             CustomDataValue::String(s) => crate::db::CustomDataValue::String(s),
             CustomDataValue::Binary(b) => crate::db::CustomDataValue::Binary(b),
         }
@@ -358,14 +358,14 @@ struct MemoryProtection {
     protect_notes: Option<bool>,
 }
 
-impl Into<crate::db::MemoryProtection> for MemoryProtection {
-    fn into(self) -> crate::db::MemoryProtection {
+impl From<MemoryProtection> for crate::db::MemoryProtection {
+    fn from(val: MemoryProtection) -> Self {
         crate::db::MemoryProtection {
-            protect_title: self.protect_title.unwrap_or(false),
-            protect_username: self.protect_username.unwrap_or(false),
-            protect_password: self.protect_password.unwrap_or(true),
-            protect_url: self.protect_url.unwrap_or(false),
-            protect_notes: self.protect_notes.unwrap_or(false),
+            protect_title: val.protect_title.unwrap_or(false),
+            protect_username: val.protect_username.unwrap_or(false),
+            protect_password: val.protect_password.unwrap_or(true),
+            protect_url: val.protect_url.unwrap_or(false),
+            protect_notes: val.protect_notes.unwrap_or(false),
         }
     }
 }
@@ -399,11 +399,11 @@ pub struct Icon {
     data: Vec<u8>,
 }
 
-impl Into<crate::db::Icon> for Icon {
-    fn into(self) -> crate::db::Icon {
-        crate::db::Icon {
-            id: crate::db::IconId::from_uuid(self.uuid.0),
-            data: self.data,
+impl From<Icon> for crate::db::Icon {
+    fn from(xml: Icon) -> Self {
+        Self {
+            id: crate::db::IconId::from_uuid(xml.uuid.0),
+            data: xml.data,
         }
     }
 }

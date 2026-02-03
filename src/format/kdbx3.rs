@@ -253,7 +253,7 @@ pub(crate) fn decrypt_kdbx3(
 
     // Check if we decrypted correctly
     if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
-        return Err(KDBX3DecryptError::IncorrectKey.into());
+        return Err(KDBX3DecryptError::IncorrectKey);
     }
 
     let mut buf = Vec::new();

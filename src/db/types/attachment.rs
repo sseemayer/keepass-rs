@@ -31,7 +31,7 @@ impl Attachment {
     }
 
     pub fn data(&self) -> &[u8] {
-        &self.data.expose_secret()
+        self.data.expose_secret()
     }
 
     pub fn set_data(&mut self, data: Vec<u8>) {

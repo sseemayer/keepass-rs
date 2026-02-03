@@ -343,13 +343,13 @@ pub struct AutoType {
     pub associations: Vec<AutoTypeAssociation>,
 }
 
-impl Into<crate::db::AutoType> for AutoType {
-    fn into(self) -> crate::db::AutoType {
+impl From<AutoType> for crate::db::AutoType {
+    fn from(value: AutoType) -> Self {
         crate::db::AutoType {
-            enabled: self.enabled,
-            default_sequence: self.default_sequence,
-            data_transfer_obfuscation: self.data_transfer_obfuscation,
-            associations: self.associations.into_iter().map(|a| a.into()).collect(),
+            enabled: value.enabled,
+            default_sequence: value.default_sequence,
+            data_transfer_obfuscation: value.data_transfer_obfuscation,
+            associations: value.associations.into_iter().map(|a| a.into()).collect(),
         }
     }
 }
@@ -372,11 +372,11 @@ pub struct AutoTypeAssociation {
     pub keystroke_sequence: String,
 }
 
-impl Into<crate::db::AutoTypeAssociation> for AutoTypeAssociation {
-    fn into(self) -> crate::db::AutoTypeAssociation {
+impl From<AutoTypeAssociation> for crate::db::AutoTypeAssociation {
+    fn from(val: AutoTypeAssociation) -> Self {
         crate::db::AutoTypeAssociation {
-            window: self.window,
-            sequence: self.keystroke_sequence,
+            window: val.window,
+            sequence: val.keystroke_sequence,
         }
     }
 }

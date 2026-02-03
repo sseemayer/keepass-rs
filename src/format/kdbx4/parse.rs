@@ -382,7 +382,7 @@ fn parse_inner_header(
             }
 
             _ => {
-                return Err(ParseInnerHeaderError::InvalidInnerHeaderEntry { entry_type }.into());
+                return Err(ParseInnerHeaderError::InvalidInnerHeaderEntry { entry_type });
             }
         }
     }

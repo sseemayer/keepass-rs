@@ -142,7 +142,7 @@ fn parse_groups(
                 let level = parsing_level.ok_or(KdbParseGroupError::MissingKDBGroupLevel(group_id))? as usize;
                 let name = parsing_name.clone().unwrap_or_else(|| String::from(""));
 
-                let parent_id: GroupId = if (level as usize) <= branch.len() {
+                let parent_id: GroupId = if level <= branch.len() {
                     branch.truncate(level);
                     *branch.last().unwrap_or(&db.root().id())
                 } else {

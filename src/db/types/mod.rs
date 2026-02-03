@@ -58,6 +58,7 @@ pub struct Database {
 }
 
 impl Database {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self::new_with_root_id(GroupId::new())
     }
@@ -73,7 +74,7 @@ impl Database {
             meta: Meta::default(),
             root: root_id,
             entries: HashMap::new(),
-            groups: groups,
+            groups,
             custom_icons: HashMap::new(),
             attachments: HashMap::new(),
             deleted_objects: HashMap::new(),
@@ -91,7 +92,7 @@ impl Database {
             meta: Meta::default(),
             root: root_id,
             entries: HashMap::new(),
-            groups: groups,
+            groups,
             custom_icons: HashMap::new(),
             attachments: HashMap::new(),
             deleted_objects: HashMap::new(),

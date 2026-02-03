@@ -190,7 +190,7 @@ impl GroupRef<'_> {
     pub fn entry_by_name(&self, title: &str) -> Option<EntryRef<'_>> {
         self.entries().find(|e| {
             e.get(crate::db::fields::TITLE)
-                .map_or(false, |t| t.as_str().eq_ignore_ascii_case(title))
+                .is_some_and(|t| t.as_str().eq_ignore_ascii_case(title))
         })
     }
 

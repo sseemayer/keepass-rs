@@ -26,16 +26,16 @@ pub struct Times {
     pub location_changed: Option<Timestamp>,
 }
 
-impl Into<crate::db::Times> for Times {
-    fn into(self) -> crate::db::Times {
+impl From<Times> for crate::db::Times {
+    fn from(t: Times) -> Self {
         crate::db::Times {
-            creation: self.creation_time.as_ref().map(|t| t.time),
-            last_modification: self.last_modification_time.as_ref().map(|t| t.time),
-            last_access: self.last_access_time.as_ref().map(|t| t.time),
-            expiry: self.expiry_time.as_ref().map(|t| t.time),
-            location_changed: self.location_changed.as_ref().map(|t| t.time),
-            expires: self.expires,
-            usage_count: self.usage_count,
+            creation: t.creation_time.as_ref().map(|ts| ts.time),
+            last_modification: t.last_modification_time.as_ref().map(|ts| ts.time),
+            last_access: t.last_access_time.as_ref().map(|ts| ts.time),
+            expiry: t.expiry_time.as_ref().map(|ts| ts.time),
+            location_changed: t.location_changed.as_ref().map(|ts| ts.time),
+            expires: t.expires,
+            usage_count: t.usage_count,
         }
     }
 }

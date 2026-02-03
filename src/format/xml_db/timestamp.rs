@@ -36,9 +36,9 @@ impl Timestamp {
     }
 }
 
-impl Into<NaiveDateTime> for Timestamp {
-    fn into(self) -> NaiveDateTime {
-        self.time
+impl From<Timestamp> for NaiveDateTime {
+    fn from(t: Timestamp) -> Self {
+        t.time
     }
 }
 
