@@ -34,6 +34,21 @@ impl Times {
 
 impl Times {
     /// Returns the current time since the last leap second
+    #[cfg(target_arch = "wasm32")]
+    pub fn now() -> NaiveDateTime {
+        // Use JS Date.now() to get the current time in milliseconds,
+        // then convert it to seconds and nanoseconds
+        let millis = js_sys::Date::now();
+        let secs = (millis / 1000.0) as i64;
+        let nanosecs = ((millis % 1000.0) * 1_000_000.0) as u32;
+
+        chrono::DateTime::from_timestamp(secs, nanosecs)
+            .unwrap()
+            .naive_utc()
+    }
+
+    /// Returns the current time since the last leap second
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn now() -> NaiveDateTime {
         chrono::Utc::now().naive_utc()
     }
