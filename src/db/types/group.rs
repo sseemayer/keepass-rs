@@ -64,7 +64,7 @@ pub struct Group {
     pub(crate) custom_icon_id: Option<IconId>,
 
     /// Unique identifiers for child groups
-    groups: HashSet<GroupId>,
+    pub(crate) groups: HashSet<GroupId>,
 
     /// Unique identifiers for entries in the group
     pub(crate) entries: HashSet<EntryId>,
@@ -106,7 +106,7 @@ impl Group {
             custom_icon_id: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
-            times: Times::default(),
+            times: Times::create_new(),
             custom_data: HashMap::new(),
             is_expanded: true,
             default_autotype_sequence: None,
@@ -126,7 +126,7 @@ impl Group {
             custom_icon_id: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
-            times: Times::default(),
+            times: Times::create_new(),
             custom_data: HashMap::new(),
             is_expanded: true,
             default_autotype_sequence: None,

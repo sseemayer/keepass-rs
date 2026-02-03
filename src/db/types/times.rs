@@ -18,10 +18,23 @@ pub struct Times {
 }
 
 impl Times {
-    /// Returns the current time, without nanoseconds since the last leap second
+    pub(crate) fn create_new() -> Self {
+        Times {
+            creation: Some(Times::now()),
+            last_modification: Some(Times::now()),
+            last_access: Some(Times::now()),
+            expiry: None,
+            location_changed: None,
+            expires: Some(false),
+            usage_count: Some(0),
+        }
+    }
+}
+
+impl Times {
+    /// Returns the current time since the last leap second
     pub fn now() -> NaiveDateTime {
-        let now = chrono::Utc::now().timestamp();
-        chrono::DateTime::from_timestamp(now, 0).unwrap().naive_utc()
+        chrono::Utc::now().naive_utc()
     }
 
     /// Returns the Unix epoch time: 1970-01-01 00:00:00

@@ -94,7 +94,7 @@ impl Entry {
             attachments: HashSet::new(),
             autotype: None,
             tags: HashSet::new(),
-            times: Times::default(),
+            times: Times::create_new(),
             custom_data: HashMap::new(),
             icon_id: None,
             custom_icon_id: None,
@@ -114,7 +114,7 @@ impl Entry {
             attachments: HashSet::new(),
             autotype: None,
             tags: HashSet::new(),
-            times: Times::default(),
+            times: Times::create_new(),
             custom_data: HashMap::new(),
             icon_id: None,
             custom_icon_id: None,
@@ -418,13 +418,15 @@ impl DerefMut for EntryTrack<'_> {
 
 impl Drop for EntryTrack<'_> {
     fn drop(&mut self) {
-        let parent_id = self.parent;
-        let entry = self.database.entries.get_mut(&self.id).expect("Entry not found");
+        // see if the entry is still there (it might have been removed)
+        if let Some(entry) = self.database.entries.get_mut(&self.id) {
+            let parent_id = entry.parent;
 
-        let historical = std::mem::replace(&mut self.historical, Entry::new(parent_id));
-        if entry.history.is_none() {
-            entry.history = Some(History::default());
+            let historical = std::mem::replace(&mut self.historical, Entry::new(parent_id));
+            if entry.history.is_none() {
+                entry.history = Some(History::default());
+            }
+            entry.history.as_mut().unwrap().entries.push(historical);
         }
-        entry.history.as_mut().unwrap().entries.push(historical);
     }
 }

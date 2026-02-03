@@ -68,8 +68,8 @@ impl Database {
     /// This function will use the UUIDs to detect what entries and groups are the same.
     pub fn merge(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
         let mut log = MergeLog::default();
-        merge_group(self.root_mut(), other.root(), &mut log)?;
         merge_deletions(self, other, &mut log)?;
+        merge_group(&mut self.root_mut(), &other.root(), &mut log)?;
 
         Ok(log)
     }
@@ -116,6 +116,15 @@ fn merge_deletions(dest: &mut Database, source: &Database, log: &mut MergeLog) -
 
         let group_id = GroupId::with_uuid(id);
         if let Some(group) = dest.group_mut(group_id) {
+            if let Some(last_modified) = group.times.last_modification {
+                if let Some(deletion_time) = merged_timestamp {
+                    if last_modified > deletion_time {
+                        // the group was modified after it was deleted - do not delete it
+                        continue;
+                    }
+                }
+            }
+
             group.remove();
             log.events.push(MergeEvent {
                 target: MergeEventTarget::Group(group_id),
@@ -125,6 +134,15 @@ fn merge_deletions(dest: &mut Database, source: &Database, log: &mut MergeLog) -
 
         let entry_id = EntryId::with_uuid(id);
         if let Some(entry) = dest.entry_mut(entry_id) {
+            if let Some(last_modified) = entry.times.last_modification {
+                if let Some(deletion_time) = merged_timestamp {
+                    if last_modified > deletion_time {
+                        // the entry was modified after it was deleted - do not delete it
+                        continue;
+                    }
+                }
+            }
+
             entry.remove();
             log.events.push(MergeEvent {
                 target: MergeEventTarget::Entry(entry_id),
@@ -146,16 +164,37 @@ fn merge_group_entries(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLo
     // Handle entries that exist in both source and destination - this might mean moving them to a
     // new location.
     for &id in dest_entries.intersection(&source_entries) {
-        let dest_entry = dest.entry_mut(id).unwrap();
+        let mut dest_entry = dest.entry_mut(id).unwrap();
         let source_entry = source.entry(id).unwrap();
-        merge_entry(dest_entry, source_entry, log)?;
+        merge_entry(&mut dest_entry, &source_entry, log)?;
     }
 
     // Handle entries that exist only in source.
     for &id in source_entries.difference(&dest_entries) {
-        // was the entry deleted in dest? then do not re-add it
-        if dest.as_ref().database().deleted_objects.contains_key(&id.uuid()) {
-            continue;
+        // was the entry deleted in dest?
+        if let Some(deletion_time) = dest.as_ref().database().deleted_objects.get(&id.uuid()) {
+            // get the last modification time of the entry in source.
+            // if it does not exist, assume that it was never modified and do not re-add it.
+            let Some(source_modification_time) = source
+                .database()
+                .entry(id)
+                .and_then(|e| e.times.last_modification)
+            else {
+                continue;
+            };
+
+            let Some(deletion_time) = deletion_time else {
+                // blank deletion time in dest - do not re-add the entry
+                continue;
+            };
+
+            // if the entry was deleted after its last modification time in source,
+            // do not re-add it
+            if *deletion_time >= source_modification_time {
+                continue;
+            }
+
+            // otherwise, we can re-add the entry
         }
 
         let source_entry = source.entry(id).unwrap();
@@ -171,10 +210,24 @@ fn merge_group_entries(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLo
 
     // Handle entries that exist only in destination.
     for &id in dest_entries.difference(&source_entries) {
-        // was the entry deleted in source? then delete it from dest
-        if let Some(timestamp) = source.database().deleted_objects.get(&id.uuid()) {
+        // was the entry deleted in source?
+        if let Some(deletion_time) = source.database().deleted_objects.get(&id.uuid()) {
+            let dest_modification_time = dest
+                .as_ref()
+                .database()
+                .entry(id)
+                .and_then(|e| e.times.last_modification);
+
+            if let (Some(deletion_time), Some(dest_modification_time)) = (deletion_time, dest_modification_time)
+            {
+                // if the entry was deleted and then later modified in dest, do not delete it
+                if *deletion_time < dest_modification_time {
+                    continue;
+                }
+            }
+
             let db = dest.database_mut();
-            db.deleted_objects.insert(id.uuid(), timestamp.clone());
+            db.deleted_objects.insert(id.uuid(), deletion_time.clone());
             db.entry_mut(id).expect("Entry must exist").remove();
 
             log.events.push(MergeEvent {
@@ -194,9 +247,9 @@ fn merge_group_groups(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog
 
     // Handle groups that exist in both source and destination.
     for &id in dest_groups.intersection(&source_groups) {
-        let dest_group = dest.group_mut(id).unwrap();
+        let mut dest_group = dest.group_mut(id).unwrap();
         let source_group = source.group(id).unwrap();
-        merge_group(dest_group, source_group, log)?;
+        merge_group(&mut dest_group, &source_group, log)?;
     }
 
     // Handle groups that exist only in source.
@@ -207,8 +260,12 @@ fn merge_group_groups(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog
         }
 
         let source_group = source.group(id).unwrap();
-        let mut group = dest.add_group_with_id(id);
-        *group = source_group.deref().clone();
+        let mut dest_group = dest.add_group_with_id(id);
+
+        merge_group_groups(&mut dest_group, &source_group, log)?;
+        merge_group_entries(&mut dest_group, &source_group, log)?;
+
+        *dest_group = source_group.deref().clone();
 
         log.events.push(MergeEvent {
             target: MergeEventTarget::Group(id),
@@ -294,7 +351,9 @@ fn merge_group_itself(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog
     });
 
     if dest_last_modification == source_last_modification {
-        if !have_groups_diverged(&dest, &source) {
+        if have_groups_diverged(&dest, &source) {
+            let dest: &Group = dest.deref();
+            let source: &Group = source.deref();
             // This should never happen.
             //
             // A group was updated without updating the last modification timestamp.
@@ -329,15 +388,15 @@ fn merge_group_itself(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog
 }
 
 /// Merge group data from `source` into `dest`, appending to a log of the merge process.
-fn merge_group(mut dest: GroupMut, source: GroupRef, log: &mut MergeLog) -> Result<(), MergeError> {
-    merge_group_groups(&mut dest, &source, log)?;
-    merge_group_entries(&mut dest, &source, log)?;
-    merge_group_itself(&mut dest, &source, log)?;
+fn merge_group(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog) -> Result<(), MergeError> {
+    merge_group_groups(dest, source, log)?;
+    merge_group_entries(dest, source, log)?;
+    merge_group_itself(dest, source, log)?;
     Ok(())
 }
 
 /// Merge entry data from `source` into `dest`, appending to a log of the merge process.
-fn merge_entry(mut dest: EntryMut, source: EntryRef, log: &mut MergeLog) -> Result<(), MergeError> {
+fn merge_entry<'a>(dest: &mut EntryMut<'a>, source: &EntryRef, log: &mut MergeLog) -> Result<(), MergeError> {
     // check whether the entries are still in the same parent group
     if dest.as_ref().parent().id() != source.parent().id() {
         // can we determine which change is more recent?
@@ -389,7 +448,7 @@ fn merge_entry(mut dest: EntryMut, source: EntryRef, log: &mut MergeLog) -> Resu
     });
 
     if dest_last_modification == source_last_modification {
-        if !have_entries_diverged(&dest, &source) {
+        if have_entries_diverged(&dest, &source) {
             // This should never happen.
             //
             // An entry was updated without updating the last modification timestamp.
@@ -415,7 +474,7 @@ fn merge_entry(mut dest: EntryMut, source: EntryRef, log: &mut MergeLog) -> Resu
 
     if source_last_modification > dest_last_modification {
         // The source entry is more recent than the destination entry. Replace dest with source.
-        *dest = source.deref().clone();
+        **dest = source.deref().clone();
     }
 
     dest.history = merged_history;
@@ -456,7 +515,7 @@ fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result
 
     // perform a merge of both histories, which are sorted by last modification time.
     loop {
-        match (entries_dest.is_empty(), entries_dest.is_empty()) {
+        match (entries_dest.is_empty(), entries_source.is_empty()) {
             (false, false) => {
                 // Both histories have entries left to process.
                 let dest_entry = entries_dest.last().unwrap();
@@ -506,26 +565,32 @@ fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result
 fn have_groups_diverged(a: &Group, b: &Group) -> bool {
     let new_times = Times::default();
 
-    let mut a_without_times = a.clone();
-    a_without_times.times = new_times.clone();
+    let mut a = a.clone();
+    a.times = new_times.clone();
+    a.entries.clear();
+    a.groups.clear();
 
-    let mut b_without_times = b.clone();
-    b_without_times.times = new_times.clone();
+    let mut b = b.clone();
+    b.times = new_times.clone();
+    b.entries.clear();
+    b.groups.clear();
 
-    !a_without_times.eq(&b_without_times)
+    !a.eq(&b)
 }
 
 /// Check if two entries are dissimilar, ignoring their timestamps.
 fn have_entries_diverged(a: &Entry, b: &Entry) -> bool {
     let new_times = Times::default();
 
-    let mut a_without_times = a.clone();
-    a_without_times.times = new_times.clone();
+    let mut a = a.clone();
+    a.times = new_times.clone();
+    a.history = None;
 
-    let mut b_without_times = b.clone();
-    b_without_times.times = new_times.clone();
+    let mut b = b.clone();
+    b.times = new_times.clone();
+    b.history = None;
 
-    !a_without_times.eq(&b_without_times)
+    !a.eq(&b)
 }
 
 #[cfg(test)]
@@ -562,24 +627,23 @@ mod merge_tests {
         // build up root -> group1 -> subgroup1 -> entry2
         db.root_mut()
             .add_group_with_id(GROUP1_ID)
-            .edit(|g| g.name = "group1".to_string())
+            .edit_tracking(|g| g.name = "group1".to_string())
             .add_group_with_id(SUBGROUP1_ID)
-            .edit(|sg| sg.name = "subgroup1".to_string())
+            .edit_tracking(|sg| sg.name = "subgroup1".to_string())
             .add_entry_with_id(ENTRY2_ID)
-            .edit(|e| e.track_changes().set_unprotected("Title", "entry2"));
+            .edit_tracking(|e| e.set_unprotected("Title", "entry2"));
 
         // build up root -> group2 -> subgroup2
         db.root_mut()
             .add_group_with_id(GROUP2_ID)
-            .edit(|g| g.name = "group2".to_string())
+            .edit_tracking(|g| g.name = "group2".to_string())
             .add_group_with_id(SUBGROUP2_ID)
-            .edit(|sg| sg.name = "subgroup2".to_string());
+            .edit_tracking(|sg| sg.name = "subgroup2".to_string());
 
         // Placing the first entry in the root group
         db.root_mut()
             .add_entry_with_id(ENTRY1_ID)
-            .track_changes()
-            .set_unprotected("Title", "entry1");
+            .edit_tracking(|e| e.set_unprotected("Title", "entry1"));
 
         db
     }
@@ -589,6 +653,8 @@ mod merge_tests {
     fn test_idempotence() {
         let mut destination_db = create_test_database();
         let source_db = destination_db.clone();
+
+        thread::sleep(time::Duration::from_secs(3));
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
@@ -602,16 +668,18 @@ mod merge_tests {
         assert_eq!(destination_db.entries.len(), entry_count_before);
         assert_eq!(destination_db.groups.len(), group_count_before);
 
-        // The 2 groups should be exactly the same after merging, since
+        // The two groups should be exactly the same after merging, since
         // nothing was performed during the merge.
         assert_eq!(destination_db, source_db);
 
         // Now modify an entry in the destination database, and merge again.
+        thread::sleep(time::Duration::from_secs(3));
         destination_db
             .entry_mut(ENTRY1_ID)
             .unwrap()
             .edit_tracking(|e| e.set_unprotected("Title", "entry1_updated"));
 
+        // Merging should ignore the change, since destination is more recent.
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
         assert_eq!(merge_result.events.len(), 0);
@@ -898,8 +966,10 @@ mod merge_tests {
         // mark the entry as deleted in source_db
         thread::sleep(time::Duration::from_secs(1));
         source_db
-            .deleted_objects
-            .insert(deleted_entry_id.uuid(), Some(Times::now()));
+            .entry_mut(deleted_entry_id)
+            .unwrap()
+            .track_changes()
+            .remove();
 
         // modify the entry in destination_db
         thread::sleep(time::Duration::from_secs(1));
