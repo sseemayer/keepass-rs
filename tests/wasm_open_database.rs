@@ -16,5 +16,5 @@ fn open_kdbx4_argon2_in_wasm_does_not_panic() {
         .expect("database should open successfully in wasm without panicking");
 
     // A small sanity check to confirm that parsing actually succeeded.
-    assert_eq!(db.root.name, "Root");
+    assert_eq!(db.root().name, "Root");
 }
