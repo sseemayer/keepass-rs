@@ -1,4 +1,7 @@
-use std::{collections::HashSet, ops::Deref};
+use std::{
+    collections::{HashSet, VecDeque},
+    ops::Deref,
+};
 
 use chrono::NaiveDateTime;
 use thiserror::Error;
@@ -7,6 +10,7 @@ use crate::{
     db::{
         Entry, EntryId, EntryMut, EntryRef, Group, GroupId, GroupMut, GroupRef, History, MoveGroupError, Times,
     },
+    format::xml_db::group,
     Database,
 };
 
@@ -34,15 +38,6 @@ pub struct MergeEvent {
 #[derive(Error)]
 #[derive(Debug)]
 pub enum MergeError {
-    #[error("{0}")]
-    GenericError(String),
-
-    #[error("Could not find group {0}")]
-    FindGroupError(GroupId),
-
-    #[error("Could not find entry {0}")]
-    FindEntryError(EntryId),
-
     #[error("Entries with UUID {0} have the same modification time but have diverged.")]
     EntryModificationTimeNotUpdated(EntryId),
 
@@ -68,218 +63,155 @@ impl Database {
     /// This function will use the UUIDs to detect what entries and groups are the same.
     pub fn merge(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
         let mut log = MergeLog::default();
-        merge_deletions(self, other, &mut log)?;
-        merge_group(&mut self.root_mut(), &other.root(), &mut log)?;
+        merge_groups(self, other, &mut log)?;
+        merge_entries(self, other, &mut log)?;
 
         Ok(log)
     }
 }
 
-/// Merge deletions from `source` into `dest`, appending to a log of the merge process.
-fn merge_deletions(dest: &mut Database, source: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
-    for (&id, source_timestamp) in source.deleted_objects.iter() {
-        // compare deletion timestamps to determine which deletion is more recent and whether we
-        // need to delete objects in dest
-        let merged_timestamp = match (source_timestamp, dest.deleted_objects.get(&id)) {
-            (None, None) => {
-                // no timestamp in source, no deletion event in dest. add a blank deletion event
-                // and delete the object
-                None
-            }
-            (None, Some(None)) => {
-                // no timestamp in source, dest has a blank deletion event - delete the object
-                None
-            }
-            (None, Some(Some(_d))) => {
-                // no timestamp in source, but dest has a timestamped deletion event, which we
-                // assume is newer - don't perform additional deletions
-                continue;
-            }
-            (Some(s), None) => {
-                // timestamped deletion in source, no deletion event in dest - use source timestamp
-                Some(s.clone())
-            }
-            (Some(s), Some(None)) => {
-                // timestamped deletion in source, blank deletion event in dest - use source timestamp
-                Some(s.clone())
-            }
-            (Some(s), Some(Some(d))) => {
-                if s > d {
-                    // timestamped deletion in source is newer than dest - use source timestamp
-                    Some(s.clone())
-                } else {
-                    // timestamped deletion in dest is newer than source - don't delete again
-                    continue;
-                }
-            }
-        };
+/// Get the last update time (modification or location change) of a group, considering its entries and subgroups.
+fn get_last_update(group: GroupRef) -> Option<NaiveDateTime> {
+    let mut last_update = group.times.last_modification.or(group.times.location_changed);
 
-        let group_id = GroupId::with_uuid(id);
-        if let Some(group) = dest.group_mut(group_id) {
-            if let Some(last_modified) = group.times.last_modification {
-                if let Some(deletion_time) = merged_timestamp {
-                    if last_modified > deletion_time {
-                        // the group was modified after it was deleted - do not delete it
-                        continue;
-                    }
+    for entry in group.entries() {
+        if let Some(entry_time) = entry.times.last_modification.or(entry.times.location_changed) {
+            if let Some(current_last_update) = last_update {
+                if entry_time > current_last_update {
+                    last_update = Some(entry_time);
                 }
+            } else {
+                last_update = Some(entry_time);
             }
-
-            group.remove();
-            log.events.push(MergeEvent {
-                target: MergeEventTarget::Group(group_id),
-                event_type: MergeEventType::Deleted,
-            });
         }
-
-        let entry_id = EntryId::with_uuid(id);
-        if let Some(entry) = dest.entry_mut(entry_id) {
-            if let Some(last_modified) = entry.times.last_modification {
-                if let Some(deletion_time) = merged_timestamp {
-                    if last_modified > deletion_time {
-                        // the entry was modified after it was deleted - do not delete it
-                        continue;
-                    }
-                }
-            }
-
-            entry.remove();
-            log.events.push(MergeEvent {
-                target: MergeEventTarget::Entry(entry_id),
-                event_type: MergeEventType::Deleted,
-            });
-        }
-
-        dest.deleted_objects.insert(id, merged_timestamp);
     }
 
-    Ok(())
+    for subgroup in group.groups() {
+        if let Some(subgroup_last_update) = get_last_update(subgroup) {
+            if let Some(current_last_update) = last_update {
+                if subgroup_last_update > current_last_update {
+                    last_update = Some(subgroup_last_update);
+                }
+            } else {
+                last_update = Some(subgroup_last_update);
+            }
+        }
+    }
+
+    last_update
 }
 
-/// Merge child entries of a group from `source` into `dest`, appending to a log of the merge process.
-fn merge_group_entries(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog) -> Result<(), MergeError> {
-    let dest_entries = dest.as_ref().entries().map(|e| e.id()).collect::<HashSet<_>>();
-    let source_entries = source.entries().map(|e| e.id()).collect::<HashSet<_>>();
+/// Merge groups from `source` into `dest`, appending to a log of the merge process.
+fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
+    let dest_groups = dest_db.groups.keys().cloned().collect::<HashSet<_>>();
+    let source_groups = source_db.groups.keys().cloned().collect::<HashSet<_>>();
 
-    // Handle entries that exist in both source and destination - this might mean moving them to a
-    // new location.
-    for &id in dest_entries.intersection(&source_entries) {
-        let mut dest_entry = dest.entry_mut(id).unwrap();
-        let source_entry = source.entry(id).unwrap();
-        merge_entry(&mut dest_entry, &source_entry, log)?;
-    }
-
-    // Handle entries that exist only in source.
-    for &id in source_entries.difference(&dest_entries) {
-        // was the entry deleted in dest?
-        if let Some(deletion_time) = dest.as_ref().database().deleted_objects.get(&id.uuid()) {
-            // get the last modification time of the entry in source.
-            // if it does not exist, assume that it was never modified and do not re-add it.
-            let Some(source_modification_time) = source
-                .database()
-                .entry(id)
-                .and_then(|e| e.times.last_modification)
-            else {
-                continue;
-            };
-
-            let Some(deletion_time) = deletion_time else {
-                // blank deletion time in dest - do not re-add the entry
-                continue;
-            };
-
-            // if the entry was deleted after its last modification time in source,
-            // do not re-add it
-            if *deletion_time >= source_modification_time {
-                continue;
-            }
-
-            // otherwise, we can re-add the entry
-        }
-
-        let source_entry = source.entry(id).unwrap();
-
-        let mut entry = dest.add_entry_with_id(id);
-        *entry = source_entry.deref().clone();
-
-        log.events.push(MergeEvent {
-            target: MergeEventTarget::Entry(id),
-            event_type: MergeEventType::Created,
-        });
-    }
-
-    // Handle entries that exist only in destination.
-    for &id in dest_entries.difference(&source_entries) {
-        // was the entry deleted in source?
-        if let Some(deletion_time) = source.database().deleted_objects.get(&id.uuid()) {
-            let dest_modification_time = dest
-                .as_ref()
-                .database()
-                .entry(id)
-                .and_then(|e| e.times.last_modification);
-
-            if let (Some(deletion_time), Some(dest_modification_time)) = (deletion_time, dest_modification_time)
-            {
-                // if the entry was deleted and then later modified in dest, do not delete it
-                if *deletion_time < dest_modification_time {
-                    continue;
-                }
-            }
-
-            let db = dest.database_mut();
-            db.deleted_objects.insert(id.uuid(), deletion_time.clone());
-            db.entry_mut(id).expect("Entry must exist").remove();
-
-            log.events.push(MergeEvent {
-                target: MergeEventTarget::Entry(id),
-                event_type: MergeEventType::Deleted,
-            });
-        }
-    }
-
-    Ok(())
-}
-
-/// Merge child entries of a group from `source` into `dest`, appending to a log of the merge process.
-fn merge_group_groups(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog) -> Result<(), MergeError> {
-    let dest_groups = dest.as_ref().groups().map(|g| g.id()).collect::<HashSet<_>>();
-    let source_groups = source.groups().map(|g| g.id()).collect::<HashSet<_>>();
-
-    // Handle groups that exist in both source and destination.
-    for &id in dest_groups.intersection(&source_groups) {
-        let mut dest_group = dest.group_mut(id).unwrap();
-        let source_group = source.group(id).unwrap();
-        merge_group(&mut dest_group, &source_group, log)?;
-    }
-
-    // Handle groups that exist only in source.
+    // Handle groups that exist only in source and might need to be added.
+    let mut groups_to_add = HashSet::new();
     for &id in source_groups.difference(&dest_groups) {
-        // was the group deleted in dest? then do not re-add it
-        if dest.as_ref().database().deleted_objects.contains_key(&id.uuid()) {
-            continue;
+        let source = source_db.group(id).unwrap();
+
+        // was the group deleted in dest?
+        if let Some(deletion_time) = dest_db.deleted_objects.get(&id.uuid()) {
+            // get the last modification time of the group in source.
+            let source_last_update = get_last_update(source);
+
+            // compare deletion time and last update time to decide whether to re-add the group
+            match (deletion_time, source_last_update) {
+                (Some(deletion_time), Some(source_last_update)) => {
+                    // if the group was deleted after its last modification time in source,
+                    // do not re-add it, otherwise we can re-add the group
+                    if *deletion_time >= source_last_update {
+                        continue;
+                    }
+                }
+                (Some(_), None) => {
+                    // blank last update time in source - do not re-add the group
+                    continue;
+                }
+                (None, Some(_)) => {
+                    // blank deletion time is probably older than concrete update time - re-add the
+                    // group
+                }
+                (None, None) => {
+                    // both times are blank - do not re-add the group
+                    continue;
+                }
+            }
         }
 
-        let source_group = source.group(id).unwrap();
-        let mut dest_group = dest.add_group_with_id(id);
-
-        merge_group_groups(&mut dest_group, &source_group, log)?;
-        merge_group_entries(&mut dest_group, &source_group, log)?;
-
-        *dest_group = source_group.deref().clone();
-
-        log.events.push(MergeEvent {
-            target: MergeEventTarget::Group(id),
-            event_type: MergeEventType::Created,
-        });
+        groups_to_add.insert(id);
     }
 
-    // Handle groups that exist only in destination.
+    // actually add groups from groups_to_add. Use a stack to ensure that parent groups are added as needed
+    let mut add_stack = Vec::new();
+    loop {
+        // refill the stack if it's empty
+        if add_stack.is_empty() {
+            if let Some(&next) = groups_to_add.iter().next() {
+                // refill the stack with an arbitrary group to re-add
+                add_stack.push(next);
+                groups_to_add.remove(&next);
+            } else {
+                // no more groups to re-add
+                break;
+            }
+        }
+
+        // get the current group from the stack
+        let &id = add_stack.last().expect("non-empty queue");
+
+        // get the desired parent of the group to be re-added
+        let source = source_db.group(id).expect("source group exists");
+        let parent_id = source.parent().expect("cannot re-add root").id();
+
+        // does the parent exist in dest?
+        if let Some(mut parent) = dest_db.group_mut(parent_id) {
+            // yes - re-add the group
+            let mut dest_group = parent.add_group_with_id(id);
+            dest_group.times = source.times.clone();
+            dest_group.name = source.name.clone();
+            dest_group.notes = source.notes.clone();
+            dest_group.icon_id = source.icon_id;
+            dest_group.custom_data = source.custom_data.clone();
+            dest_group.is_expanded = source.is_expanded;
+            dest_group.default_autotype_sequence = source.default_autotype_sequence.clone();
+            dest_group.enable_autotype = source.enable_autotype;
+            dest_group.enable_searching = source.enable_searching;
+            dest_group.last_top_visible_entry = source.last_top_visible_entry;
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Group(id),
+                event_type: MergeEventType::Created,
+            });
+
+            // success - remove the current item from the stack (it was already removed from the set)
+            add_stack.pop();
+        } else {
+            // the parent does not exist yet - add it to the stack to be re-added first
+            add_stack.push(parent_id);
+
+            // since we will deal with the parent now, it doesn't need to be handled later
+            groups_to_add.remove(&parent_id);
+        }
+    }
+
+    // Handle groups that exist only in destination. These groups might need to be deleted.
     for &id in dest_groups.difference(&source_groups) {
-        // was the group deleted in source? then delete it from dest
-        if let Some(timestamp) = source.database().deleted_objects.get(&id.uuid()) {
-            let db = dest.database_mut();
-            db.deleted_objects.insert(id.uuid(), timestamp.clone());
-            db.group_mut(id).expect("Group must exist").remove();
+        let dest = dest_db.group_mut(id).unwrap();
+
+        // was the group deleted in source?
+        if let Some(deletion_time) = source_db.deleted_objects.get(&id.uuid()) {
+            let dest_last_updated = get_last_update(dest.as_ref());
+            if let (Some(deletion_time), Some(dest_last_updated)) = (deletion_time, dest_last_updated) {
+                // if the group was deleted and then later modified in dest, do not delete it
+                if *deletion_time < dest_last_updated {
+                    continue;
+                }
+            }
+
+            dest.remove();
+            dest_db.deleted_objects.insert(id.uuid(), deletion_time.clone());
 
             log.events.push(MergeEvent {
                 target: MergeEventTarget::Group(id),
@@ -288,197 +220,298 @@ fn merge_group_groups(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog
         }
     }
 
-    Ok(())
-}
+    // re-compute the group set after additions and deletions
+    let dest_groups = dest_db.groups.keys().cloned().collect::<HashSet<_>>();
 
-/// Perform merge on just the data of the group itself, not its children.
-fn merge_group_itself(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog) -> Result<(), MergeError> {
-    // check if the group has moved location
-    let dest_parent = dest.as_ref().parent().map(|p| p.id());
-    let source_parent = source.parent().map(|p| p.id());
-    if dest_parent != source_parent {
-        // can we determine which change is more recent?
-        if let (Some(dest_location_changed), Some(source_location_changed)) =
-            (dest.times.location_changed, source.times.location_changed)
-        {
-            if source_location_changed > dest_location_changed {
-                // the source group has been moved more recently than the destination group.
-                // try to move the destination group to the new location.
-                if let Some(source_parent) = source_parent {
-                    if dest.as_ref().database().group(source_parent).is_none() {
+    // Handle groups that exist in both source and destination.
+    let mut moves = Vec::new();
+    let root_id = dest_db.root().id();
+    for &id in dest_groups.intersection(&source_groups) {
+        let mut dest = dest_db.group_mut(id).unwrap();
+        let source = source_db.group(id).unwrap();
+
+        let dest_parent_id = dest.as_ref().parent().map(|p| p.id());
+        let source_parent_id = source.parent().map(|p| p.id());
+
+        // was the group moved?
+        if dest_parent_id != source_parent_id {
+            let dest_location_changed = dest.times.location_changed;
+            let source_location_changed = source.times.location_changed;
+
+            if let (Some(dlc), Some(slc)) = (dest_location_changed, source_location_changed) {
+                if slc > dlc {
+                    // the source group has been moved more recently than the destination group.
+                    // try to move the destination group to the new location.
+
+                    let Some(parent_id) = source.parent().map(|p| p.id()) else {
+                        log.warnings.push(format!("Cannot move root group {}", id,));
+                        continue;
+                    };
+
+                    if !dest_groups.contains(&parent_id) {
                         log.warnings.push(format!(
                             "Cannot move group {} to group {} because the group does not exist in the destination database.",
-                            dest.id(),
-                            source_parent,
+                            id,
+                            parent_id,
                         ));
-                    } else {
-                        log.events.push(MergeEvent {
-                            target: MergeEventTarget::Group(dest.id()),
-                            event_type: MergeEventType::LocationUpdated,
-                        });
-                        dest.move_to(source_parent)?;
-                        dest.times.location_changed = Some(source_location_changed)
-                    }
-                } else {
-                    log.warnings.push(format!(
-                        "Cannot move group {} to root because moving groups to root is not supported.",
-                        dest.id(),
-                    ));
-                }
-            }
-        } else {
-            log.warnings.push(format!(
-                "Cannot determine which group {} move is more recent because one of the groups does not have a location changed timestamp.",
-                dest.id(),
-            ));
-        }
-    }
+                        continue;
+                    };
 
-    let dest_last_modification = dest.times.last_modification.unwrap_or_else(|| {
-        log.warnings.push(format!(
-            "Destination group {} did not have a last modification timestamp",
-            dest.id()
-        ));
-        Times::now()
-    });
+                    // to avoid creating cycles in situations where two groups swap their parent-child
+                    // relationship, move all groups to root first and then to their final destination
+                    moves.push((id, parent_id));
+                    dest.move_to(root_id)?;
 
-    let source_last_modification = source.times.last_modification.unwrap_or_else(|| {
-        log.warnings.push(format!(
-            "Source group {} did not have a last modification timestamp",
-            source.id()
-        ));
-        Times::epoch()
-    });
-
-    if dest_last_modification == source_last_modification {
-        if have_groups_diverged(&dest, &source) {
-            let dest: &Group = dest.deref();
-            let source: &Group = source.deref();
-            // This should never happen.
-            //
-            // A group was updated without updating the last modification timestamp.
-            return Err(MergeError::GroupModificationTimeNotUpdated(source.id()));
-        }
-        return Ok(());
-    }
-
-    if dest_last_modification > source_last_modification {
-        // The destination group is more recent than the source group. Nothing to do.
-        return Ok(());
-    }
-
-    // The source group is more recent than the destination group. Update dest with source.
-    dest.name = source.name.clone();
-    dest.notes = source.notes.clone();
-    dest.icon_id = source.icon_id;
-    dest.custom_data = source.custom_data.clone();
-    dest.times.last_modification = source.times.last_modification.or(dest.times.last_modification);
-    dest.is_expanded = source.is_expanded;
-    dest.default_autotype_sequence = source.default_autotype_sequence.clone();
-    dest.enable_autotype = source.enable_autotype;
-    dest.enable_searching = source.enable_searching;
-    dest.last_top_visible_entry = source.last_top_visible_entry;
-
-    log.events.push(MergeEvent {
-        target: MergeEventTarget::Group(dest.id()),
-        event_type: MergeEventType::Updated,
-    });
-
-    Ok(())
-}
-
-/// Merge group data from `source` into `dest`, appending to a log of the merge process.
-fn merge_group(dest: &mut GroupMut, source: &GroupRef, log: &mut MergeLog) -> Result<(), MergeError> {
-    merge_group_groups(dest, source, log)?;
-    merge_group_entries(dest, source, log)?;
-    merge_group_itself(dest, source, log)?;
-    Ok(())
-}
-
-/// Merge entry data from `source` into `dest`, appending to a log of the merge process.
-fn merge_entry<'a>(dest: &mut EntryMut<'a>, source: &EntryRef, log: &mut MergeLog) -> Result<(), MergeError> {
-    // check whether the entries are still in the same parent group
-    if dest.as_ref().parent().id() != source.parent().id() {
-        // can we determine which change is more recent?
-        if let (Some(dest_location_changed), Some(source_location_changed)) =
-            (dest.times.location_changed, source.times.location_changed)
-        {
-            if source_location_changed > dest_location_changed {
-                // the source entry has been moved more recently than the destination entry.
-                // try to move the destination entry to the new location.
-                let source_parent = source.parent().id();
-                if dest.as_ref().database().group(source_parent).is_none() {
-                    log.warnings.push(format!(
-                            "Cannot move entry {} to group {} because the group does not exist in the destination database.",
-                            dest.id(),
-                            source_parent,
-                        ));
-                } else {
                     log.events.push(MergeEvent {
-                        target: MergeEventTarget::Entry(dest.id()),
+                        target: MergeEventTarget::Group(id),
                         event_type: MergeEventType::LocationUpdated,
                     });
-                    dest.move_to(source_parent)
-                        .expect("We checked that destination exists");
-                    dest.times.location_changed = Some(source_location_changed)
+                }
+            } else {
+                log.warnings.push(format!(
+                    "Cannot determine which group {} move is more recent because one of the groups does not have a location changed timestamp.",
+                    id,
+                ));
+            }
+        }
+
+        let dest_last_modification = dest.times.last_modification.unwrap_or_else(|| {
+            log.warnings.push(format!(
+                "Destination group {} did not have a last modification timestamp",
+                id
+            ));
+            Times::now()
+        });
+
+        let source_last_modification = source.times.last_modification.unwrap_or_else(|| {
+            log.warnings.push(format!(
+                "Source group {} did not have a last modification timestamp",
+                id
+            ));
+            Times::epoch()
+        });
+
+        if dest_last_modification == source_last_modification {
+            if have_groups_diverged(&dest, &source) {
+                // This should never happen.
+                //
+                // A group was updated without updating the last modification timestamp.
+                return Err(MergeError::GroupModificationTimeNotUpdated(id));
+            }
+            return Ok(());
+        }
+
+        if dest_last_modification > source_last_modification {
+            // The destination group is more recent than the source group. Nothing to do.
+            return Ok(());
+        }
+
+        // The source group is more recent than the destination group. Update dest with source.
+        dest.name = source.name.clone();
+        dest.notes = source.notes.clone();
+        dest.icon_id = source.icon_id;
+        dest.custom_data = source.custom_data.clone();
+        dest.times.last_modification = source.times.last_modification.or(dest.times.last_modification);
+        dest.is_expanded = source.is_expanded;
+        dest.default_autotype_sequence = source.default_autotype_sequence.clone();
+        dest.enable_autotype = source.enable_autotype;
+        dest.enable_searching = source.enable_searching;
+        dest.last_top_visible_entry = source.last_top_visible_entry;
+
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::Group(id),
+            event_type: MergeEventType::Updated,
+        });
+    }
+
+    // perform all the moves that were queued up
+    for (group_id, parent_id) in moves {
+        let mut group = dest_db.group_mut(group_id).unwrap();
+        group.move_to(parent_id)?;
+    }
+
+    Ok(())
+}
+
+fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
+    let dest_entries = dest_db.entries.keys().cloned().collect::<HashSet<_>>();
+    let source_entries = source_db.entries.keys().cloned().collect::<HashSet<_>>();
+
+    // Handle entries that exist only in source and might need to be added.
+    for &id in source_entries.difference(&dest_entries) {
+        let source_entry = source_db.entry(id).unwrap();
+
+        // was the entry deleted in dest?
+        if let Some(deletion_time) = dest_db.deleted_objects.get(&id.uuid()) {
+            // get the last modification or location change time in source.
+            let source_update_time = source_entry
+                .times
+                .last_modification
+                .or(source_entry.times.location_changed);
+
+            match (deletion_time, source_update_time) {
+                (Some(deletion_time), Some(source_update_time)) => {
+                    // if the entry was deleted after its last modification time in source,
+                    // do not re-add it
+                    if *deletion_time >= source_update_time {
+                        continue;
+                    }
+                }
+                (Some(_), None) => {
+                    // blank last update time in source - do not re-add the entry
+                    continue;
+                }
+                (None, Some(_)) => {
+                    // blank deletion time is probably older than concrete update time - re-add the
+                    // entry
+                }
+                (None, None) => {
+                    // both times are blank - do not re-add the entry
+                    continue;
                 }
             }
-        } else {
+
+            // otherwise, we can re-add the entry
+        }
+
+        let parent_id = source_entry.parent().id();
+
+        let Some(mut parent) = dest_db.group_mut(parent_id) else {
             log.warnings.push(format!(
-                "Cannot determine which entry {} move is more recent because one of the entries does not have a location changed timestamp.",
-                dest.id(),
+                "Cannot add entry {} because its parent group {} does not exist in the destination database.",
+                id, parent_id,
             ));
+            continue;
+        };
+
+        let mut entry = parent.add_entry_with_id(id);
+        *entry = source_entry.deref().clone();
+
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::Entry(id),
+            event_type: MergeEventType::Created,
+        });
+    }
+
+    // Handle entries that exist only in destination. These entries might need to be deleted.
+    for &id in dest_entries.difference(&source_entries) {
+        let dest_entry = dest_db.entry_mut(id).unwrap();
+
+        // was the entry deleted in source?
+        if let Some(deletion_time) = source_db.deleted_objects.get(&id.uuid()) {
+            let dest_update_time = dest_entry
+                .times
+                .last_modification
+                .or(dest_entry.times.location_changed);
+
+            if let (Some(deletion_time), Some(dest_update_time)) = (deletion_time, dest_update_time) {
+                // if the entry was deleted and then later modified in dest, do not delete it
+                if *deletion_time < dest_update_time {
+                    continue;
+                }
+            }
+
+            dest_entry.remove();
+            dest_db.deleted_objects.insert(id.uuid(), deletion_time.clone());
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Entry(id),
+                event_type: MergeEventType::Deleted,
+            });
         }
     }
 
-    let source_last_modification = source.times.last_modification.unwrap_or_else(|| {
-        log.warnings.push(format!(
-            "Source entry {} did not have a last modification timestamp",
-            source.id()
-        ));
-        Times::epoch()
-    });
+    // Handle entries that exist in both source and destination.
+    for &id in dest_entries.intersection(&source_entries) {
+        let mut dest_entry = dest_db.entry_mut(id).unwrap();
+        let source_entry = source_db.entry(id).unwrap();
 
-    let dest_last_modification = dest.times.last_modification.unwrap_or_else(|| {
-        log.warnings.push(format!(
-            "Destination entry {} did not have a last modification timestamp",
-            dest.id()
-        ));
-        Times::now()
-    });
+        let dest_parent_id = dest_entry.as_ref().parent().id();
+        let source_parent_id = source_entry.parent().id();
 
-    if dest_last_modification == source_last_modification {
-        if have_entries_diverged(&dest, &source) {
-            // This should never happen.
-            //
-            // An entry was updated without updating the last modification timestamp.
-            return Err(MergeError::EntryModificationTimeNotUpdated(source.id()));
+        // has the entry moved?
+        if dest_parent_id != source_parent_id {
+            // which move is more recent?
+            let source_location_changed = source_entry.times.location_changed;
+            let dest_location_changed = dest_entry.times.location_changed;
+            if let (Some(slc), Some(dlc)) = (source_location_changed, dest_location_changed) {
+                if slc > dlc {
+                    // the source entry has been moved more recently than the destination entry.
+                    // try to move the destination entry to the new location.
+
+                    if dest_entry.move_to(source_parent_id).is_ok() {
+                        log.events.push(MergeEvent {
+                            target: MergeEventTarget::Entry(id),
+                            event_type: MergeEventType::LocationUpdated,
+                        });
+                        dest_entry.times.location_changed = Some(slc);
+                    } else {
+                        log.warnings.push(format!(
+                            "Cannot move entry {} to group {} because the group does not exist in the destination database.",
+                            id,
+                            source_parent_id,
+                        ));
+                    }
+                }
+            } else {
+                log.warnings.push(format!(
+                    "Cannot determine which entry {} move is more recent because one of the entries does not have a location changed timestamp.",
+                    id,
+                ));
+            }
         }
-        return Ok(());
+
+        let source_last_modification = source_entry.times.last_modification.unwrap_or_else(|| {
+            log.warnings.push(format!(
+                "Source entry {} did not have a last modification timestamp",
+                id
+            ));
+            Times::epoch()
+        });
+
+        let dest_last_modification = dest_entry.times.last_modification.unwrap_or_else(|| {
+            log.warnings.push(format!(
+                "Destination entry {} did not have a last modification timestamp",
+                id
+            ));
+            Times::now()
+        });
+
+        if dest_last_modification == source_last_modification {
+            if have_entries_diverged(&dest_entry, &source_entry) {
+                // This should never happen.
+                //
+                // An entry was updated without updating the last modification timestamp.
+                return Err(MergeError::EntryModificationTimeNotUpdated(id));
+            }
+            return Ok(());
+        }
+
+        let source_history = source_entry.history.clone().unwrap_or_else(|| {
+            log.warnings.push(format!("Source entry {} had no history.", id));
+            History::default()
+        });
+
+        let dest_history = dest_entry.history.clone().unwrap_or_else(|| {
+            log.warnings
+                .push(format!("Destination entry {} had no history.", id));
+            History::default()
+        });
+
+        let merged_history = Some(merge_history(&dest_history, &source_history, log)?);
+        let merged_location_timestamp = dest_entry
+            .times
+            .location_changed
+            .or(source_entry.times.location_changed);
+
+        if source_last_modification > dest_last_modification {
+            // The source entry is more recent than the destination entry. Replace dest with source.
+            *dest_entry = source_entry.deref().clone();
+        }
+
+        dest_entry.history = merged_history;
+        dest_entry.times.location_changed = merged_location_timestamp;
     }
-
-    let source_history = source.history.clone().unwrap_or_else(|| {
-        log.warnings
-            .push(format!("Source entry {} had no history.", source.id()));
-        History::default()
-    });
-
-    let dest_history = dest.history.clone().unwrap_or_else(|| {
-        log.warnings
-            .push(format!("Destination entry {} had no history.", dest.id()));
-        History::default()
-    });
-
-    let merged_history = Some(merge_history(&dest_history, &source_history, log)?);
-    let merged_location_timestamp = dest.times.location_changed.or(source.times.location_changed);
-
-    if source_last_modification > dest_last_modification {
-        // The source entry is more recent than the destination entry. Replace dest with source.
-        **dest = source.deref().clone();
-    }
-
-    dest.history = merged_history;
-    dest.times.location_changed = merged_location_timestamp;
 
     Ok(())
 }
