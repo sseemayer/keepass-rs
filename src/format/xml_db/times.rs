@@ -62,9 +62,6 @@ impl From<crate::db::Times> for Times {
 mod tests {
     use super::*;
 
-    #[derive(Serialize, Deserialize)]
-    struct Test<T>(T);
-
     #[test]
     fn test_deserialize_times() {
         let xml = r#"<Times>

@@ -19,12 +19,13 @@ pub struct Times {
 
 impl Times {
     pub(crate) fn create_new() -> Self {
+        let now = Times::now();
         Times {
-            creation: Some(Times::now()),
-            last_modification: Some(Times::now()),
-            last_access: Some(Times::now()),
+            creation: Some(now),
+            last_modification: Some(now),
+            last_access: Some(now),
             expiry: None,
-            location_changed: None,
+            location_changed: Some(now),
             expires: Some(false),
             usage_count: Some(0),
         }

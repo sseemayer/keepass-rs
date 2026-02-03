@@ -427,9 +427,6 @@ mod tests {
 
     use super::*;
 
-    #[derive(Serialize, Deserialize)]
-    struct Test<T>(T);
-
     #[test]
     fn test_serialize_custom_data() {
         let cd = CustomData {

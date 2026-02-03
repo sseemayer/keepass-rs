@@ -24,6 +24,7 @@ impl History {
 
     // Determines if the entries of the history are
     // ordered by last modification time.
+    #[cfg(test)]
     pub(crate) fn is_ordered(&self) -> bool {
         let mut last_modification_time: Option<&chrono::NaiveDateTime> = None;
         for entry in &self.entries {

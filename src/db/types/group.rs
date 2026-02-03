@@ -49,7 +49,7 @@ pub struct Group {
     id: GroupId,
 
     /// The unique identifier for the parent group
-    parent: Option<GroupId>,
+    pub(crate) parent: Option<GroupId>,
 
     /// The name of the group
     pub name: String,
@@ -465,14 +465,18 @@ impl GroupTrack<'_> {
         // Delete entries
         let entry_ids: Vec<EntryId> = self.entries.iter().cloned().collect();
         for entry_id in entry_ids {
-            self.as_mut().entry_mut(entry_id).unwrap().remove();
+            self.as_mut()
+                .entry_mut(entry_id)
+                .unwrap()
+                .track_changes()
+                .remove();
         }
 
         // Recursively delete child groups
         let child_group_ids: Vec<GroupId> = self.groups.iter().cloned().collect();
         for child_id in child_group_ids {
-            if let Some(child_group) = self.database.group_mut(child_id) {
-                child_group.remove();
+            if let Some(mut child_group) = self.database.group_mut(child_id) {
+                child_group.track_changes().remove();
             }
         }
 

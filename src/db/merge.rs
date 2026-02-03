@@ -1,16 +1,10 @@
-use std::{
-    collections::{HashSet, VecDeque},
-    ops::Deref,
-};
+use std::{collections::HashSet, ops::Deref};
 
 use chrono::NaiveDateTime;
 use thiserror::Error;
 
 use crate::{
-    db::{
-        Entry, EntryId, EntryMut, EntryRef, Group, GroupId, GroupMut, GroupRef, History, MoveGroupError, Times,
-    },
-    format::xml_db::group,
+    db::{Entry, EntryId, Group, GroupId, GroupRef, History, MoveGroupError, Times},
     Database,
 };
 
@@ -64,7 +58,6 @@ impl Database {
     pub fn merge(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
         let mut log = MergeLog::default();
         merge_groups(self, other, &mut log)?;
-        merge_entries(self, other, &mut log)?;
 
         Ok(log)
     }
@@ -102,6 +95,8 @@ fn get_last_update(group: GroupRef) -> Option<NaiveDateTime> {
 }
 
 /// Merge groups from `source` into `dest`, appending to a log of the merge process.
+///
+/// NOTE: this function will also call `merge_entries` to handle entries within the groups.
 fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
     let dest_groups = dest_db.groups.keys().cloned().collect::<HashSet<_>>();
     let source_groups = source_db.groups.keys().cloned().collect::<HashSet<_>>();
@@ -197,6 +192,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
     }
 
     // Handle groups that exist only in destination. These groups might need to be deleted.
+    let mut to_delete = Vec::new();
     for &id in dest_groups.difference(&source_groups) {
         let dest = dest_db.group_mut(id).unwrap();
 
@@ -210,13 +206,26 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
                 }
             }
 
-            dest.remove();
+            // queue the deletion so that all subgroups will also emit a deletion event
+            to_delete.push(id);
             dest_db.deleted_objects.insert(id.uuid(), deletion_time.clone());
 
             log.events.push(MergeEvent {
                 target: MergeEventTarget::Group(id),
                 event_type: MergeEventType::Deleted,
             });
+        }
+    }
+
+    // perform the entry merges now that all groups that need adding are added but the groups that
+    // need deleting still haven't been deleted, so that the entries can still be accessed and
+    // generate events
+    merge_entries(dest_db, source_db, log)?;
+
+    // perform all group deletions
+    while let Some(id) = to_delete.pop() {
+        if let Some(group) = dest_db.group_mut(id) {
+            group.remove();
         }
     }
 
@@ -261,6 +270,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
                     // relationship, move all groups to root first and then to their final destination
                     moves.push((id, parent_id));
                     dest.move_to(root_id)?;
+                    dest.times.location_changed = Some(slc);
 
                     log.events.push(MergeEvent {
                         target: MergeEventTarget::Group(id),
@@ -298,12 +308,12 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
                 // A group was updated without updating the last modification timestamp.
                 return Err(MergeError::GroupModificationTimeNotUpdated(id));
             }
-            return Ok(());
+            continue;
         }
 
         if dest_last_modification > source_last_modification {
             // The destination group is more recent than the source group. Nothing to do.
-            return Ok(());
+            continue;
         }
 
         // The source group is more recent than the destination group. Update dest with source.
@@ -333,6 +343,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
     Ok(())
 }
 
+/// Merge entries from `source` into `dest`, appending to a log of the merge process.
 fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
     let dest_entries = dest_db.entries.keys().cloned().collect::<HashSet<_>>();
     let source_entries = source_db.entries.keys().cloned().collect::<HashSet<_>>();
@@ -484,7 +495,7 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
                 // An entry was updated without updating the last modification timestamp.
                 return Err(MergeError::EntryModificationTimeNotUpdated(id));
             }
-            return Ok(());
+            continue;
         }
 
         let source_history = source_entry.history.clone().unwrap_or_else(|| {
@@ -498,18 +509,43 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
             History::default()
         });
 
-        let merged_history = Some(merge_history(&dest_history, &source_history, log)?);
+        let mut merged_history = merge_history(&dest_history, &source_history, log)?;
         let merged_location_timestamp = dest_entry
             .times
             .location_changed
             .or(source_entry.times.location_changed);
 
         if source_last_modification > dest_last_modification {
+            // add the previous dest entry to history if it has diverged
+            if let Some(last_history_entry) = merged_history.entries.first() {
+                if have_entries_diverged(&dest_entry, &last_history_entry) {
+                    let mut dest_entry_for_history = dest_entry.deref().clone();
+                    dest_entry_for_history.history = None;
+                    merged_history.add_entry(dest_entry_for_history);
+                }
+            }
+
             // The source entry is more recent than the destination entry. Replace dest with source.
-            *dest_entry = source_entry.deref().clone();
+            dest_entry.times.last_modification = source_entry.times.last_modification;
+            dest_entry.fields = source_entry.fields.clone();
+            dest_entry.autotype = source_entry.autotype.clone();
+            dest_entry.tags = source_entry.tags.clone();
+            dest_entry.custom_data = source_entry.custom_data.clone();
+            dest_entry.icon_id = source_entry.icon_id;
+            dest_entry.foreground_color = source_entry.foreground_color.clone();
+            dest_entry.background_color = source_entry.background_color.clone();
+            dest_entry.override_url = source_entry.override_url.clone();
+            dest_entry.quality_check = source_entry.quality_check.clone();
+
+            // TODO: attachments and custom_icons_id
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Entry(id),
+                event_type: MergeEventType::Updated,
+            });
         }
 
-        dest_entry.history = merged_history;
+        dest_entry.history = Some(merged_history);
         dest_entry.times.location_changed = merged_location_timestamp;
     }
 
@@ -602,11 +638,13 @@ fn have_groups_diverged(a: &Group, b: &Group) -> bool {
     a.times = new_times.clone();
     a.entries.clear();
     a.groups.clear();
+    a.parent = None;
 
     let mut b = b.clone();
     b.times = new_times.clone();
     b.entries.clear();
     b.groups.clear();
+    b.parent = None;
 
     !a.eq(&b)
 }
@@ -813,17 +851,11 @@ mod merge_tests {
         assert!(destination_db.entry(deleted_entry_id).is_none());
     }
 
-    /// Test that an entry that is updated in source under a group that is deleted in destination
-    /// will be deleted and not re-added.
+    /// Test that an entry that is updated and moved to a group in source but that group is deleted
+    /// later in dest should cause the group to be re-added and the entry to be moved there.
     #[test]
     fn test_updated_entry_under_deleted_group() {
         let mut destination_db = create_test_database();
-
-        let deleted_group_id = destination_db
-            .root_mut()
-            .add_group()
-            .edit(|g| g.name = "deleted_group".to_string())
-            .id();
 
         let modified_entry_id = destination_db
             .root_mut()
@@ -831,15 +863,25 @@ mod merge_tests {
             .edit_tracking(|e| e.set_unprotected("Title", "original_title"))
             .id();
 
+        let deleted_group_id = destination_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "deleted_group".to_string())
+            .id();
+
         let mut source_db = destination_db.clone();
 
-        // perform the update of the entry in source_db
+        // perform the update of the entry in source_db and move it to the group that will be
+        // deleted
         source_db
             .entry_mut(modified_entry_id)
             .unwrap()
-            .edit_tracking(|e| {
+            .track_changes()
+            .edit(|e| {
                 e.set_unprotected("Title", "modified_title");
-            });
+            })
+            .move_to(deleted_group_id)
+            .unwrap();
 
         // delete the group in destination_db
         destination_db.group_mut(deleted_group_id).unwrap().remove();
@@ -847,18 +889,18 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
-        // perform the merge - the entry should not be re-added since its parent group was deleted
+        // perform the merge - the group should be re-added and the entry moved there
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 1);
+        assert_eq!(merge_result.events.len(), 3); // recreate group, move entry, update entry
 
         let entry_count_after = destination_db.entries.len();
         let group_count_after = destination_db.groups.len();
         assert_eq!(entry_count_after, entry_count_before);
-        assert_eq!(group_count_after, group_count_before);
+        assert_eq!(group_count_after, group_count_before + 1);
 
-        assert!(destination_db.group(deleted_group_id).is_none());
-        assert!(destination_db.entry(modified_entry_id).is_none());
+        assert!(destination_db.group(deleted_group_id).is_some());
+        assert!(destination_db.entry(modified_entry_id).is_some());
     }
 
     /// Test that a group that is marked as deleted in the destination database is not re-added
@@ -1143,7 +1185,7 @@ mod merge_tests {
         // modify the deleted subgroup in destination_db to be newer than the deletion time
         thread::sleep(time::Duration::from_secs(1));
         destination_db
-            .group_mut(deleted_subgroup_id)
+            .group_mut(deleted_group_id)
             .unwrap()
             .track_changes()
             .edit(|g| {
@@ -1470,7 +1512,7 @@ mod merge_tests {
         // content from destination_db since it was modified later
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 2);
+        assert_eq!(merge_result.events.len(), 1);
 
         let entry_count_after = destination_db.entries.len();
         let group_count_after = destination_db.groups.len();
@@ -1488,8 +1530,8 @@ mod merge_tests {
         assert_eq!(entry.times.last_modification, Some(entry_modified_timestamp));
     }
 
-    /// Test that if an entry is moved in source and modified in destination, the entry ends up
-    /// in the new location and with the modifications kept.
+    /// Test that if an entry is moved in source and modified in destination, the entry stays
+    /// in the new location and gets the modifications.
     #[test]
     fn test_entry_relocation_in_destination_and_update() {
         let mut destination_db = create_test_database();
@@ -1591,7 +1633,7 @@ mod merge_tests {
         // perform the merge - this should create the new group and update and relocate the entry there
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
-        assert_eq!(merge_result.events.len(), 2);
+        assert_eq!(merge_result.events.len(), 3);
 
         let entry_count_after = destination_db.entries.len();
         let group_count_after = destination_db.groups.len();
@@ -1690,7 +1732,7 @@ mod merge_tests {
         assert_eq!(merged_history.entries.len(), 2);
 
         // check that we can find the old version of the entry
-        let merged_entry = &merged_history.entries[1];
+        let merged_entry = &merged_history.entries[0];
         assert_eq!(merged_entry.get_str("Title"), Some("entry1"));
 
         let entry_count_after = destination_db.entries.len();
@@ -1729,7 +1771,7 @@ mod merge_tests {
         assert_eq!(merged_history.entries.len(), 2);
 
         // check that we can find the old version of the entry
-        let merged_entry = &merged_history.entries[1];
+        let merged_entry = &merged_history.entries[0];
         assert_eq!(merged_entry.get_str("Title"), Some("entry1"));
 
         let entry_count_after = destination_db.entries.len();
@@ -1784,7 +1826,7 @@ mod merge_tests {
         assert!(merged_history.is_ordered());
         assert_eq!(merged_history.entries.len(), 3);
         assert_eq!(
-            merged_history.entries[1].get_str("Title"),
+            merged_history.entries[0].get_str("Title"),
             Some("entry1_updated_from_destination")
         );
         assert_eq!(merged_history.entries[1].get_str("Title"), Some("entry1"));
@@ -1906,7 +1948,8 @@ mod merge_tests {
         source_db
             .group_mut(SUBGROUP1_ID)
             .unwrap()
-            .edit_tracking(|g| {
+            .track_changes()
+            .edit(|g| {
                 g.name = "subgroup1_updated_name".to_string();
             })
             .move_to(GROUP2_ID)

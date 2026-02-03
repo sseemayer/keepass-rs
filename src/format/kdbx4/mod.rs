@@ -67,7 +67,7 @@ mod kdbx4_tests {
     use crate::format::kdbx4::dump::dump_kdbx4;
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-        db::{Database, Entry, Group, Value},
+        db::Database,
         format::KDBX4_CURRENT_MINOR_VERSION,
         key::DatabaseKey,
     };

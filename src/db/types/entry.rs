@@ -249,7 +249,10 @@ impl EntryMut<'_> {
     /// Convert this mutable reference into a history-tracking variant that will persist the
     /// current state of the entry into its history when dropped.
     pub fn track_changes(&mut self) -> EntryTrack<'_> {
-        let historical: Entry = self.deref().deref().clone();
+        let mut historical: Entry = self.deref().deref().clone();
+
+        // Remove history from the historical entry to avoid exponential growth
+        historical.history = None;
 
         EntryTrack {
             database: self.database,
@@ -410,8 +413,6 @@ impl Deref for EntryTrack<'_> {
 impl DerefMut for EntryTrack<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let entry = self.database.entries.get_mut(&self.id).expect("Entry not found");
-        entry.times.last_modification = Some(Times::now());
-
         entry
     }
 }
