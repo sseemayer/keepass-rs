@@ -666,7 +666,6 @@ fn have_entries_diverged(a: &Entry, b: &Entry) -> bool {
 
 #[cfg(test)]
 mod merge_tests {
-    use std::{thread, time};
     use uuid::uuid;
 
     use crate::db::{EntryId, GroupId, History, Times};
@@ -744,8 +743,6 @@ mod merge_tests {
         let mut destination_db = create_test_database();
         let source_db = destination_db.clone();
 
-        thread::sleep(time::Duration::from_secs(3));
-
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
@@ -763,7 +760,6 @@ mod merge_tests {
         assert_eq!(destination_db, source_db);
 
         // Now modify an entry in the destination database, and merge again.
-        thread::sleep(time::Duration::from_secs(3));
         destination_db
             .entry_mut(ENTRY1_ID)
             .unwrap()
@@ -852,7 +848,6 @@ mod merge_tests {
             .id();
 
         // mark the entry as deleted in destination_db
-        thread::sleep(time::Duration::from_secs(1));
         destination_db
             .deleted_objects
             .insert(deleted_entry_id.uuid(), Some(Times::now()));
@@ -939,8 +934,6 @@ mod merge_tests {
             .edit(|g| g.name = "deleted_group".to_string())
             .id();
 
-        thread::sleep(time::Duration::from_secs(1));
-
         // mark the group as deleted in destination_db
         destination_db
             .deleted_objects
@@ -975,7 +968,6 @@ mod merge_tests {
         let group_count_before = destination_db.groups.len();
 
         // mark the entry as deleted in source_db
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .entry_mut(deleted_entry_id)
             .unwrap()
@@ -1016,7 +1008,6 @@ mod merge_tests {
         let group_count_before = destination_db.groups.len();
 
         // mark the entry as deleted in source_db
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .group_mut(deleted_group_id)
             .unwrap()
@@ -1058,7 +1049,6 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         // mark the entry as deleted in source_db
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .entry_mut(deleted_entry_id)
             .unwrap()
@@ -1066,7 +1056,6 @@ mod merge_tests {
             .remove();
 
         // modify the entry in destination_db
-        thread::sleep(time::Duration::from_secs(1));
         destination_db
             .entry_mut(deleted_entry_id)
             .unwrap()
@@ -1120,8 +1109,6 @@ mod merge_tests {
             .id();
 
         let mut source_db = destination_db.clone();
-
-        thread::sleep(time::Duration::from_secs(1));
 
         // mark the entire group subtree as deleted in source_db
         source_db
@@ -1194,7 +1181,6 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         // mark the entire group subtree as deleted in source_db
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .group_mut(deleted_group_id)
             .unwrap()
@@ -1202,7 +1188,6 @@ mod merge_tests {
             .remove();
 
         // modify the deleted subgroup in destination_db to be newer than the deletion time
-        thread::sleep(time::Duration::from_secs(1));
         destination_db
             .group_mut(deleted_group_id)
             .unwrap()
@@ -1255,7 +1240,6 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         // mark the group as deleted in source_db
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .group_mut(deleted_group_id)
             .unwrap()
@@ -1263,7 +1247,6 @@ mod merge_tests {
             .remove();
 
         // modify the group in destination_db
-        thread::sleep(time::Duration::from_secs(1));
         destination_db
             .group_mut(deleted_group_id)
             .unwrap()
@@ -1305,7 +1288,6 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         // mark the group as deleted in source_db
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .group_mut(deleted_group_id)
             .unwrap()
@@ -1313,7 +1295,6 @@ mod merge_tests {
             .remove();
 
         // add a new entry to the deleted group in destination_db
-        thread::sleep(time::Duration::from_secs(1));
         let new_entry_id = destination_db
             .group_mut(deleted_group_id)
             .unwrap()
@@ -1433,8 +1414,6 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
-        thread::sleep(time::Duration::from_secs(1));
-
         // before
         // root (ROOT_GROUP_ID)
         // ├── entry1 (ENTRY1_ID)
@@ -1500,7 +1479,6 @@ mod merge_tests {
         });
 
         // relocate entry in source
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .entry_mut(ENTRY2_ID)
             .unwrap()
@@ -1572,7 +1550,6 @@ mod merge_tests {
             .unwrap();
 
         // relocate entry in destination
-        thread::sleep(time::Duration::from_secs(1));
         destination_db
             .entry_mut(ENTRY2_ID)
             .unwrap()
@@ -1635,13 +1612,11 @@ mod merge_tests {
             .id();
 
         // modify the entry in source
-        thread::sleep(time::Duration::from_secs(1));
         source_db.entry_mut(new_entry_id).unwrap().edit_tracking(|e| {
             e.set_unprotected("Title", "new_entry_modified_in_source");
         });
 
         // relocate the entry to the new group in source
-        thread::sleep(time::Duration::from_secs(1));
         source_db
             .entry_mut(new_entry_id)
             .unwrap()
@@ -1673,8 +1648,6 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
-
-        thread::sleep(time::Duration::from_secs(1));
 
         // before
         // root (ROOT_GROUP_ID)
@@ -1819,8 +1792,6 @@ mod merge_tests {
             e.set_unprotected("Title", "entry1_updated_from_destination");
         });
 
-        thread::sleep(time::Duration::from_secs(1));
-
         // update entry in source
         source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
             e.set_unprotected("Title", "entry1_updated_from_source");
@@ -1865,7 +1836,6 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
-        thread::sleep(time::Duration::from_secs(1));
         source_db.group_mut(SUBGROUP1_ID).unwrap().edit_tracking(|g| {
             g.name = "subgroup1_updated_name".to_string();
         });
@@ -1912,7 +1882,6 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
-        thread::sleep(time::Duration::from_secs(1));
         destination_db
             .group_mut(SUBGROUP1_ID)
             .unwrap()
@@ -1961,8 +1930,6 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
-
-        thread::sleep(time::Duration::from_secs(1));
 
         source_db
             .group_mut(SUBGROUP1_ID)
@@ -2016,7 +1983,6 @@ mod merge_tests {
         let group_count_before = destination_db.groups.len();
 
         // rename group in source
-        thread::sleep(time::Duration::from_secs(1));
         source_db.group_mut(SUBGROUP1_ID).unwrap().edit_tracking(|g| {
             g.name = "subgroup1_updated_name".to_string();
         });
@@ -2029,7 +1995,6 @@ mod merge_tests {
             .unwrap();
 
         // relocate group in destination
-        thread::sleep(time::Duration::from_secs(1));
         destination_db
             .group_mut(SUBGROUP1_ID)
             .unwrap()
