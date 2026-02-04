@@ -461,7 +461,7 @@ mod file_read_tests {
         Ok(())
     }
 
-    #[ignore = "This test take a very long time"]
+    #[ignore = "This test takes a very long time"]
     #[test]
     fn open_kdbx4_fuzzing() -> Result<(), DatabaseOpenError> {
         use std::io::Read;
