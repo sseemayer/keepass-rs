@@ -102,7 +102,7 @@ impl Entry {
             background_color: None,
             override_url: None,
             quality_check: None,
-            history: None,
+            history: Some(History::default()),
         }
     }
 
@@ -122,7 +122,7 @@ impl Entry {
             background_color: None,
             override_url: None,
             quality_check: None,
-            history: None,
+            history: Some(History::default()),
         }
     }
 
@@ -424,6 +424,7 @@ impl Drop for EntryTrack<'_> {
             let parent_id = entry.parent;
 
             let historical = std::mem::replace(&mut self.historical, Entry::new(parent_id));
+
             if entry.history.is_none() {
                 entry.history = Some(History::default());
             }

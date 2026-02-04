@@ -697,25 +697,30 @@ mod merge_tests {
         // build up root -> group1 -> subgroup1 -> entry2
         db.root_mut()
             .add_group_with_id(GROUP1_ID)
-            .edit_tracking(|g| g.name = "group1".to_string())
+            .edit(|g| g.name = "group1".to_string())
             .add_group_with_id(SUBGROUP1_ID)
-            .edit_tracking(|sg| sg.name = "subgroup1".to_string())
+            .edit(|sg| sg.name = "subgroup1".to_string())
             .add_entry_with_id(ENTRY2_ID)
-            .edit_tracking(|e| e.set_unprotected("Title", "entry2"));
+            .edit(|e| e.set_unprotected("Title", "entry2"));
 
         // build up root -> group2 -> subgroup2
         db.root_mut()
             .add_group_with_id(GROUP2_ID)
-            .edit_tracking(|g| g.name = "group2".to_string())
+            .edit(|g| g.name = "group2".to_string())
             .add_group_with_id(SUBGROUP2_ID)
-            .edit_tracking(|sg| sg.name = "subgroup2".to_string());
+            .edit(|sg| sg.name = "subgroup2".to_string());
 
         // Placing the first entry in the root group
         db.root_mut()
             .add_entry_with_id(ENTRY1_ID)
-            .edit_tracking(|e| e.set_unprotected("Title", "entry1"));
+            .edit(|e| e.set_unprotected("Title", "entry1"));
 
         db
+    }
+
+    /// sleep for 1 second to ensure different timestamps
+    fn sleep() {
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
     fn assert_history_ordered(history: &History) {
@@ -758,6 +763,8 @@ mod merge_tests {
         // The two groups should be exactly the same after merging, since
         // nothing was performed during the merge.
         assert_eq!(destination_db, source_db);
+
+        sleep();
 
         // Now modify an entry in the destination database, and merge again.
         destination_db
@@ -874,7 +881,7 @@ mod merge_tests {
         let modified_entry_id = destination_db
             .root_mut()
             .add_entry()
-            .edit_tracking(|e| e.set_unprotected("Title", "original_title"))
+            .edit(|e| e.set_unprotected("Title", "original_title"))
             .id();
 
         let deleted_group_id = destination_db
@@ -884,6 +891,8 @@ mod merge_tests {
             .id();
 
         let mut source_db = destination_db.clone();
+
+        sleep();
 
         // perform the update of the entry in source_db and move it to the group that will be
         // deleted
@@ -896,6 +905,8 @@ mod merge_tests {
             })
             .move_to(deleted_group_id)
             .unwrap();
+
+        sleep();
 
         // delete the group in destination_db
         destination_db.group_mut(deleted_group_id).unwrap().remove();
@@ -1055,6 +1066,8 @@ mod merge_tests {
             .track_changes()
             .remove();
 
+        sleep();
+
         // modify the entry in destination_db
         destination_db
             .entry_mut(deleted_entry_id)
@@ -1173,12 +1186,14 @@ mod merge_tests {
             .group_mut(deleted_subgroup_id)
             .unwrap()
             .add_entry()
-            .edit_tracking(|e| {
+            .edit(|e| {
                 e.set_unprotected("Title", "deleted_entry");
             })
             .id();
 
         let mut source_db = destination_db.clone();
+
+        sleep();
 
         // mark the entire group subtree as deleted in source_db
         source_db
@@ -1186,6 +1201,8 @@ mod merge_tests {
             .unwrap()
             .track_changes()
             .remove();
+
+        sleep();
 
         // modify the deleted subgroup in destination_db to be newer than the deletion time
         destination_db
@@ -1246,6 +1263,8 @@ mod merge_tests {
             .track_changes()
             .remove();
 
+        sleep();
+
         // modify the group in destination_db
         destination_db
             .group_mut(deleted_group_id)
@@ -1293,6 +1312,8 @@ mod merge_tests {
             .unwrap()
             .track_changes()
             .remove();
+
+        sleep();
 
         // add a new entry to the deleted group in destination_db
         let new_entry_id = destination_db
@@ -1414,6 +1435,8 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
+        sleep();
+
         // before
         // root (ROOT_GROUP_ID)
         // ├── entry1 (ENTRY1_ID)
@@ -1473,6 +1496,8 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
+        sleep();
+
         // perform first edit of entry in source
         source_db.entry_mut(ENTRY2_ID).unwrap().edit_tracking(|e| {
             e.set_unprotected("Title", "entry2_modified_in_source");
@@ -1492,6 +1517,8 @@ mod merge_tests {
             .times
             .location_changed
             .unwrap();
+
+        sleep();
 
         // perform second edit of entry in destination
         destination_db.entry_mut(ENTRY2_ID).unwrap().edit_tracking(|e| {
@@ -1536,6 +1563,8 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
+
+        sleep();
 
         // edit entry in source
         source_db.entry_mut(ENTRY2_ID).unwrap().edit_tracking(|e| {
@@ -1595,7 +1624,7 @@ mod merge_tests {
         let new_entry_id = destination_db
             .root_mut()
             .add_entry()
-            .edit_tracking(|e| {
+            .edit(|e| {
                 e.set_unprotected("Title", "new_entry");
             })
             .id();
@@ -1610,6 +1639,8 @@ mod merge_tests {
             .add_group()
             .edit(|g| g.name = "new_group".to_string())
             .id();
+
+        sleep();
 
         // modify the entry in source
         source_db.entry_mut(new_entry_id).unwrap().edit_tracking(|e| {
@@ -1648,6 +1679,8 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
+
+        sleep();
 
         // before
         // root (ROOT_GROUP_ID)
@@ -1708,6 +1741,8 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
+        sleep();
+
         // update entry in destination
         destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
             e.set_unprotected("Title", "entry1_updated");
@@ -1721,7 +1756,7 @@ mod merge_tests {
         // check that history is preserved
         let merged_history = destination_db.entry(ENTRY1_ID).unwrap().history.clone().unwrap();
         assert_history_ordered(&merged_history);
-        assert_eq!(merged_history.entries.len(), 2);
+        assert_eq!(merged_history.entries.len(), 1);
 
         // check that we can find the old version of the entry
         let merged_entry = &merged_history.entries[0];
@@ -1747,6 +1782,8 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
+        sleep();
+
         // update entry in source
         source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
             e.set_unprotected("Title", "entry1_updated");
@@ -1760,7 +1797,7 @@ mod merge_tests {
         // check that history is preserved
         let merged_history = destination_db.entry(ENTRY1_ID).unwrap().history.clone().unwrap();
         assert_history_ordered(&merged_history);
-        assert_eq!(merged_history.entries.len(), 2);
+        assert_eq!(merged_history.entries.len(), 1);
 
         // check that we can find the old version of the entry
         let merged_entry = &merged_history.entries[0];
@@ -1787,10 +1824,14 @@ mod merge_tests {
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
 
+        sleep();
+
         // update entry in destination
         destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
             e.set_unprotected("Title", "entry1_updated_from_destination");
         });
+
+        sleep();
 
         // update entry in source
         source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
@@ -1814,7 +1855,7 @@ mod merge_tests {
         // check that history is preserved and contains both older versions
         let merged_history = entry.history.clone().unwrap();
         assert_history_ordered(&merged_history);
-        assert_eq!(merged_history.entries.len(), 3);
+        assert_eq!(merged_history.entries.len(), 2);
         assert_eq!(
             merged_history.entries[0].get_str("Title"),
             Some("entry1_updated_from_destination")
@@ -1835,6 +1876,8 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
+
+        sleep();
 
         source_db.group_mut(SUBGROUP1_ID).unwrap().edit_tracking(|g| {
             g.name = "subgroup1_updated_name".to_string();
@@ -1881,6 +1924,8 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
+
+        sleep();
 
         destination_db
             .group_mut(SUBGROUP1_ID)
@@ -1930,6 +1975,8 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
+
+        sleep();
 
         source_db
             .group_mut(SUBGROUP1_ID)
@@ -1981,6 +2028,8 @@ mod merge_tests {
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
+
+        sleep();
 
         // rename group in source
         source_db.group_mut(SUBGROUP1_ID).unwrap().edit_tracking(|g| {
