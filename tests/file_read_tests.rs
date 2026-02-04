@@ -336,4 +336,35 @@ mod file_read_tests {
 
         Ok(())
     }
+
+    #[test]
+    fn open_kdbx4_fuzzing() -> Result<()> {
+        use std::io::Read;
+        let path = Path::new("tests/resources/test_db_few_rounds.kdbx");
+        let file_len = path.metadata()?.len() as usize;
+
+        let mut file_as_vec = Vec::new();
+        File::open(path)?.read_to_end(&mut file_as_vec)?;
+
+        for one_len in 0..=file_len {
+            print!("Trying length: {}", one_len);
+            let current_slice = &file_as_vec[..one_len];
+            let res = Database::parse(current_slice, DatabaseKey::new().with_password("demopass"));
+            match res {
+                Ok(db) => {
+                    println!(" - DB Opened");
+
+                    assert_eq!(db.root().name, "Root");
+                    assert_eq!(db.num_entries(), 1);
+                }
+                Err(_) => {
+                    println!(" - failed with error");
+                    continue;
+                    // we don't care about error, it's normal, we just check for panic
+                }
+            }
+        }
+
+        Ok(())
+    }
 }

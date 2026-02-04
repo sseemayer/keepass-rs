@@ -9,7 +9,7 @@ pub const HMAC_KEY_END: [u8; 1] = hex!("01");
 pub(crate) fn read_hmac_block_stream(
     data: &[u8],
     key: &GenericArray<u8, U64>,
-) -> Result<Vec<u8>, BlockHashMismatchError> {
+) -> Result<Vec<u8>, BlockStreamError> {
     // keepassxc src/streams/HmacBlockStream.cpp
 
     let mut out = Vec::new();
@@ -18,16 +18,14 @@ pub(crate) fn read_hmac_block_stream(
     let mut block_index: u64 = 0;
 
     while pos < data.len() {
-        let Some(hmac) = data.get(pos..(pos + 32)) else {
-            return Err(BlockStreamError::Eof);
-        };
-        let Some(size_bytes) = data.get((pos + 32)..(pos + 36)) else {
-            return Err(BlockStreamError::Eof);
-        };
+        let hmac = data.get(pos..(pos + 32)).ok_or(BlockStreamError::UnexpectedEof)?;
+        let size_bytes = data
+            .get((pos + 32)..(pos + 36))
+            .ok_or(BlockStreamError::UnexpectedEof)?;
         let size = LittleEndian::read_u32(size_bytes) as usize;
-        let Some(block) = data.get((pos + 36)..(pos + 36 + size)) else {
-            return Err(BlockStreamError::Eof);
-        };
+        let block = data
+            .get((pos + 36)..(pos + 36 + size))
+            .ok_or(BlockStreamError::UnexpectedEof)?;
 
         // verify block hmac
         let hmac_block_key = get_hmac_block_key(block_index, key);
@@ -39,7 +37,7 @@ pub(crate) fn read_hmac_block_stream(
                 .expect("HMAC block key calculated correctly")
                 .as_slice()
         {
-            return Err(BlockHashMismatchError { block_index });
+            return Err(BlockStreamError::BlockHashMismatch { block_index });
         }
 
         pos += 36 + size;
@@ -56,9 +54,12 @@ pub(crate) fn read_hmac_block_stream(
 }
 
 #[derive(Debug, Error)]
-#[error("Block hash mismatch at block index {block_index}")]
-pub struct BlockHashMismatchError {
-    pub block_index: u64,
+pub enum BlockStreamError {
+    #[error("Block hash mismatch at block index {block_index}")]
+    BlockHashMismatch { block_index: u64 },
+
+    #[error("Unexpected end of HMAC block stream")]
+    UnexpectedEof,
 }
 
 #[cfg(feature = "save_kdbx4")]
