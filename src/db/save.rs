@@ -28,3 +28,44 @@ pub enum DatabaseSaveError {
     #[error(transparent)]
     SaveKdbx4Error(#[from] crate::format::kdbx4::SaveKdbx4Error),
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use crate::{db::fields, Database, DatabaseKey};
+
+    /// Test that a new database can be created and saved without errors, and loaded back correctly
+    #[test]
+    fn test_save() {
+        let mut db = Database::new();
+
+        db.root_mut()
+            .add_entry()
+            .edit(|e| e.set_unprotected(fields::TITLE, "Entry 1"));
+
+        db.root_mut()
+            .add_group()
+            .edit(|g| {
+                g.name = "Group 1".to_string();
+                g.add_entry()
+                    .edit(|e| e.set_unprotected(fields::TITLE, "Entry 2"));
+            })
+            .add_group()
+            .edit(|g| {
+                g.name = "Subgroup 1".to_string();
+                g.add_entry()
+                    .edit(|e| e.set_unprotected(fields::TITLE, "Entry 3"));
+            });
+
+        let key = DatabaseKey::new().with_password("testpass");
+        let mut buffer: Vec<u8> = Vec::new();
+
+        db.save(&mut buffer, key.clone())
+            .expect("Failed to save database");
+
+        let loaded_db = Database::open(&mut buffer.as_slice(), key).expect("Failed to load saved database");
+
+        assert_eq!(db, loaded_db);
+    }
+}

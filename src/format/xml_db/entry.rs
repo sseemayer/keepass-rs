@@ -35,7 +35,7 @@ pub struct Entry {
     #[serde(default, with = "cs_opt_string")]
     pub tags: Option<String>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub times: Option<Times>,
 
     #[serde(default, rename = "String")]
@@ -44,10 +44,10 @@ pub struct Entry {
     #[serde(default, rename = "Binary")]
     pub binary_fields: Vec<BinaryField>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_type: Option<AutoType>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history: Option<History>,
 }
 

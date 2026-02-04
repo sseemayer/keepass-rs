@@ -51,10 +51,10 @@ pub struct Meta {
     #[serde(default, with = "cs_opt_fromstr")]
     master_key_change_force: Option<isize>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     memory_protection: Option<MemoryProtection>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_icons: Option<CustomIcons>,
 
     #[serde(default, with = "cs_opt_bool")]
@@ -87,17 +87,17 @@ pub struct Meta {
     #[serde(default, with = "cs_opt_string")]
     settings_changed: Option<Timestamp>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub binaries: Option<Binaries>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     custom_data: Option<CustomData>,
 }
 
 impl From<Meta> for crate::db::Meta {
     fn from(val: Meta) -> Self {
         // NOTE: custom icons and binary attachments are moved out of the Meta into the main
-        // databsase, so they are not converted here.
+        // database, so they are not converted here.
         crate::db::Meta {
             generator: val.generator,
             database_name: val.database_name,
