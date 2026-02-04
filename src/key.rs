@@ -249,7 +249,7 @@ impl DatabaseKey {
         )?));
         Ok(self)
     }
-    /// Create a database key with a `keyfile`
+    /// Creates a database key with a `keyfile`
     ///
     /// # Errors
     ///
