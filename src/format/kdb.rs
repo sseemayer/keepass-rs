@@ -309,7 +309,7 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
 
     // KDF is always AES
     let kdf_config = KdfConfig::Aes {
-        rounds: header.transform_rounds as u64,
+        rounds: u64::from(header.transform_rounds),
     };
 
     let transformed_key = kdf_config

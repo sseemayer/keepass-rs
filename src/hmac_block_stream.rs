@@ -19,10 +19,16 @@ pub(crate) fn read_hmac_block_stream(
     let mut block_index: u64 = 0;
 
     while pos < data.len() {
-        let hmac = &data[pos..(pos + 32)];
-        let size_bytes = &data[(pos + 32)..(pos + 36)];
+        let Some(hmac) = data.get(pos..(pos + 32)) else {
+            return Err(BlockStreamError::Eof);
+        };
+        let Some(size_bytes) = data.get((pos + 32)..(pos + 36)) else {
+            return Err(BlockStreamError::Eof);
+        };
         let size = LittleEndian::read_u32(size_bytes) as usize;
-        let block = &data[(pos + 36)..(pos + 36 + size)];
+        let Some(block) = data.get((pos + 36)..(pos + 36 + size)) else {
+            return Err(BlockStreamError::Eof);
+        };
 
         // verify block hmac
         let hmac_block_key = get_hmac_block_key(block_index, key)?;

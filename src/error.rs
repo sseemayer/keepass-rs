@@ -252,6 +252,9 @@ pub enum BlockStreamError {
 
     #[error("Block hash mismatch for block {}", block_index)]
     BlockHashMismatch { block_index: u64 },
+
+    #[error("unexpected end of file")]
+    Eof,
 }
 
 /// Errors while parsing a VariantDictionary
