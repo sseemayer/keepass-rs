@@ -33,16 +33,18 @@ pub enum DatabaseSaveError {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::{db::fields, Database, DatabaseKey};
+    use crate::{db::fields, Database, DatabaseKey, Value};
 
     /// Test that a new database can be created and saved without errors, and loaded back correctly
     #[test]
     fn test_save() {
         let mut db = Database::new();
 
-        db.root_mut()
-            .add_entry()
-            .edit(|e| e.set_unprotected(fields::TITLE, "Entry 1"));
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Entry 1");
+            e.set(fields::USERNAME, Value::String("user".to_string()));
+            e.set_protected(fields::PASSWORD, "asdf");
+        });
 
         db.root_mut()
             .add_group()
@@ -67,5 +69,48 @@ mod tests {
         let loaded_db = Database::open(&mut buffer.as_slice(), key).expect("Failed to load saved database");
 
         assert_eq!(db, loaded_db);
+    }
+
+    /// test that errors are thrown for invalid database versions
+    #[test]
+    fn test_save_unsupported_version() {
+        let mut db = Database::new();
+        db.config.version = crate::config::DatabaseVersion::KDB(1);
+
+        let key = DatabaseKey::new().with_password("testpass");
+        let mut buffer: Vec<u8> = Vec::new();
+
+        let result = db.save(&mut buffer, key);
+
+        assert!(matches!(
+            result,
+            Err(crate::db::save::DatabaseSaveError::UnsupportedVersion)
+        ));
+
+        let mut db = Database::new();
+        db.config.version = crate::config::DatabaseVersion::KDB2(1);
+
+        let key = DatabaseKey::new().with_password("testpass");
+        let mut buffer: Vec<u8> = Vec::new();
+
+        let result = db.save(&mut buffer, key);
+
+        assert!(matches!(
+            result,
+            Err(crate::db::save::DatabaseSaveError::UnsupportedVersion)
+        ));
+
+        let mut db = Database::new();
+        db.config.version = crate::config::DatabaseVersion::KDB3(1);
+
+        let key = DatabaseKey::new().with_password("testpass");
+        let mut buffer: Vec<u8> = Vec::new();
+
+        let result = db.save(&mut buffer, key);
+
+        assert!(matches!(
+            result,
+            Err(crate::db::save::DatabaseSaveError::UnsupportedVersion)
+        ));
     }
 }

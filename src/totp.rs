@@ -216,6 +216,10 @@ mod kdbx4_otp_tests {
 
         assert_eq!(entry.get_str(crate::db::fields::OTP), Some(otp_str));
 
+        let otp = entry.get_otp()?;
+
+        assert_eq!(otp.value_at(1234).code, "806863");
+
         Ok(())
     }
 
@@ -234,6 +238,7 @@ mod kdbx4_otp_tests {
         };
 
         assert_eq!(otp_str.parse::<TOTP>()?, expected);
+        assert!(expected.value_now().is_ok());
 
         Ok(())
     }
@@ -246,6 +251,26 @@ mod kdbx4_otp_tests {
         let otp = otp_str.parse::<TOTP>()?;
 
         assert_eq!(otp.get_secret(), "JBSWY3DPEHPK3PXP".to_string());
+
+        Ok(())
+    }
+
+    #[test]
+    fn totp_sha256() -> Result<(), TOTPError> {
+        let otp_str = "otpauth://totp/sha256%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha256%20totp&algorithm=SHA256";
+
+        let expected = TOTP {
+            label: "sha256%20totp:none".to_string(),
+            secret: b"123456".to_vec(),
+            issuer: Some("sha256 totp".to_string()),
+            period: 30,
+            digits: 6,
+            algorithm: TOTPAlgorithm::Sha256,
+        };
+
+        assert_eq!(otp_str.parse::<TOTP>()?, expected);
+        assert_eq!(expected.value_at(1234).code, "014448");
+        assert!(expected.value_now().is_ok());
 
         Ok(())
     }
@@ -264,6 +289,8 @@ mod kdbx4_otp_tests {
         };
 
         assert_eq!(otp_str.parse::<TOTP>()?, expected);
+        assert_eq!(expected.value_at(1234).code, "317899");
+        assert!(expected.value_now().is_ok());
 
         Ok(())
     }
@@ -279,7 +306,10 @@ mod kdbx4_otp_tests {
             algorithm: TOTPAlgorithm::Sha1,
         };
 
-        assert_eq!(totp.value_at(1234).code, "806863")
+        let value = totp.value_at(1234);
+        assert_eq!(value.code, "806863");
+        assert_eq!(format!("{}", value), "Code: 806863, valid for: 26/30s");
+        assert!(totp.value_now().is_ok());
     }
 
     #[test]

@@ -158,6 +158,20 @@ mod tests {
         assert_eq!(db.meta.database_name.as_deref(), Some("Passwords"));
     }
 
+    /// test that getting XML from a valid KDBX3 file works
+    #[test]
+    fn test_get_xml_valid_kdbx3_file() {
+        let mut file = File::open("tests/resources/test_db_with_password.kdbx").unwrap();
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+
+        let key = DatabaseKey::new().with_password("demopass");
+
+        let xml = Database::get_xml(&data, key).unwrap();
+
+        assert!(xml.contains("<KeePassFile"));
+    }
+
     /// test that getting XML from a valid KDBX4 file works
     #[test]
     fn test_get_xml_valid_kdbx4_file() {
@@ -170,5 +184,21 @@ mod tests {
         let xml = Database::get_xml(&data, key).unwrap();
 
         assert!(xml.contains("<KeePassFile"));
+    }
+
+    /// test that getting XML from an unsupported KDB file fails gracefully
+    #[test]
+    fn test_get_xml_unsupported_kdb_file() {
+        let mut file = File::open("tests/resources/test_db_kdb_with_password.kdb").unwrap();
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+
+        let key = DatabaseKey::new().with_password("testpass");
+
+        let result = Database::get_xml(&data, key);
+        assert!(matches!(
+            result,
+            Err(crate::db::open::DatabaseParseError::Unsupported(_))
+        ));
     }
 }
