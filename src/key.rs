@@ -249,7 +249,11 @@ impl DatabaseKey {
         )?));
         Ok(self)
     }
-
+    /// Creates a database key with a `keyfile`
+    ///
+    /// # Errors
+    ///
+    /// Fails if the `keyfile` cannot be read
     pub fn with_keyfile(mut self, keyfile: &mut dyn Read) -> Result<Self, std::io::Error> {
         let mut buf = Vec::new();
         keyfile.read_to_end(&mut buf)?;

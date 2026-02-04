@@ -145,7 +145,7 @@ impl Entry {
     #[cfg(all(test, feature = "_merge"))]
     // Convenience function used in unit tests, to make sure that:
     // 1. The history gets updated after changing a field
-    // 2. We wait a second before commiting the changes so that the timestamp is not the same
+    // 2. We wait a second before committing the changes so that the timestamp is not the same
     //    as it previously was. This is necessary since the timestamps in the KDBX format
     //    do not preserve the msecs.
     pub(crate) fn set_field_and_commit(&mut self, field_name: &str, field_value: &str) {

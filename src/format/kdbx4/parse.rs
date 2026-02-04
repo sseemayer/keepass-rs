@@ -1,4 +1,9 @@
-use std::convert::{TryFrom, TryInto};
+//! Parse the kdbx4 format
+
+use std::{
+    convert::{TryFrom, TryInto},
+    io::ErrorKind,
+};
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -64,9 +69,24 @@ pub(crate) fn decrypt_kdbx4(
     //      header_hmac         - A HMAC of the header_data (for verification of the key_elements)
     //      hmac_block_stream   - A HMAC-verified block stream of encrypted and compressed blocks
     let header_data = &data[0..inner_header_start];
-    let header_sha256 = &data[inner_header_start..(inner_header_start + 32)];
-    let header_hmac = &data[(inner_header_start + 32)..(inner_header_start + 64)];
-    let hmac_block_stream = &data[(inner_header_start + 64)..];
+    let Some(header_sha256) = data.get(inner_header_start..(inner_header_start + 32)) else {
+        return Err(DatabaseOpenError::Io(std::io::Error::new(
+            ErrorKind::UnexpectedEof,
+            "unexpected end of file",
+        )));
+    };
+    let Some(header_hmac) = data.get((inner_header_start + 32)..(inner_header_start + 64)) else {
+        return Err(DatabaseOpenError::Io(std::io::Error::new(
+            ErrorKind::UnexpectedEof,
+            "unexpected end of file",
+        )));
+    };
+    let Some(hmac_block_stream) = data.get((inner_header_start + 64)..) else {
+        return Err(DatabaseOpenError::Io(std::io::Error::new(
+            ErrorKind::UnexpectedEof,
+            "unexpected end of file",
+        )));
+    };
 
     // verify header
     if header_sha256 != crypt::calculate_sha256(&[header_data])?.as_slice() {
@@ -160,13 +180,29 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
         //   entry_buffer: [u8; entry_length]       // the entry buffer
         // )
 
-        let entry_type = data[pos];
-        let entry_length: usize = LittleEndian::read_u32(&data[pos + 1..(pos + 5)]) as usize;
-        let entry_buffer = &data[(pos + 5)..(pos + 5 + entry_length)];
+        let Some(entry_type) = data.get(pos) else {
+            return Err(DatabaseOpenError::Io(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "unexpected end of file",
+            )));
+        };
+        let Some(entry_length_u32) = data.get(pos + 1..(pos + 5)) else {
+            return Err(DatabaseOpenError::Io(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "unexpected end of file",
+            )));
+        };
+        let entry_length: usize = LittleEndian::read_u32(entry_length_u32) as usize;
+        let Some(entry_buffer) = data.get((pos + 5)..(pos + 5 + entry_length)) else {
+            return Err(DatabaseOpenError::Io(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "unexpected end of file",
+            )));
+        };
 
         pos += 5 + entry_length;
 
-        match entry_type {
+        match *entry_type {
             HEADER_END => {
                 break;
             }
@@ -198,7 +234,10 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
             }
 
             _ => {
-                return Err(DatabaseIntegrityError::InvalidOuterHeaderEntry { entry_type }.into());
+                return Err(DatabaseIntegrityError::InvalidOuterHeaderEntry {
+                    entry_type: *entry_type,
+                }
+                .into());
             }
         };
     }

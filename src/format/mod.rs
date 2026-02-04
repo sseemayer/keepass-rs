@@ -63,8 +63,8 @@ impl DatabaseVersion {
             _ => {
                 return Err(DatabaseIntegrityError::InvalidKDBXVersion {
                     version,
-                    file_major_version: file_major_version as u32,
-                    file_minor_version: file_minor_version as u32,
+                    file_major_version: u32::from(file_major_version),
+                    file_minor_version: u32::from(file_minor_version),
                 })
             }
         };

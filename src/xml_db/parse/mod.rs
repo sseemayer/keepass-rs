@@ -558,7 +558,7 @@ mod parse_test {
     fn test_custom_xml_fields() -> Result<(), XmlParseError> {
         let xml = include_bytes!("../../../tests/resources/inner_xml_with_custom_fields.xml");
 
-        let mut inner_cipher = InnerCipherConfig::Plain.get_cipher(&[]).unwrap();
+        let mut inner_cipher = InnerCipherConfig::Plain.get_cipher(&[])?;
 
         let _database_content = parse(&xml[..], &mut *inner_cipher)?;
 
