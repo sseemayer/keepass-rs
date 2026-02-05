@@ -83,3 +83,24 @@ impl serde::Serialize for Value {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Value;
+
+    #[test]
+    fn test_value() {
+        let unprotected = Value::string("test");
+        let protected = Value::protected_string("test");
+        assert!(!unprotected.is_protected());
+        assert!(protected.is_protected());
+
+        assert_eq!(unprotected.as_str(), "test");
+        assert_eq!(protected.as_str(), "test");
+
+        assert_eq!(format!("{}", unprotected), "test");
+        assert_eq!(format!("{}", protected), "[redacted]");
+
+        assert_ne!(unprotected, protected);
+    }
+}

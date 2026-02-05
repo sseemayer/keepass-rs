@@ -100,7 +100,10 @@ impl Entry {
                     .entries
                     .into_iter()
                     .map(|e| {
-                        let mut he = crate::db::Entry::new(target.as_ref().parent().id());
+                        let mut he = crate::db::Entry::with_id(
+                            crate::db::EntryId::with_uuid(e.uuid.0),
+                            target.as_ref().parent().id(),
+                        );
                         e.xml_to_history(&mut he, inner_decryptor)?;
                         Ok(he)
                     })
@@ -148,6 +151,8 @@ impl Entry {
         target.autotype = self.auto_type.map(|at| at.into());
 
         // history cannot be handled here as this is already a history entry
+        // delete the history because it gets auto-created by the constructor
+        target.history = None;
 
         Ok(())
     }
@@ -210,7 +215,7 @@ impl Entry {
             foreground_color: db.foreground_color.clone(),
             background_color: db.background_color.clone(),
             override_url: db.override_url.clone(),
-            tags: db.tags.iter().cloned().reduce(|a, b| format!("{a};{b}")),
+            tags: db.tags.iter().cloned().reduce(|a, b| format!("{a},{b}")),
             times: Some(db.times().clone().into()),
             string_fields,
             binary_fields,
@@ -253,7 +258,7 @@ impl Entry {
             foreground_color: db.foreground_color.clone(),
             background_color: db.background_color.clone(),
             override_url: db.override_url.clone(),
-            tags: db.tags.iter().cloned().reduce(|a, b| format!("{a};{b}")),
+            tags: db.tags.iter().cloned().reduce(|a, b| format!("{a},{b}")),
             times: Some(db.times.clone().into()),
             string_fields,
             binary_fields: vec![], // binary fields cannot be handled here as we don't have access to header attachments
@@ -336,7 +341,11 @@ pub struct BinaryValue {
 pub struct AutoType {
     #[serde(default, with = "cs_bool")]
     pub enabled: bool,
+
+    #[serde(default, with = "cs_opt_fromstr")]
     pub data_transfer_obfuscation: Option<isize>,
+
+    #[serde(default, with = "cs_opt_string")]
     pub default_sequence: Option<String>,
 
     #[serde(rename = "Association", default)]

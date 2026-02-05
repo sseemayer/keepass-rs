@@ -432,3 +432,67 @@ impl Drop for EntryTrack<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use crate::{db::fields, Database};
+
+    #[test]
+    fn test_entry() {
+        let mut db = Database::new();
+
+        let entry_id = db
+            .root_mut()
+            .add_entry()
+            .edit(|e| {
+                e.set_unprotected(fields::TITLE, "Entry 1");
+                e.set(fields::USERNAME, crate::db::Value::String("user".to_string()));
+                e.set_protected(fields::PASSWORD, "asdf");
+            })
+            .id();
+
+        assert_eq!(db.num_attachments(), 0);
+        assert_eq!(db.num_entries(), 1);
+
+        assert_eq!(
+            db.entry(entry_id).unwrap().history.clone().unwrap().entries.len(),
+            0
+        );
+
+        assert_eq!(
+            db.entry(entry_id).unwrap().get_str(fields::TITLE).unwrap(),
+            "Entry 1"
+        );
+
+        db.entry_mut(entry_id)
+            .unwrap()
+            .edit_tracking(|e| {
+                e.set_unprotected(fields::TITLE, "Modified Entry 1");
+            })
+            .add_attachment()
+            .edit(|a| {
+                a.name = "Attachment 1".to_string();
+                a.set_data(b"Attachment data".to_vec());
+                a.protected = !a.protected;
+            });
+
+        assert_eq!(db.num_attachments(), 1);
+        assert_eq!(db.num_entries(), 1);
+        assert_eq!(
+            db.entry(entry_id).unwrap().history.clone().unwrap().entries.len(),
+            1
+        );
+
+        assert_eq!(
+            db.entry(entry_id).unwrap().get_str(fields::TITLE).unwrap(),
+            "Modified Entry 1"
+        );
+
+        db.entry_mut(entry_id).unwrap().remove();
+
+        assert_eq!(db.num_entries(), 0);
+        assert_eq!(db.num_attachments(), 0);
+    }
+}

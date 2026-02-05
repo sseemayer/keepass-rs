@@ -97,6 +97,15 @@ impl AttachmentMut<'_> {
     pub(crate) fn new(database: &mut crate::db::Database, id: AttachmentId) -> AttachmentMut<'_> {
         AttachmentMut { database, id }
     }
+
+    /// Edit the attachment in place using a closure
+    pub fn edit<F>(&mut self, f: F) -> &mut Self
+    where
+        F: FnOnce(&mut AttachmentMut),
+    {
+        f(self);
+        self
+    }
 }
 
 impl Deref for AttachmentMut<'_> {

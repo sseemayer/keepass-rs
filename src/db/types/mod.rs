@@ -209,3 +209,78 @@ impl Database {
             .then(move || IconMut::new(self, id))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{db::fields, Database};
+
+    #[test]
+    fn test_database_new() {
+        let db = Database::new();
+        assert_eq!(db.num_groups(), 1); // root group
+        assert_eq!(db.num_entries(), 0);
+        assert_eq!(db.num_attachments(), 0);
+    }
+
+    #[test]
+    fn test_entry_iteration() {
+        let mut db = Database::new();
+
+        let mut root = db.root_mut();
+        for i in 0..5 {
+            root.add_entry().edit(|e| {
+                e.set_unprotected(fields::TITLE, &format!("Entry {}", i));
+            });
+        }
+
+        let mut count = 0;
+        for entry in db.iter_all_entries() {
+            assert!(entry.get_str(fields::TITLE).unwrap().starts_with("Entry "));
+            count += 1;
+        }
+        assert_eq!(count, 5);
+
+        db.foreach_entry_mut(|mut e| {
+            let entry_title = e.get_str(fields::TITLE).unwrap().to_string();
+            e.set_unprotected(fields::USERNAME, format!("User for {}", entry_title));
+        });
+
+        for entry in db.iter_all_entries() {
+            let title = entry.get_str(fields::TITLE).unwrap();
+            let username = entry.get_str(fields::USERNAME).unwrap();
+            assert_eq!(username, format!("User for {}", title));
+        }
+    }
+
+    #[test]
+    fn test_group_iteration() {
+        let mut db = Database::new();
+
+        let mut root = db.root_mut();
+        for i in 0..3 {
+            root.add_group().edit(|g| {
+                g.name = format!("Group {}", i);
+            });
+        }
+
+        let mut count = 0;
+        for group in db.iter_all_groups() {
+            if group.id() == db.root().id() {
+                continue; // skip root group
+            }
+
+            assert!(group.name.starts_with("Group "));
+            count += 1;
+        }
+        assert_eq!(count, 3);
+
+        db.foreach_group_mut(|mut g| {
+            let group_name = g.name.to_string();
+            g.name = format!("Renamed {}", group_name);
+        });
+
+        for group in db.iter_all_groups() {
+            assert!(group.name.starts_with("Renamed ") || group.id() == db.root().id());
+        }
+    }
+}
