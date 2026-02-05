@@ -77,7 +77,6 @@ impl serde::Serialize for Attachment {
         use serde::ser::SerializeStruct;
 
         let mut state = serializer.serialize_struct("Attachment", 4)?;
-        state.serialize_field("id", &self.id)?;
         state.serialize_field("name", &self.name)?;
         state.serialize_field("protected", &self.protected)?;
         state.serialize_field("data", &base64_engine::STANDARD.encode(self.data()))?;

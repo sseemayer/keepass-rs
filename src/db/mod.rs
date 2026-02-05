@@ -44,6 +44,9 @@ mod types;
 #[cfg(feature = "_merge")]
 mod merge;
 
+#[cfg(feature = "serialization")]
+mod serialization;
+
 pub use open::{DatabaseOpenError, DatabaseParseError, GetDatabaseVersionError};
 pub use types::*;
 
