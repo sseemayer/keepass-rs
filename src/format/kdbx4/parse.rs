@@ -1,9 +1,6 @@
 //! Parse the kdbx4 format
 
-use std::{
-    convert::{TryFrom, TryInto},
-    io::ErrorKind,
-};
+use std::convert::{TryFrom, TryInto};
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -11,7 +8,7 @@ use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
     db::{Database, HeaderAttachment},
-    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
+    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, UnexpectedEof},
     format::{
         kdbx4::{
             KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
@@ -28,12 +25,13 @@ use crate::{
 
 use super::KDBX4InnerHeader;
 
-impl From<&[u8]> for HeaderAttachment {
-    fn from(data: &[u8]) -> Self {
-        let flags = data[0];
-        let content = data[1..].to_vec();
+impl TryFrom<&[u8]> for HeaderAttachment {
+    type Error = std::io::Error;
+    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+        let flags = *data.first().ok_or(UnexpectedEof::err())?;
+        let content = data.get(1..).ok_or(UnexpectedEof::err())?.to_vec();
 
-        HeaderAttachment { flags, content }
+        Ok(Self { flags, content })
     }
 }
 
@@ -68,25 +66,16 @@ pub(crate) fn decrypt_kdbx4(
     //      header_sha256       - A Sha256 hash of header_data (for verification of header integrity)
     //      header_hmac         - A HMAC of the header_data (for verification of the key_elements)
     //      hmac_block_stream   - A HMAC-verified block stream of encrypted and compressed blocks
-    let header_data = &data[0..inner_header_start];
-    let Some(header_sha256) = data.get(inner_header_start..(inner_header_start + 32)) else {
-        return Err(DatabaseOpenError::Io(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "unexpected end of file",
-        )));
-    };
-    let Some(header_hmac) = data.get((inner_header_start + 32)..(inner_header_start + 64)) else {
-        return Err(DatabaseOpenError::Io(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "unexpected end of file",
-        )));
-    };
-    let Some(hmac_block_stream) = data.get((inner_header_start + 64)..) else {
-        return Err(DatabaseOpenError::Io(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "unexpected end of file",
-        )));
-    };
+    let header_data = data.get(0..inner_header_start).ok_or(UnexpectedEof::err())?;
+    let header_sha256 = data
+        .get(inner_header_start..(inner_header_start + 32))
+        .ok_or(UnexpectedEof::err())?;
+    let header_hmac = data
+        .get((inner_header_start + 32)..(inner_header_start + 64))
+        .ok_or(UnexpectedEof::err())?;
+    let hmac_block_stream = data
+        .get((inner_header_start + 64)..)
+        .ok_or(UnexpectedEof::err())?;
 
     // verify header
     if header_sha256 != crypt::calculate_sha256(&[header_data])?.as_slice() {
@@ -135,7 +124,7 @@ pub(crate) fn decrypt_kdbx4(
     let (header_attachments, inner_header, body_start) = parse_inner_header(&payload)?;
 
     // after inner header is one XML document
-    let xml = &payload[body_start..];
+    let xml = &payload.get(body_start..).ok_or(UnexpectedEof::err())?;
 
     // initialize the inner decryptor
     let inner_decryptor = inner_header
@@ -180,25 +169,12 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
         //   entry_buffer: [u8; entry_length]       // the entry buffer
         // )
 
-        let Some(entry_type) = data.get(pos) else {
-            return Err(DatabaseOpenError::Io(std::io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "unexpected end of file",
-            )));
-        };
-        let Some(entry_length_u32) = data.get(pos + 1..(pos + 5)) else {
-            return Err(DatabaseOpenError::Io(std::io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "unexpected end of file",
-            )));
-        };
+        let entry_type = data.get(pos).ok_or(UnexpectedEof::err())?;
+        let entry_length_u32 = data.get(pos + 1..(pos + 5)).ok_or(UnexpectedEof::err())?;
         let entry_length: usize = LittleEndian::read_u32(entry_length_u32) as usize;
-        let Some(entry_buffer) = data.get((pos + 5)..(pos + 5 + entry_length)) else {
-            return Err(DatabaseOpenError::Io(std::io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "unexpected end of file",
-            )));
-        };
+        let entry_buffer = data
+            .get((pos + 5)..(pos + 5 + entry_length))
+            .ok_or(UnexpectedEof::err())?;
 
         pos += 5 + entry_length;
 
@@ -283,9 +259,12 @@ fn parse_inner_header(
     let mut header_attachments = Vec::new();
 
     loop {
-        let entry_type = data[pos];
-        let entry_length: usize = LittleEndian::read_u32(&data[pos + 1..(pos + 5)]) as usize;
-        let entry_buffer = &data[(pos + 5)..(pos + 5 + entry_length)];
+        let entry_type = *data.get(pos).ok_or(UnexpectedEof::err())?;
+        let entry_length: usize =
+            LittleEndian::read_u32(data.get(pos + 1..(pos + 5)).ok_or(UnexpectedEof::err())?) as usize;
+        let entry_buffer = data
+            .get((pos + 5)..(pos + 5 + entry_length))
+            .ok_or(UnexpectedEof::err())?;
 
         pos += 5 + entry_length;
 
@@ -299,7 +278,7 @@ fn parse_inner_header(
             INNER_HEADER_RANDOM_STREAM_KEY => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
             INNER_HEADER_BINARY_ATTACHMENTS => {
-                let header_attachment = HeaderAttachment::from(entry_buffer);
+                let header_attachment = HeaderAttachment::try_from(entry_buffer)?;
                 header_attachments.push(header_attachment);
             }
 

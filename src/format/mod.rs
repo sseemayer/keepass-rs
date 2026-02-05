@@ -9,7 +9,7 @@ use std::io::Write;
 use byteorder::WriteBytesExt;
 use byteorder::{ByteOrder, LittleEndian};
 
-use crate::error::DatabaseIntegrityError;
+use crate::error::{DatabaseIntegrityError, UnexpectedEof};
 
 const KDBX_IDENTIFIER: [u8; 4] = [0x03, 0xd9, 0xa2, 0x9a];
 
@@ -37,19 +37,25 @@ pub enum DatabaseVersion {
 }
 
 impl DatabaseVersion {
+    /// Parse the database version
+    ///
+    /// # Errors
+    ///
+    /// Fails if the source cannot be read
     pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseIntegrityError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
             return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
         }
 
         // check identifier
-        if data[0..4] != KDBX_IDENTIFIER {
+        let identifer = data.get(0..4).ok_or(UnexpectedEof::err())?;
+        if identifer != KDBX_IDENTIFIER {
             return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
         }
 
-        let version = LittleEndian::read_u32(&data[4..8]);
-        let file_minor_version = LittleEndian::read_u16(&data[8..10]);
-        let file_major_version = LittleEndian::read_u16(&data[10..12]);
+        let version = LittleEndian::read_u32(data.get(4..8).ok_or(UnexpectedEof::err())?);
+        let file_minor_version = LittleEndian::read_u16(data.get(8..10).ok_or(UnexpectedEof::err())?);
+        let file_major_version = LittleEndian::read_u16(data.get(10..12).ok_or(UnexpectedEof::err())?);
 
         let response = match version {
             KEEPASS_1_ID => DatabaseVersion::KDB(file_minor_version),

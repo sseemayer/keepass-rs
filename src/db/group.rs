@@ -452,7 +452,7 @@ impl<'a> IntoIterator for &'a Group {
     type IntoIter = NodeIter<'a>;
 
     fn into_iter(self) -> NodeIter<'a> {
-        let mut queue: VecDeque<NodeRef> = VecDeque::new();
+        let mut queue: VecDeque<NodeRef<'_>> = VecDeque::new();
         queue.push_back(NodeRef::Group(self));
 
         NodeIter::new(queue)

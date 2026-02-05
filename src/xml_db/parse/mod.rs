@@ -26,11 +26,11 @@ pub fn parse_xml_timestamp(t: &str) -> Result<chrono::NaiveDateTime, XmlParseErr
         Ok(ndt) => Ok(ndt),
         // If we don't have a valid ISO 8601 string, assume we have found a Base64 encoded int.
         _ => {
-            let v = base64_engine::STANDARD.decode(t)?;
+            let decoded_b64 = base64_engine::STANDARD.decode(t)?;
 
             // Cast the decoded base64 Vec into the array expected by i64::from_le_bytes
             let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-            a.copy_from_slice(&v[0..8]);
+            a.copy_from_slice(decoded_b64.get(0..8).ok_or(XmlParseError::Eof)?);
             let ndt = get_epoch_baseline() + chrono::Duration::seconds(i64::from_le_bytes(a));
             Ok(ndt)
         }

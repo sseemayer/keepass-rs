@@ -1,5 +1,15 @@
 #![doc = include_str!("../README.md")]
 #![recursion_limit = "1024"]
+#![warn(clippy::all, rust_2018_idioms)]
+#![deny(
+    // missing_docs,
+    clippy::all,
+    clippy::missing_errors_doc,
+    clippy::cargo,
+    clippy::expect_used,
+    clippy::cast_lossless,
+    // clippy::indexing_slicing,
+)]
 
 mod compression;
 pub mod config;

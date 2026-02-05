@@ -2,7 +2,7 @@ use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{calculate_sha256, ciphers::Cipher},
     db::Database,
-    error::{BlockStreamError, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
+    error::{BlockStreamError, DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, UnexpectedEof},
     format::DatabaseVersion,
     key::DatabaseKey,
 };
@@ -54,9 +54,12 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, DatabaseOpenError> {
         //   entry_buffer: [u8; entry_length]       // the entry buffer
         // )
 
-        let entry_type = data[pos];
-        let entry_length: usize = LittleEndian::read_u16(&data[pos + 1..(pos + 3)]) as usize;
-        let entry_buffer = &data[(pos + 3)..(pos + 3 + entry_length)];
+        let entry_type = *data.get(pos).ok_or(UnexpectedEof::err())?;
+        let entry_length: usize =
+            LittleEndian::read_u16(data.get(pos + 1..(pos + 3)).ok_or(UnexpectedEof::err())?) as usize;
+        let entry_buffer = data
+            .get((pos + 3)..(pos + 3 + entry_length))
+            .ok_or(UnexpectedEof::err())?;
 
         pos += 3 + entry_length;
 
@@ -207,7 +210,7 @@ pub(crate) fn decrypt_kdbx3(
     let compression = config.compression_config.get_compression();
 
     // Rest of file after header is payload
-    let payload_encrypted = &data[pos..];
+    let payload_encrypted = &data.get(pos..).ok_or(UnexpectedEof::err())?;
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
@@ -229,7 +232,11 @@ pub(crate) fn decrypt_kdbx3(
         .decrypt(payload_encrypted)?;
 
     // Check if we decrypted correctly
-    if &payload[0..header.stream_start.len()] != header.stream_start.as_slice() {
+    if payload
+        .get(0..header.stream_start.len())
+        .ok_or(UnexpectedEof::err())?
+        != header.stream_start.as_slice()
+    {
         return Err(DatabaseKeyError::IncorrectKey.into());
     }
 
@@ -250,15 +257,18 @@ pub(crate) fn decrypt_kdbx3(
         // )
 
         // let block_id = LittleEndian::read_u32(&payload[pos..(pos + 4)]);
-        let block_hash = &payload[(pos + 4)..(pos + 36)];
-        let block_size = LittleEndian::read_u32(&payload[(pos + 36)..(pos + 40)]) as usize;
+        let block_hash = payload.get((pos + 4)..(pos + 36)).ok_or(UnexpectedEof::err())?;
+        let block_size =
+            LittleEndian::read_u32(payload.get((pos + 36)..(pos + 40)).ok_or(UnexpectedEof::err())?) as usize;
 
         // A block with size 0 means we have hit EOF
         if block_size == 0 {
             break;
         }
 
-        let block_buffer_compressed = &payload[(pos + 40)..(pos + 40 + block_size)];
+        let block_buffer_compressed = payload
+            .get((pos + 40)..(pos + 40 + block_size))
+            .ok_or(UnexpectedEof::err())?;
 
         // Test block hash
         let block_hash_check = calculate_sha256(&[block_buffer_compressed])?;

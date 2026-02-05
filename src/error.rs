@@ -5,6 +5,14 @@ use thiserror::Error;
 #[cfg(feature = "totp")]
 pub use crate::db::otp::TOTPError;
 
+pub struct UnexpectedEof;
+
+impl UnexpectedEof {
+    pub(crate) fn err() -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected end of file")
+    }
+}
+
 /// Errors upon reading a Database
 #[derive(Debug, Error)]
 pub enum DatabaseOpenError {

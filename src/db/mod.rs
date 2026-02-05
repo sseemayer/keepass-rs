@@ -67,6 +67,10 @@ pub struct Database {
 
 impl Database {
     /// Parse a database from a std::io::Read
+    ///
+    /// # Errors
+    ///
+    /// Fails if the source cannot be read
     pub fn open(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Database, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
@@ -74,6 +78,11 @@ impl Database {
         Database::parse(data.as_ref(), key)
     }
 
+    /// Parse a database from a slice
+    ///
+    /// # Errors
+    ///
+    /// Fails if the parsing of the version or the data fails
     pub fn parse(data: &[u8], key: DatabaseKey) -> Result<Database, DatabaseOpenError> {
         let database_version = DatabaseVersion::parse(data)?;
 
@@ -104,6 +113,10 @@ impl Database {
     }
 
     /// Helper function to load a database into its internal XML chunks
+    ///
+    /// # Errors
+    ///
+    /// Fails if the source cannot be read or parsed
     pub fn get_xml(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Vec<u8>, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
@@ -121,6 +134,10 @@ impl Database {
     }
 
     /// Get the version of a database without decrypting it
+    ///
+    /// # Errors
+    ///
+    /// Fails if the source cannot be read or parsed
     pub fn get_version(source: &mut dyn std::io::Read) -> Result<DatabaseVersion, DatabaseIntegrityError> {
         let mut data = vec![0; DatabaseVersion::get_version_header_size()];
         source.read_exact(&mut data)?;
