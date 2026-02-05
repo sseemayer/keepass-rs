@@ -77,16 +77,19 @@ impl DumpXml for Value {
         inner_cipher: &mut dyn Cipher,
     ) -> Result<(), xml::writer::Error> {
         match self {
-            Value::Bytes(b) => {
-                SimpleTag("Value", std::str::from_utf8(b).expect("utf-8")).dump_xml(writer, inner_cipher)
-            }
+            Value::Bytes(b) => SimpleTag(
+                "Value",
+                std::str::from_utf8(b)
+                    .map_err(|e| std::io::Error::other(format!("Error while converting the value to utf-8: {e}")))?,
+            )
+            .dump_xml(writer, inner_cipher),
             Value::Unprotected(s) => SimpleTag("Value", s).dump_xml(writer, inner_cipher),
             Value::Protected(p) => {
                 writer.write(WriterEvent::start_element("Value").attr("Protected", "True"))?;
 
                 let encrypted_value = inner_cipher
                     .encrypt(p.unsecure())
-                    .expect("Encrypt with inner cipher");
+                    .map_err(|e| std::io::Error::other(format!("Error while encrypting the value: {e}")))?;
 
                 let protected_value = base64_engine::STANDARD.encode(&encrypted_value);
 

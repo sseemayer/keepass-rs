@@ -4,7 +4,7 @@
 #![deny(
     // missing_docs,
     clippy::all,
-    clippy::missing_errors_doc,
+    // clippy::missing_errors_doc,
     clippy::cargo,
     clippy::expect_used,
     clippy::cast_lossless,
