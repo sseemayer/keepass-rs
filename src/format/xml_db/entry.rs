@@ -9,6 +9,7 @@ use crate::{
     db::Color,
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_fromstr, cs_opt_string},
+        meta::CustomData,
         times::Times,
         UUID,
     },
@@ -49,6 +50,9 @@ pub struct Entry {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history: Option<History>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_data: Option<CustomData>,
 }
 
 impl Entry {
@@ -111,6 +115,10 @@ impl Entry {
             });
         }
 
+        if let Some(cd) = self.custom_data {
+            target.custom_data = cd.into();
+        }
+
         Ok(())
     }
 
@@ -153,6 +161,10 @@ impl Entry {
         // history cannot be handled here as this is already a history entry
         // delete the history because it gets auto-created by the constructor
         target.history = None;
+
+        if let Some(cd) = self.custom_data {
+            target.custom_data = cd.into();
+        }
 
         Ok(())
     }
@@ -209,6 +221,12 @@ impl Entry {
                 .collect(),
         });
 
+        let custom_data: Option<CustomData> = if db.custom_data.is_empty() {
+            None
+        } else {
+            Some(db.custom_data.clone().into())
+        };
+
         Entry {
             uuid: UUID(db.id().uuid()),
             icon_id: db.icon_id,
@@ -221,6 +239,7 @@ impl Entry {
             binary_fields,
             auto_type: db.autotype.as_ref().map(|at| at.clone().into()),
             history,
+            custom_data,
         }
     }
 
@@ -252,6 +271,12 @@ impl Entry {
             })
             .collect();
 
+        let custom_data: Option<CustomData> = if db.custom_data.is_empty() {
+            None
+        } else {
+            Some(db.custom_data.clone().into())
+        };
+
         Entry {
             uuid: UUID(db.id().uuid()),
             icon_id: db.icon_id,
@@ -264,6 +289,7 @@ impl Entry {
             binary_fields: vec![], // binary fields cannot be handled here as we don't have access to header attachments
             auto_type: db.autotype.as_ref().map(|at| at.clone().into()),
             history: None, // history cannot be handled here as this is already a history entry
+            custom_data,
         }
     }
 }

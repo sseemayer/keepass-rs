@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
@@ -225,7 +227,7 @@ impl Binary {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct CustomData {
+pub struct CustomData {
     #[serde(default, rename = "Item")]
     items: Vec<CustomDataItem>,
 }
@@ -272,6 +274,52 @@ impl CustomData {
             .collect();
 
         Self { items }
+    }
+}
+
+impl From<HashMap<String, crate::db::CustomDataItem>> for CustomData {
+    fn from(db: HashMap<String, crate::db::CustomDataItem>) -> Self {
+        let items = db
+            .into_iter()
+            .map(|(key, item)| {
+                let value = item
+                    .value
+                    .as_ref()
+                    .map(|v| v.clone().into())
+                    .unwrap_or(CustomDataValue::String(String::new()));
+
+                let last_modification_time = item.last_modification_time.as_ref().map(|t| t.clone().into());
+
+                CustomDataItem {
+                    key,
+                    value,
+                    last_modification_time,
+                }
+            })
+            .collect();
+
+        Self { items }
+    }
+}
+
+impl From<CustomData> for HashMap<String, crate::db::CustomDataItem> {
+    fn from(cd: CustomData) -> Self {
+        cd.items
+            .into_iter()
+            .map(|item| {
+                let value = item.value.into();
+
+                let last_modification_time = item.last_modification_time.map(|t| t.into());
+
+                (
+                    item.key,
+                    crate::db::CustomDataItem {
+                        value: Some(value),
+                        last_modification_time,
+                    },
+                )
+            })
+            .collect()
     }
 }
 

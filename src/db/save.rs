@@ -33,17 +33,63 @@ pub enum DatabaseSaveError {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::{db::fields, Database, DatabaseKey, Value};
+    use crate::{
+        db::{fields, Times},
+        Database, DatabaseKey, Value,
+    };
 
     /// Test that a new database can be created and saved without errors, and loaded back correctly
     #[test]
     fn test_save() {
         let mut db = Database::new();
 
-        db.root_mut().add_entry().edit(|e| {
-            e.set_unprotected(fields::TITLE, "Entry 1");
-            e.set(fields::USERNAME, Value::String("user".to_string()));
-            e.set_protected(fields::PASSWORD, "asdf");
+        // create an elaborate entry to test serialization and deserialization of all fields
+        let entry_id = db
+            .root_mut()
+            .add_entry()
+            .edit(|e| {
+                e.set_unprotected(fields::TITLE, "Entry 1");
+                e.set(fields::USERNAME, Value::String("user".to_string()));
+                e.set_protected(fields::PASSWORD, "asdf");
+
+                e.autotype = Some(crate::db::AutoType {
+                    enabled: true,
+                    default_sequence: Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string()),
+                    data_transfer_obfuscation: None,
+                    associations: vec![],
+                });
+
+                e.tags.insert("test".to_string());
+                e.tags.insert("example".to_string());
+
+                e.custom_data.insert(
+                    "answer".to_string(),
+                    crate::db::CustomDataItem {
+                        value: Some(crate::db::CustomDataValue::String("42".to_string())),
+                        last_modification_time: None,
+                    },
+                );
+
+                e.custom_data.insert(
+                    "binary".to_string(),
+                    crate::db::CustomDataItem {
+                        value: Some(crate::db::CustomDataValue::Binary(vec![1, 2, 3, 4])),
+                        last_modification_time: Some(Times::now()),
+                    },
+                );
+
+                e.icon_id = Some(5);
+
+                e.foreground_color = Some(crate::db::Color { r: 255, g: 0, b: 0 });
+                e.background_color = Some(crate::db::Color { r: 0, g: 255, b: 0 });
+
+                e.override_url = Some("https://example.com/login".to_string());
+            })
+            .id();
+
+        // make a tracking edit to test history serialization and deserialization
+        db.entry_mut(entry_id).unwrap().edit_tracking(|e| {
+            e.set_protected(fields::PASSWORD, "newpassword");
         });
 
         db.root_mut()
