@@ -56,7 +56,7 @@ pub fn main() -> Result<()> {
 
 fn purge_history_for_entry(entry: &mut keepass::db::Entry) -> Result<()> {
     if let Some(history) = &entry.history {
-        let history_size = history.get_entries().len();
+        let history_size = history.entries().len();
         if history_size != 0 {
             println!("Removing {} history entries from {}", history_size, entry.id());
         }

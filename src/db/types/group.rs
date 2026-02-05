@@ -151,20 +151,16 @@ impl GroupRef<'_> {
 
     /// Get a contained group by ID
     pub fn group(&self, id: GroupId) -> Option<GroupRef<'_>> {
-        if self.groups.contains(&id) {
-            Some(GroupRef::new(self.database, id))
-        } else {
-            None
-        }
+        self.groups
+            .contains(&id)
+            .then(move || GroupRef::new(self.database, id))
     }
 
     /// Get a contained entry by ID
     pub fn entry(&self, id: EntryId) -> Option<EntryRef<'_>> {
-        if self.entries.contains(&id) {
-            Some(EntryRef::new(self.database, id))
-        } else {
-            None
-        }
+        self.entries
+            .contains(&id)
+            .then(move || EntryRef::new(self.database, id))
     }
 
     /// Get an iterator over all contained groups
@@ -250,19 +246,15 @@ impl GroupMut<'_> {
     }
 
     pub fn group_mut(&mut self, id: GroupId) -> Option<GroupMut<'_>> {
-        if self.groups.contains(&id) {
-            Some(GroupMut::new(self.database, id))
-        } else {
-            None
-        }
+        self.groups
+            .contains(&id)
+            .then(move || GroupMut::new(self.database, id))
     }
 
     pub fn entry_mut(&mut self, id: EntryId) -> Option<EntryMut<'_>> {
-        if self.entries.contains(&id) {
-            Some(EntryMut::new(self.database, id))
-        } else {
-            None
-        }
+        self.entries
+            .contains(&id)
+            .then(move || EntryMut::new(self.database, id))
     }
 
     /// Convenience method to edit the group in a closure.
@@ -329,12 +321,7 @@ impl GroupMut<'_> {
     }
 
     pub fn parent_mut(&mut self) -> Option<GroupMut<'_>> {
-        if let Some(parent_id) = self.parent {
-            if self.database.groups.contains_key(&parent_id) {
-                return Some(GroupMut::new(self.database, parent_id));
-            }
-        }
-        None
+        self.parent.map(move |id| GroupMut::new(self.database, id))
     }
 
     pub fn move_to(&mut self, new_parent_id: GroupId) -> Result<(), MoveGroupError> {
