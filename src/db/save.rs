@@ -34,7 +34,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        db::{fields, Times},
+        db::{fields, MemoryProtection, Times},
         Database, DatabaseKey, Value,
     };
 
@@ -42,6 +42,14 @@ mod tests {
     #[test]
     fn test_save() {
         let mut db = Database::new();
+
+        db.meta.memory_protection = Some(MemoryProtection {
+            protect_title: true,
+            protect_username: false,
+            protect_password: true,
+            protect_url: false,
+            protect_notes: true,
+        });
 
         // create an elaborate entry to test serialization and deserialization of all fields
         let entry_id = db
