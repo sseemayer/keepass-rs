@@ -108,7 +108,7 @@ impl Entry {
                             crate::db::EntryId::with_uuid(e.uuid.0),
                             target.as_ref().parent().id(),
                         );
-                        e.xml_to_history(&mut he, inner_decryptor)?;
+                        e.xml_to_history(&mut he, header_attachments, inner_decryptor)?;
                         Ok(he)
                     })
                     .collect::<Result<_, UnprotectError>>()?,
@@ -126,6 +126,7 @@ impl Entry {
     pub(crate) fn xml_to_history(
         self,
         target: &mut crate::db::Entry,
+        header_attachments: &[crate::db::Attachment],
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
         target.icon_id = self.icon_id;
@@ -154,7 +155,12 @@ impl Entry {
             target.fields.insert(field.key, value);
         }
 
-        // binary fields cannot be handled here as we don't have access to header attachments
+        // only create references to existing attachments
+        for field in self.binary_fields {
+            if let Some(attachment) = header_attachments.get(field.value.value_ref) {
+                target.attachments.insert(attachment.id());
+            }
+        }
 
         target.autotype = self.auto_type.map(|at| at.into());
 
@@ -173,7 +179,7 @@ impl Entry {
     pub(crate) fn db_to_xml(
         db: crate::db::EntryRef<'_>,
         inner_encryptor: &mut dyn Cipher,
-        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, usize>,
+        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
     ) -> Self {
         let string_fields = db
             .fields
@@ -206,9 +212,10 @@ impl Entry {
             .map(|a| BinaryField {
                 key: a.name.clone(),
                 value: BinaryValue {
-                    value_ref: *attachment_id_numbering
+                    value_ref: attachment_id_numbering
                         .get(&a.id())
-                        .expect("Attachment in entry not found in header attachments"),
+                        .expect("Attachment in entry not found in header attachments")
+                        .0,
                 },
             })
             .collect();
@@ -217,7 +224,7 @@ impl Entry {
             entries: h
                 .entries
                 .iter()
-                .map(|e| Entry::db_to_xml_history(e, inner_encryptor))
+                .map(|e| Entry::db_to_xml_history(e, inner_encryptor, attachment_id_numbering))
                 .collect(),
         });
 
@@ -244,7 +251,11 @@ impl Entry {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml_history(db: &crate::db::Entry, inner_encryptor: &mut dyn Cipher) -> Self {
+    fn db_to_xml_history(
+        db: &crate::db::Entry,
+        inner_encryptor: &mut dyn Cipher,
+        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
+    ) -> Self {
         let string_fields = db
             .fields
             .iter()
@@ -271,6 +282,17 @@ impl Entry {
             })
             .collect();
 
+        let binary_fields = db
+            .attachments
+            .iter()
+            .filter_map(|a| {
+                attachment_id_numbering.get(&a).map(|(id_ref, key)| BinaryField {
+                    key: key.clone(),
+                    value: BinaryValue { value_ref: *id_ref },
+                })
+            })
+            .collect();
+
         let custom_data: Option<CustomData> = if db.custom_data.is_empty() {
             None
         } else {
@@ -286,7 +308,7 @@ impl Entry {
             tags: db.tags.iter().cloned().reduce(|a, b| format!("{a},{b}")),
             times: Some(db.times.clone().into()),
             string_fields,
-            binary_fields: vec![], // binary fields cannot be handled here as we don't have access to header attachments
+            binary_fields,
             auto_type: db.autotype.as_ref().map(|at| at.clone().into()),
             history: None, // history cannot be handled here as this is already a history entry
             custom_data,

@@ -86,7 +86,7 @@ impl Group {
     pub(crate) fn db_to_xml(
         source: crate::db::GroupRef<'_>,
         inner_cipher: &mut dyn Cipher,
-        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, usize>,
+        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
     ) -> Self {
         Group {
             uuid: UUID(source.id().uuid()),

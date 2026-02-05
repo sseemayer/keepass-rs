@@ -203,7 +203,7 @@ impl Binary {
     pub(crate) fn xml_to_db(
         self,
         inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-        _header_attachments: &[crate::db::Attachment],
+        id: crate::db::AttachmentId,
     ) -> crate::db::Attachment {
         let mut data = base64_engine::STANDARD.decode(self.value).unwrap_or_default();
 
@@ -217,7 +217,7 @@ impl Binary {
                 .unwrap_or_default();
         }
 
-        let mut attachment = crate::db::Attachment::new();
+        let mut attachment = crate::db::Attachment::with_id(id);
         attachment.protected = self.protected.unwrap_or(false);
         attachment.set_data(data);
 

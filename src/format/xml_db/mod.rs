@@ -49,11 +49,12 @@ pub fn to_xml(
     inner_encryptor: &mut dyn Cipher,
     header_attachments: &[crate::db::Attachment],
 ) -> Result<Vec<u8>, quick_xml::SeError> {
-    let attachment_id_numbering: std::collections::HashMap<crate::db::AttachmentId, usize> = header_attachments
-        .iter()
-        .enumerate()
-        .map(|(i, att)| (att.id(), i))
-        .collect();
+    let attachment_id_numbering: std::collections::HashMap<crate::db::AttachmentId, (usize, String)> =
+        header_attachments
+            .iter()
+            .enumerate()
+            .map(|(i, att)| (att.id(), (i, att.name.clone())))
+            .collect();
 
     let kdbx = KeePassFile::db_to_xml(db, inner_encryptor, &attachment_id_numbering);
     Ok(quick_xml::se::to_string_with_root("KeePassFile", &kdbx)?
@@ -83,7 +84,8 @@ impl KeePassFile {
 
         if let Some(binaries) = self.meta.binaries.take() {
             for binary in binaries.binaries {
-                let attachment = binary.xml_to_db(inner_decryptor, header_attachments);
+                let next_id = crate::db::AttachmentId::from_usize(attachments.len());
+                let attachment = binary.xml_to_db(inner_decryptor, next_id);
                 attachments.push(attachment);
             }
         }
@@ -126,7 +128,7 @@ impl KeePassFile {
     fn db_to_xml(
         db: &crate::db::Database,
         inner_cipher: &mut dyn Cipher,
-        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, usize>,
+        attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
     ) -> Self {
         KeePassFile {
             meta: db.meta.clone().into(),

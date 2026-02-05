@@ -49,7 +49,7 @@ pub struct Entry {
     pub fields: HashMap<String, Value>,
 
     /// attachments associated with the entry
-    attachments: HashSet<AttachmentId>,
+    pub(crate) attachments: HashSet<AttachmentId>,
 
     /// auto-type settings for the entry
     pub autotype: Option<AutoType>,
@@ -263,8 +263,8 @@ impl EntryMut<'_> {
 
     /// Add a new attachment to the entry, returning a mutable reference to it.
     pub fn add_attachment(&mut self) -> AttachmentMut<'_> {
-        let attachment = Attachment::new();
-        let id = attachment.id();
+        let id = AttachmentId::next_free(&self.database);
+        let attachment = Attachment::with_id(id);
         self.database.attachments.insert(id, attachment);
         self.attachments.insert(id);
 

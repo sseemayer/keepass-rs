@@ -60,6 +60,12 @@ mod tests {
                 e.set(fields::USERNAME, Value::String("user".to_string()));
                 e.set_protected(fields::PASSWORD, "asdf");
 
+                e.add_attachment().edit(|a| {
+                    a.name = "attachment.txt".to_string();
+                    a.protected = true;
+                    a.set_data(vec![104, 101, 108, 108, 111]); // "hello"
+                });
+
                 e.autotype = Some(crate::db::AutoType {
                     enabled: true,
                     default_sequence: Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string()),

@@ -1,11 +1,28 @@
 use std::ops::{Deref, DerefMut};
 
 use secrecy::{ExposeSecret, SecretBox};
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct AttachmentId(Uuid);
+pub struct AttachmentId(usize);
+
+impl AttachmentId {
+    /// Create an AttachmentId from a usize
+    ///
+    /// this is only accessible within the crate because the user could create conflicts
+    pub(crate) fn from_usize(id: usize) -> Self {
+        AttachmentId(id)
+    }
+
+    /// Generate the next free AttachmentId in the database
+    pub(crate) fn next_free(database: &crate::db::Database) -> Self {
+        let mut id = AttachmentId(0);
+        while database.attachments.contains_key(&id) {
+            id.0 += 1;
+        }
+        id
+    }
+}
 
 /// Attachment associated with an entry
 #[derive(Debug, Clone)]
@@ -17,9 +34,9 @@ pub struct Attachment {
 }
 
 impl Attachment {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn with_id(id: AttachmentId) -> Self {
         Attachment {
-            id: AttachmentId(Uuid::new_v4()),
+            id,
             name: String::new(),
             protected: true,
             data: SecretBox::new(Box::new([])),

@@ -12,7 +12,7 @@ use thiserror::Error;
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{Attachment, Database},
+    db::{Attachment, AttachmentId, Database},
     format::{
         kdbx4::{
             KDBX4OuterHeader, HEADER_COMMENT, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
@@ -374,7 +374,7 @@ fn parse_inner_header(
                 // process memory", not encrypted in the inner header
                 let protected = (flags & 0x01) != 0;
 
-                let mut attachment = Attachment::new();
+                let mut attachment = Attachment::with_id(AttachmentId::from_usize(header_attachments.len()));
                 attachment.protected = protected;
                 attachment.set_data(data.to_vec());
 

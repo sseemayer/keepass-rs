@@ -94,6 +94,8 @@ mod tests {
         let protected = Value::protected_string("test");
         assert!(!unprotected.is_protected());
         assert!(protected.is_protected());
+        assert!(!unprotected.is_empty());
+        assert!(!protected.is_empty());
 
         assert_eq!(unprotected.as_str(), "test");
         assert_eq!(protected.as_str(), "test");
