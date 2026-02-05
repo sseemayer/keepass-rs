@@ -79,8 +79,9 @@ impl DumpXml for Value {
         match self {
             Value::Bytes(b) => SimpleTag(
                 "Value",
-                std::str::from_utf8(b)
-                    .map_err(|e| std::io::Error::other(format!("Error while converting the value to utf-8: {e}")))?,
+                std::str::from_utf8(b).map_err(|e| {
+                    std::io::Error::other(format!("Error while converting the value to utf-8: {e}"))
+                })?,
             )
             .dump_xml(writer, inner_cipher),
             Value::Unprotected(s) => SimpleTag("Value", s).dump_xml(writer, inner_cipher),
