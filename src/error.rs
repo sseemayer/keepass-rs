@@ -282,6 +282,9 @@ pub enum VariantDictionaryError {
 
     #[error("VariantDictionary did not end with null byte, when it should")]
     NotTerminated,
+
+    #[error("VariantDictionary did have the correct size")]
+    InvalidSize,
 }
 
 /// Errors while parsing the XML document inside of a KeePass database

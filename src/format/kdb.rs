@@ -2,7 +2,7 @@ use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::calculate_sha256,
     db::{Database, Entry, Group, NodeRefMut, Value},
-    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
+    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError, UnexpectedEof},
     format::DatabaseVersion,
     key::DatabaseKey,
 };
@@ -34,15 +34,15 @@ fn parse_header(data: &[u8]) -> Result<KDBHeader, DatabaseIntegrityError> {
     }
 
     Ok(KDBHeader {
-        flags: LittleEndian::read_u32(&data[8..]),
-        subversion: LittleEndian::read_u32(&data[12..]),
-        master_seed: data[16..32].to_vec(),
-        encryption_iv: data[32..48].to_vec(),
-        num_groups: LittleEndian::read_u32(&data[48..]),
-        num_entries: LittleEndian::read_u32(&data[52..]),
-        contents_hash: data[56..88].to_vec(),
-        transform_seed: data[88..120].to_vec(),
-        transform_rounds: LittleEndian::read_u32(&data[120..]),
+        flags: LittleEndian::read_u32(data.get(8..).ok_or(UnexpectedEof::err())?),
+        subversion: LittleEndian::read_u32(data.get(12..).ok_or(UnexpectedEof::err())?),
+        master_seed: data.get(16..32).ok_or(UnexpectedEof::err())?.to_vec(),
+        encryption_iv: data.get(32..48).ok_or(UnexpectedEof::err())?.to_vec(),
+        num_groups: LittleEndian::read_u32(data.get(48..).ok_or(UnexpectedEof::err())?),
+        num_entries: LittleEndian::read_u32(data.get(52..).ok_or(UnexpectedEof::err())?),
+        contents_hash: data.get(56..88).ok_or(UnexpectedEof::err())?.to_vec(),
+        transform_seed: data.get(88..120).ok_or(UnexpectedEof::err())?.to_vec(),
+        transform_rounds: LittleEndian::read_u32(data.get(120..).ok_or(UnexpectedEof::err())?),
     })
 }
 
@@ -109,9 +109,9 @@ fn parse_groups(
     let mut num_groups = 0; // the total number of parsed groups
     while num_groups < header_num_groups as usize {
         // Read group TLV
-        let field_type = LittleEndian::read_u16(&data[0..]);
-        let field_size = LittleEndian::read_u32(&data[2..]);
-        let field_value = &data[6..6 + field_size as usize];
+        let field_type = LittleEndian::read_u16(data.get(0..).ok_or(UnexpectedEof::err())?);
+        let field_size = LittleEndian::read_u32(data.get(2..).ok_or(UnexpectedEof::err())?);
+        let field_value = data.get(6..6 + field_size as usize).ok_or(UnexpectedEof::err())?;
 
         match field_type {
             0x0000 => {} // KeePass ignores this field type
@@ -172,7 +172,7 @@ fn parse_groups(
             }
         }
 
-        *data = &data[6 + field_size as usize..];
+        *data = data.get(6 + field_size as usize..).ok_or(UnexpectedEof::err())?;
     }
     if gid.is_some() {
         return Err(DatabaseIntegrityError::IncompleteKDBGroup);
@@ -195,9 +195,9 @@ fn parse_entries(
     let mut num_entries = 0;
     while num_entries < header_num_entries {
         // Read entry TLV
-        let field_type = LittleEndian::read_u16(&data[0..]);
-        let field_size = LittleEndian::read_u32(&data[2..]);
-        let field_value = &data[6..6 + field_size as usize];
+        let field_type = LittleEndian::read_u16(data.get(0..).ok_or(UnexpectedEof::err())?);
+        let field_size = LittleEndian::read_u32(data.get(2..).ok_or(UnexpectedEof::err())?);
+        let field_value = data.get(6..6 + field_size as usize).ok_or(UnexpectedEof::err())?;
 
         match field_type {
             0x0000 => {} // KeePass ignores this field type
@@ -266,7 +266,7 @@ fn parse_entries(
             }
         }
 
-        *data = &data[6 + field_size as usize..];
+        *data = data.get(6 + field_size as usize..).ok_or(UnexpectedEof::err())?;
     }
     if gid.is_some() {
         return Err(DatabaseIntegrityError::IncompleteKDBEntry);
@@ -295,13 +295,15 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
     let version = DatabaseVersion::KDB(header.subversion as u16);
 
     // Rest of file after header is payload
-    let payload_encrypted = &data[HEADER_SIZE..];
+    let payload_encrypted = data.get(HEADER_SIZE..).ok_or(UnexpectedEof::err())?;
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = if key_elements.len() == 1 {
-        let key_element: [u8; 32] = key_elements[0].try_into().unwrap();
+        let key_element: [u8; 32] = (*key_elements.first().ok_or(UnexpectedEof::err())?)
+            .try_into()
+            .unwrap();
         GenericArray::from(key_element) // single pass of SHA256, already done before the call to parse()
     } else {
         calculate_sha256(&key_elements)? // second pass of SHA256
@@ -330,8 +332,10 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
     let payload_padded = outer_cipher_config
         .get_cipher(&master_key, header.encryption_iv.as_ref())?
         .decrypt(payload_encrypted)?;
-    let padlen = payload_padded[payload_padded.len() - 1] as usize;
-    let payload = &payload_padded[..payload_padded.len() - padlen];
+    let padlen = (*payload_padded.last().ok_or(UnexpectedEof::err())?) as usize;
+    let payload = payload_padded
+        .get(..payload_padded.len() - padlen)
+        .ok_or(UnexpectedEof::err())?;
 
     // Check if we decrypted correctly
     let hash = calculate_sha256(&[payload])?;

@@ -41,7 +41,7 @@ impl DatabaseVersion {
     ///
     /// # Errors
     ///
-    /// Fails if the source cannot be read
+    /// Fails if the source cannot be parsed
     pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseIntegrityError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
             return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);

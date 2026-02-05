@@ -33,7 +33,7 @@ impl VariantDictionary {
     }
 
     pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryError> {
-        let version = LittleEndian::read_u16(&buffer[0..2]);
+        let version = LittleEndian::read_u16(buffer.get(0..2).ok_or(VariantDictionaryError::InvalidSize)?);
 
         if version != VARIANT_DICTIONARY_VERSION {
             return Err(VariantDictionaryError::InvalidVersion { version });
@@ -43,19 +43,34 @@ impl VariantDictionary {
         let mut data = HashMap::new();
 
         while pos + 9 < buffer.len() {
-            let value_type = buffer[pos];
+            let value_type = *buffer.get(pos).ok_or(VariantDictionaryError::InvalidSize)?;
             pos += 1;
 
-            let key_length = LittleEndian::read_u32(&buffer[pos..(pos + 4)]) as usize;
+            let key_length = LittleEndian::read_u32(
+                buffer
+                    .get(pos..(pos + 4))
+                    .ok_or(VariantDictionaryError::InvalidSize)?,
+            ) as usize;
             pos += 4;
 
-            let key = String::from_utf8_lossy(&buffer[pos..(pos + key_length)]).to_string();
+            let key = String::from_utf8_lossy(
+                buffer
+                    .get(pos..(pos + key_length))
+                    .ok_or(VariantDictionaryError::InvalidSize)?,
+            )
+            .to_string();
             pos += key_length;
 
-            let value_length = LittleEndian::read_u32(&buffer[pos..(pos + 4)]) as usize;
+            let value_length = LittleEndian::read_u32(
+                buffer
+                    .get(pos..(pos + 4))
+                    .ok_or(VariantDictionaryError::InvalidSize)?,
+            ) as usize;
             pos += 4;
 
-            let value_buffer = &buffer[pos..(pos + value_length)];
+            let value_buffer = buffer
+                .get(pos..(pos + value_length))
+                .ok_or(VariantDictionaryError::InvalidSize)?;
             pos += value_length;
 
             let value = match value_type {
@@ -76,7 +91,9 @@ impl VariantDictionary {
             data.insert(key, value);
         }
 
-        if pos == buffer.len() || buffer[pos] != VARIANT_DICTIONARY_END {
+        if pos == buffer.len()
+            || *buffer.get(pos).ok_or(VariantDictionaryError::InvalidSize)? != VARIANT_DICTIONARY_END
+        {
             // even though we can determine when to stop parsing a VariantDictionary by where we
             // are in the buffer, there should always be a value_type = 0 entry to denote that a
             // VariantDictionary is finished

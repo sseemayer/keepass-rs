@@ -70,7 +70,7 @@ impl Database {
     ///
     /// # Errors
     ///
-    /// Fails if the source cannot be read
+    /// Fails if the source cannot be read or parsed
     pub fn open(source: &mut dyn std::io::Read, key: DatabaseKey) -> Result<Database, DatabaseOpenError> {
         let mut data = Vec::new();
         source.read_to_end(&mut data)?;
