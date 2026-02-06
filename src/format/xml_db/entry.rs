@@ -24,6 +24,9 @@ pub struct Entry {
     #[serde(default, rename = "IconID", with = "cs_opt_fromstr")]
     pub icon_id: Option<usize>,
 
+    #[serde(default, rename = "CustomIconUUID", skip_serializing_if = "Option::is_none")]
+    pub custom_icon_uuid: Option<UUID>,
+
     #[serde(default, with = "cs_opt_string")]
     pub foreground_color: Option<Color>,
 
@@ -63,6 +66,19 @@ impl Entry {
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
         target.icon_id = self.icon_id;
+
+        if let Some(uuid) = self.custom_icon_uuid {
+            let custom_icon_id = crate::db::IconId::from_uuid(uuid.0);
+            if target
+                .as_ref()
+                .database()
+                .custom_icons
+                .contains_key(&custom_icon_id)
+            {
+                target.custom_icon_id = Some(custom_icon_id);
+            }
+        }
+
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
         target.override_url = self.override_url;
@@ -105,7 +121,7 @@ impl Entry {
                     .into_iter()
                     .map(|e| {
                         let mut he = crate::db::Entry::with_id(
-                            crate::db::EntryId::with_uuid(e.uuid.0),
+                            crate::db::EntryId::from_uuid(e.uuid.0),
                             target.as_ref().parent().id(),
                         );
                         e.xml_to_history(&mut he, header_attachments, inner_decryptor)?;
@@ -130,6 +146,11 @@ impl Entry {
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
         target.icon_id = self.icon_id;
+
+        target.custom_icon_id = self
+            .custom_icon_uuid
+            .and_then(|uuid| Some(crate::db::IconId::from_uuid(uuid.0)));
+
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
         target.override_url = self.override_url;
@@ -181,6 +202,8 @@ impl Entry {
         inner_encryptor: &mut dyn Cipher,
         attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
     ) -> Self {
+        let custom_icon_uuid = db.custom_icon_id.map(|id| UUID(id.to_uuid()));
+
         let string_fields = db
             .fields
             .iter()
@@ -237,6 +260,7 @@ impl Entry {
         Entry {
             uuid: UUID(db.id().uuid()),
             icon_id: db.icon_id,
+            custom_icon_uuid,
             foreground_color: db.foreground_color.clone(),
             background_color: db.background_color.clone(),
             override_url: db.override_url.clone(),
@@ -256,6 +280,8 @@ impl Entry {
         inner_encryptor: &mut dyn Cipher,
         attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
     ) -> Self {
+        let custom_icon_uuid = db.custom_icon_id.map(|id| UUID(id.to_uuid()));
+
         let string_fields = db
             .fields
             .iter()
@@ -302,6 +328,7 @@ impl Entry {
         Entry {
             uuid: UUID(db.id().uuid()),
             icon_id: db.icon_id,
+            custom_icon_uuid,
             foreground_color: db.foreground_color.clone(),
             background_color: db.background_color.clone(),
             override_url: db.override_url.clone(),

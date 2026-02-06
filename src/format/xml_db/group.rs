@@ -67,15 +67,15 @@ impl Group {
         target.enable_searching = self.enable_searching;
         target.last_top_visible_entry = self
             .last_top_visible_entry
-            .map(|u| crate::db::EntryId::with_uuid(u.0));
+            .map(|u| crate::db::EntryId::from_uuid(u.0));
 
         for entry in self.entries {
-            let new_entry = target.add_entry_with_id(EntryId::with_uuid(entry.uuid.0));
+            let new_entry = target.add_entry_with_id(EntryId::from_uuid(entry.uuid.0));
             entry.xml_to_db_handle(new_entry, header_attachments, inner_decryptor)?;
         }
 
         for group in self.groups {
-            let new_group = target.add_group_with_id(GroupId::with_uuid(group.uuid.0));
+            let new_group = target.add_group_with_id(GroupId::from_uuid(group.uuid.0));
             group.xml_to_db_handle(new_group, header_attachments, inner_decryptor)?;
         }
 

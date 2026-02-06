@@ -21,7 +21,7 @@ impl GroupId {
         GroupId(Uuid::new_v4())
     }
 
-    pub(crate) const fn with_uuid(uuid: Uuid) -> GroupId {
+    pub(crate) const fn from_uuid(uuid: Uuid) -> GroupId {
         GroupId(uuid)
     }
 

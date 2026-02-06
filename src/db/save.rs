@@ -51,6 +51,16 @@ mod tests {
             protect_notes: true,
         });
 
+        db.meta.custom_data.insert(
+            "custom_key".to_string(),
+            crate::db::CustomDataItem {
+                value: Some(crate::db::CustomDataValue::String("custom_value".to_string())),
+                last_modification_time: Some(Times::now()),
+            },
+        );
+
+        let custom_icon_id = db.add_custom_icon(vec![1, 2, 3, 4]).id();
+
         // create an elaborate entry to test serialization and deserialization of all fields
         let entry_id = db
             .root_mut()
@@ -93,6 +103,7 @@ mod tests {
                 );
 
                 e.icon_id = Some(5);
+                e.set_custom_icon(Some(custom_icon_id)).unwrap();
 
                 e.foreground_color = Some(crate::db::Color { r: 255, g: 0, b: 0 });
                 e.background_color = Some(crate::db::Color { r: 0, g: 255, b: 0 });

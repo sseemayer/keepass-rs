@@ -108,12 +108,12 @@ impl Database {
     }
 
     pub fn recycle_bin(&self) -> Option<GroupRef<'_>> {
-        let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::with_uuid)?;
+        let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::from_uuid)?;
         self.group(recyclebin_id)
     }
 
     pub fn recycle_bin_mut(&mut self) -> Option<GroupMut<'_>> {
-        let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::with_uuid)?;
+        let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::from_uuid)?;
         self.group_mut(recyclebin_id)
     }
 
@@ -145,6 +145,8 @@ impl Database {
         }
     }
 
+    /// Iterate over all groups with immutable access. This includes the root group and the recycle
+    /// bin (if it exists).
     pub fn iter_all_groups(&self) -> impl Iterator<Item = GroupRef<'_>> + '_ {
         self.groups.keys().map(move |id| GroupRef::new(self, *id))
     }
@@ -158,6 +160,23 @@ impl Database {
         let ids: Vec<GroupId> = self.groups.keys().copied().collect();
         for id in ids {
             f(GroupMut::new(self, id));
+        }
+    }
+
+    /// Iterate over all custom icons with immutable access.
+    pub fn iter_all_icons(&self) -> impl Iterator<Item = IconRef<'_>> + '_ {
+        self.custom_icons.keys().map(move |id| IconRef::new(self, *id))
+    }
+
+    /// Iterate over all custom icons with mutable access. The provided closure is
+    /// called for each `IconMut` and borrows are limited to the closure body.
+    pub fn foreach_icon_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(IconMut<'_>),
+    {
+        let ids: Vec<IconId> = self.custom_icons.keys().copied().collect();
+        for id in ids {
+            f(IconMut::new(self, id));
         }
     }
 
@@ -207,6 +226,16 @@ impl Database {
         self.custom_icons
             .contains_key(&id)
             .then(move || IconMut::new(self, id))
+    }
+
+    /// Add a custom icon to the database, returning a mutable reference to it. The icon will be
+    /// assigned a new random UUID, and the caller is responsible for ensuring that the data is
+    /// valid (e.g. a valid PNG file).
+    pub fn add_custom_icon(&mut self, data: Vec<u8>) -> IconMut<'_> {
+        let id = IconId::new();
+        let icon = Icon { id, data };
+        self.custom_icons.insert(id, icon);
+        IconMut::new(self, id)
     }
 }
 

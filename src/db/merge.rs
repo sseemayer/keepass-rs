@@ -65,33 +65,18 @@ impl Database {
 
 /// Get the last update time (modification or location change) of a group, considering its entries and subgroups.
 fn get_last_update(group: GroupRef) -> Option<NaiveDateTime> {
-    let mut last_update = group.times.last_modification.or(group.times.location_changed);
+    let last_update = group.times.last_modification.or(group.times.location_changed);
 
-    for entry in group.entries() {
-        if let Some(entry_time) = entry.times.last_modification.or(entry.times.location_changed) {
-            if let Some(current_last_update) = last_update {
-                if entry_time > current_last_update {
-                    last_update = Some(entry_time);
-                }
-            } else {
-                last_update = Some(entry_time);
-            }
-        }
-    }
-
-    for subgroup in group.groups() {
-        if let Some(subgroup_last_update) = get_last_update(subgroup) {
-            if let Some(current_last_update) = last_update {
-                if subgroup_last_update > current_last_update {
-                    last_update = Some(subgroup_last_update);
-                }
-            } else {
-                last_update = Some(subgroup_last_update);
-            }
-        }
-    }
-
-    last_update
+    group
+        .entries()
+        .filter_map(|e| e.times.last_modification.or(e.times.location_changed))
+        .chain(
+            group
+                .groups()
+                .filter_map(|g| g.times.last_modification.or(g.times.location_changed)),
+        )
+        .chain(last_update)
+        .max()
 }
 
 /// Merge groups from `source` into `dest`, appending to a log of the merge process.
@@ -671,13 +656,13 @@ mod merge_tests {
     use crate::db::{EntryId, GroupId, History, Times};
     use crate::Database;
 
-    const ROOT_GROUP_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000001"));
-    const GROUP1_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000002"));
-    const GROUP2_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000003"));
-    const SUBGROUP1_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000004"));
-    const SUBGROUP2_ID: GroupId = GroupId::with_uuid(uuid!("00000000-0000-0000-0000-000000000005"));
-    const ENTRY1_ID: EntryId = EntryId::with_uuid(uuid!("00000000-0000-0000-0000-000000000006"));
-    const ENTRY2_ID: EntryId = EntryId::with_uuid(uuid!("00000000-0000-0000-0000-000000000007"));
+    const ROOT_GROUP_ID: GroupId = GroupId::from_uuid(uuid!("00000000-0000-0000-0000-000000000001"));
+    const GROUP1_ID: GroupId = GroupId::from_uuid(uuid!("00000000-0000-0000-0000-000000000002"));
+    const GROUP2_ID: GroupId = GroupId::from_uuid(uuid!("00000000-0000-0000-0000-000000000003"));
+    const SUBGROUP1_ID: GroupId = GroupId::from_uuid(uuid!("00000000-0000-0000-0000-000000000004"));
+    const SUBGROUP2_ID: GroupId = GroupId::from_uuid(uuid!("00000000-0000-0000-0000-000000000005"));
+    const ENTRY1_ID: EntryId = EntryId::from_uuid(uuid!("00000000-0000-0000-0000-000000000006"));
+    const ENTRY2_ID: EntryId = EntryId::from_uuid(uuid!("00000000-0000-0000-0000-000000000007"));
 
     /// Build up an example database for testing
     ///
@@ -2075,5 +2060,91 @@ mod merge_tests {
         assert_eq!(group.parent().unwrap().id(), GROUP2_ID);
         assert_eq!(group.times.last_modification, Some(modification_timestamp));
         assert_eq!(group.times.location_changed, Some(location_changed_timestamp));
+    }
+
+    #[test]
+    fn test_merge_untracked_group_history() {
+        let mut destination_db = create_test_database();
+        let mut source_db = destination_db.clone();
+
+        // this is an invalid edit as the last modified timestamp of the group is not updated
+        source_db
+            .group_mut(GROUP1_ID)
+            .unwrap()
+            .edit(|g| {
+                g.name = "group1_updated_name".to_string();
+            })
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        assert_eq!(
+            destination_db.group(GROUP1_ID).unwrap().times,
+            source_db.group(GROUP1_ID).unwrap().times
+        );
+
+        // there will be an error during merge since the edit in source_db is not tracked and has
+        // the same timestamp as the group in destination_db
+        assert!(destination_db.merge(&source_db).is_err());
+
+        // remove the timestamps to test warnings
+        destination_db
+            .group_mut(GROUP1_ID)
+            .unwrap()
+            .times
+            .last_modification = None;
+        destination_db
+            .group_mut(GROUP1_ID)
+            .unwrap()
+            .times
+            .location_changed = None;
+        source_db.group_mut(GROUP1_ID).unwrap().times.last_modification = None;
+        source_db.group_mut(GROUP1_ID).unwrap().times.location_changed = None;
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 3);
+        assert_eq!(merge_result.events.len(), 0);
+    }
+
+    #[test]
+    fn test_merge_untracked_entry_history() {
+        let mut destination_db = create_test_database();
+        let mut source_db = destination_db.clone();
+
+        // this is an invalid edit as the last modified timestamp of the entry is not updated
+        source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .edit(|e| {
+                e.set_unprotected("Title", "entry1_updated_title");
+            })
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().times,
+            source_db.entry(ENTRY1_ID).unwrap().times
+        );
+
+        // there will be an error during merge since the edit in source_db is not tracked and has
+        // the same timestamp as the entry in destination_db
+        assert!(destination_db.merge(&source_db).is_err());
+
+        // remove the timestamps to test warnings
+        destination_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .times
+            .last_modification = None;
+        destination_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .times
+            .location_changed = None;
+        source_db.entry_mut(ENTRY1_ID).unwrap().times.last_modification = None;
+        source_db.entry_mut(ENTRY1_ID).unwrap().times.location_changed = None;
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 3);
+        assert_eq!(merge_result.events.len(), 0);
     }
 }

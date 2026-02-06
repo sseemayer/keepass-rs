@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::db::{
     Attachment, AttachmentId, AttachmentMut, AttachmentRef, AutoType, Color, CustomDataItem, Database, GroupId,
-    GroupMut, GroupRef, History, IconId, IconRef, Times, Value,
+    GroupMut, GroupRef, History, IconId, IconMut, IconRef, Times, Value,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -17,7 +17,7 @@ use crate::db::{
 pub struct EntryId(Uuid);
 
 impl EntryId {
-    pub(crate) const fn with_uuid(uuid: Uuid) -> EntryId {
+    pub(crate) const fn from_uuid(uuid: Uuid) -> EntryId {
         EntryId(uuid)
     }
 
@@ -67,7 +67,7 @@ pub struct Entry {
     pub icon_id: Option<usize>,
 
     /// UUID of a custom icon associated with the entry
-    custom_icon_id: Option<IconId>,
+    pub(crate) custom_icon_id: Option<IconId>,
 
     /// foreground color for the entry
     pub foreground_color: Option<Color>,
@@ -176,11 +176,9 @@ impl EntryRef<'_> {
 
     /// Get an attachment of this entry by ID.
     pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
-        if self.attachments.contains(&id) {
-            Some(AttachmentRef::new(self.database, id))
-        } else {
-            None
-        }
+        self.attachments
+            .contains(&id)
+            .then(move || AttachmentRef::new(self.database, id))
     }
 
     /// Get an iterator over all attachments of this entry.
@@ -195,7 +193,7 @@ impl EntryRef<'_> {
         self.database.group(self.parent).unwrap()
     }
 
-    /// Get a reference to the icon associated with this entry, if any.
+    /// Get a reference to the icon associated with this entnry, if any.
     pub fn custom_icon(&self) -> Option<IconRef<'_>> {
         let icon_id = self.custom_icon_id?;
         self.database.custom_icon(icon_id)
@@ -272,11 +270,9 @@ impl EntryMut<'_> {
     }
 
     pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
-        if self.attachments.contains(&id) {
-            Some(AttachmentMut::new(self.database, id))
-        } else {
-            None
-        }
+        self.attachments
+            .contains(&id)
+            .then(move || AttachmentMut::new(self.database, id))
     }
 
     /// Get a mutable reference to the parent group of this entry.
@@ -307,6 +303,24 @@ impl EntryMut<'_> {
         self.database
     }
 
+    /// Set the custom icon for this entry.
+    pub fn set_custom_icon(&mut self, icon_id: Option<IconId>) -> Result<(), IconNotFoundError> {
+        if let Some(icon_id) = icon_id {
+            if !self.database.custom_icons.contains_key(&icon_id) {
+                return Err(IconNotFoundError(icon_id));
+            }
+        }
+
+        self.custom_icon_id = icon_id;
+        Ok(())
+    }
+
+    /// Get a mutable reference to the custom icon associated with this entry, if any.
+    pub fn custom_icon_mut(&mut self) -> Option<IconMut<'_>> {
+        let icon_id = self.custom_icon_id?;
+        Some(IconMut::new(self.database, icon_id))
+    }
+
     /// Remove this entry from the database, including all its attachments.
     pub fn remove(self) {
         let entry = self.database.entries.remove(&self.id).expect("Entry not found");
@@ -325,9 +339,15 @@ impl EntryMut<'_> {
     }
 }
 
+/// Error type for when a destination group ID is provided that does not exist in the database
 #[derive(Error, Debug)]
 #[error("Destination group {0} not found")]
 pub struct DestinationGroupNotFoundError(GroupId);
+
+/// Error type for when an icon ID is provided that does not exist in the database
+#[derive(Error, Debug)]
+#[error("Icon {0} not found")]
+pub struct IconNotFoundError(IconId);
 
 impl Deref for EntryMut<'_> {
     type Target = Entry;
@@ -422,13 +442,8 @@ impl Drop for EntryTrack<'_> {
         // see if the entry is still there (it might have been removed)
         if let Some(entry) = self.database.entries.get_mut(&self.id) {
             let parent_id = entry.parent;
-
             let historical = std::mem::replace(&mut self.historical, Entry::new(parent_id));
-
-            if entry.history.is_none() {
-                entry.history = Some(History::default());
-            }
-            entry.history.as_mut().unwrap().entries.push(historical);
+            entry.history.as_mut().unwrap().add_entry(historical);
         }
     }
 }
@@ -466,17 +481,23 @@ mod tests {
             "Entry 1"
         );
 
-        db.entry_mut(entry_id)
+        let attachment_id = db
+            .entry_mut(entry_id)
             .unwrap()
             .edit_tracking(|e| {
                 e.set_unprotected(fields::TITLE, "Modified Entry 1");
+                e.set(
+                    fields::USERNAME,
+                    crate::db::Value::String(format!("modified_{}", e.get_str(fields::USERNAME).unwrap())),
+                );
             })
             .add_attachment()
             .edit(|a| {
                 a.name = "Attachment 1".to_string();
                 a.set_data(b"Attachment data".to_vec());
                 a.protected = !a.protected;
-            });
+            })
+            .id();
 
         assert_eq!(db.num_attachments(), 1);
         assert_eq!(db.num_entries(), 1);
@@ -489,6 +510,12 @@ mod tests {
             db.entry(entry_id).unwrap().get_str(fields::TITLE).unwrap(),
             "Modified Entry 1"
         );
+
+        db.entry_mut(entry_id)
+            .unwrap()
+            .attachment_mut(attachment_id)
+            .unwrap()
+            .edit(|a| a.protected = !a.protected);
 
         db.entry_mut(entry_id).unwrap().remove();
 

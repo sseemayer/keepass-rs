@@ -77,7 +77,7 @@ impl KeePassFile {
         header_attachments: &[crate::db::Attachment],
     ) -> Result<crate::db::Database, UnprotectError> {
         let mut db =
-            crate::db::Database::new_with_root_id(crate::db::GroupId::with_uuid(self.root.group.uuid.0));
+            crate::db::Database::new_with_root_id(crate::db::GroupId::from_uuid(self.root.group.uuid.0));
         let mut attachments = header_attachments.to_vec();
 
         let custom_icons = self.meta.custom_icons.take();
@@ -130,8 +130,20 @@ impl KeePassFile {
         inner_cipher: &mut dyn Cipher,
         attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
     ) -> Self {
+        let mut meta: crate::format::xml_db::Meta = db.meta.clone().into();
+
+        if !db.custom_icons.is_empty() {
+            meta.custom_icons = Some(crate::format::xml_db::meta::CustomIcons {
+                icons: db
+                    .custom_icons
+                    .values()
+                    .map(|icon| crate::format::xml_db::meta::Icon::from(icon.clone()))
+                    .collect(),
+            });
+        }
+
         KeePassFile {
-            meta: db.meta.clone().into(),
+            meta,
             root: Root {
                 group: Group::db_to_xml(db.root(), inner_cipher, &attachment_id_numbering),
                 deleted_objects: if db.deleted_objects.is_empty() {
