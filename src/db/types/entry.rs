@@ -12,6 +12,7 @@ use crate::db::{
     GroupMut, GroupRef, History, IconId, IconMut, IconRef, Times, Value,
 };
 
+/// Unique identifier for an [Entry]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct EntryId(Uuid);
@@ -163,7 +164,7 @@ impl Entry {
     }
 }
 
-/// An immutable reference to a valid entry in the database. Implements Deref to Entry.
+/// An immutable reference to an [Entry]. Implements [Deref] to [&Entry][Entry].
 pub struct EntryRef<'a> {
     database: &'a Database,
     id: EntryId,
@@ -214,7 +215,7 @@ impl Deref for EntryRef<'_> {
     }
 }
 
-/// A mutable reference to a valid entry in the database. Implements Deref and DerefMut to Entry.
+/// A mutable reference to an [Entry]. Implements [DerefMut] to [&mut Entry][Entry].
 pub struct EntryMut<'a> {
     database: &'a mut Database,
     id: EntryId,
@@ -339,12 +340,12 @@ impl EntryMut<'_> {
     }
 }
 
-/// Error type for when a destination group ID is provided that does not exist in the database
+/// Error type for when a destination [GroupId] is provided that does not exist in the database
 #[derive(Error, Debug)]
 #[error("Destination group {0} not found")]
 pub struct DestinationGroupNotFoundError(GroupId);
 
-/// Error type for when an icon ID is provided that does not exist in the database
+/// Error type for when an [IconId] is provided that does not exist in the database
 #[derive(Error, Debug)]
 #[error("Icon {0} not found")]
 pub struct IconNotFoundError(IconId);
@@ -378,18 +379,21 @@ impl EntryTrack<'_> {
         EntryMut::new(self.database, self.id)
     }
 
+    /// Move this entry to another group, tracking the change in history.
     pub fn move_to(&mut self, group_id: GroupId) -> Result<(), DestinationGroupNotFoundError> {
         self.as_mut().move_to(group_id)?;
         self.times.location_changed = Some(Times::now());
         Ok(())
     }
 
+    /// Remove this entry from the database, tracking the change in history.
     pub fn remove(mut self) {
         let this = self.as_mut();
         this.database
             .deleted_objects
             .insert(this.id.uuid(), Some(Times::now()));
 
+        // use EntryMut::remove to handle actual removal
         this.remove();
     }
 

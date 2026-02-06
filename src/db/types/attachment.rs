@@ -2,6 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use secrecy::{ExposeSecret, SecretBox};
 
+/// Unique identifier for an [Attachment]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AttachmentId(usize);
@@ -24,7 +25,7 @@ impl AttachmentId {
     }
 }
 
-/// Attachment associated with an entry
+/// Attachment associated with an [Entry][crate::db::Entry]
 #[derive(Debug, Clone)]
 pub struct Attachment {
     id: AttachmentId,
@@ -84,6 +85,7 @@ impl serde::Serialize for Attachment {
     }
 }
 
+/// An immutable reference to an [Attachment]. Implements [Deref] to [&Attachment][Attachment].
 pub struct AttachmentRef<'a> {
     database: &'a crate::db::Database,
     id: AttachmentId,
@@ -104,6 +106,7 @@ impl Deref for AttachmentRef<'_> {
     }
 }
 
+/// A mutable reference to an [Attachment]. Implements [DerefMut] to [&mut Attachment][Attachment].
 pub struct AttachmentMut<'a> {
     database: &'a mut crate::db::Database,
     id: AttachmentId,

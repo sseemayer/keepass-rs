@@ -1,6 +1,6 @@
 use crate::db::Entry;
 
-/// An entry's history
+/// History of an [Entry] containing previous versions.
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct History {

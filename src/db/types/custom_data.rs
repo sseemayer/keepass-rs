@@ -1,6 +1,7 @@
 use chrono::NaiveDateTime;
 
-/// Custom data field for an entry or metadata for internal use
+/// Custom data field for an [Entry][crate::db::Entry] or [Meta][crate::db::Meta] for database-wide
+/// custom data
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomDataItem {

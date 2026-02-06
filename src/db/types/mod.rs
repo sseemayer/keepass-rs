@@ -17,7 +17,7 @@ pub use autotype::{AutoType, AutoTypeAssociation};
 use chrono::NaiveDateTime;
 pub use color::Color;
 pub use custom_data::{CustomDataItem, CustomDataValue};
-pub use entry::{DestinationGroupNotFoundError, Entry, EntryId, EntryMut, EntryRef};
+pub use entry::{DestinationGroupNotFoundError, Entry, EntryId, EntryMut, EntryRef, IconNotFoundError};
 pub use group::{Group, GroupId, GroupMut, GroupRef, MoveGroupError};
 pub use history::History;
 pub use icon::{Icon, IconId, IconMut, IconRef};

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use thiserror::Error;
 
-/// A color value for the Database, or Entry
+/// A color value for the [Database][crate::db::Database], or [Entry][crate::db::Entry]
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Color {
     pub r: u8,
@@ -30,6 +30,7 @@ impl<'de> serde::Deserialize<'de> for Color {
     }
 }
 
+/// Parse a color from a string, in the format "#RRGGBB"
 impl FromStr for Color {
     type Err = ParseColorError;
 
@@ -49,6 +50,7 @@ impl FromStr for Color {
     }
 }
 
+/// Format a color as a string in the format "#RRGGBB"
 impl std::fmt::Display for Color {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "#{:02X}{:02X}{:02X}", self.r, self.g, self.b)

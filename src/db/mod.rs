@@ -21,9 +21,9 @@
 //! let mut entry: EntryMut = root.add_entry();
 //!
 //! // EntryMut dereferences to &mut Entry, so you can access most of its fields directly
-//! entry.set(fields::TITLE, Value::string("My Entry"));
-//! entry.set(fields::USERNAME, Value::string("jdoe"));
-//! entry.set(fields::PASSWORD, Value::protected_string("hunter2"));
+//! entry.set_unprotected(fields::TITLE, "My Entry");
+//! entry.set_unprotected(fields::USERNAME, "jdoe");
+//! entry.set_protected(fields::PASSWORD, "hunter2");
 //! entry.tags.insert("example".into());
 //!
 //! // Adding the attachment to an entry will store it in the associated database and add a
@@ -32,6 +32,20 @@
 //! attachment.name = "myfile.txt".into();
 //! attachment.set_data(b"Hello, world!".to_vec());
 //!
+//!
+//! // You can also use the fluent API to chain method calls together.
+//! let entry_id = root.add_group()
+//!     .edit(|g: &mut GroupMut| {
+//!         g.name = "Another Group".into();
+//!         g.notes = Some("This is another example group".into());
+//!     })
+//!     .add_entry()
+//!     .edit(|e: &mut EntryMut| {
+//!         e.set_unprotected(fields::TITLE, "Another Entry");
+//!         e.set_unprotected(fields::USERNAME, "asmith");
+//!         e.set_protected(fields::PASSWORD, "password123");
+//!         e.tags.insert("example".into());
+//!     }).id();
 //! # }
 //! ```
 

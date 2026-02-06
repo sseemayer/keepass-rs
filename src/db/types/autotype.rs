@@ -1,4 +1,4 @@
-/// An AutoType setting associated with an Entry
+/// An AutoType setting associated with an [Entry][crate::db::Entry]
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoType {
@@ -8,7 +8,7 @@ pub struct AutoType {
     pub associations: Vec<AutoTypeAssociation>,
 }
 
-/// A window association associated with an AutoType setting
+/// A window association associated with an [AutoType] setting
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct AutoTypeAssociation {

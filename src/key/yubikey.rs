@@ -17,6 +17,7 @@ pub fn parse_yubikey_slot(slot_number: &str) -> Result<Slot, ParseYubikeySlotErr
 #[error("Invalid slot number: '{0}'")]
 pub struct ParseYubikeySlotError(pub String);
 
+/// A challenge-response key for challenge-response authentication.
 #[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum ChallengeResponseKey {
     LocalChallenge(String),

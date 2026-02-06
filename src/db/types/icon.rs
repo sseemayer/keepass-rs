@@ -1,7 +1,10 @@
+use std::ops::{Deref, DerefMut};
+
 use uuid::Uuid;
 
 use crate::db::Database;
 
+/// A unique identifier for a custom [Icon]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct IconId(Uuid);
@@ -26,7 +29,7 @@ impl std::fmt::Display for IconId {
     }
 }
 
-/// A custom icon
+/// A custom icon for an [Entry][crate::db::Entry]
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Icon {
@@ -43,7 +46,7 @@ impl Icon {
     }
 }
 
-/// An immutable reference to an icon in the database
+/// An immutable reference to a custom [Icon]. Implements [Deref] to [&Icon][Icon]
 pub struct IconRef<'a> {
     database: &'a Database,
     id: IconId,
@@ -55,7 +58,7 @@ impl IconRef<'_> {
     }
 }
 
-impl std::ops::Deref for IconRef<'_> {
+impl Deref for IconRef<'_> {
     type Target = Icon;
 
     fn deref(&self) -> &Self::Target {
@@ -64,7 +67,7 @@ impl std::ops::Deref for IconRef<'_> {
     }
 }
 
-/// A mutable reference to an icon in the database  
+/// A mutable reference to a custom [Icon]. Implements [DerefMut] to [&mut Icon][Icon]
 pub struct IconMut<'a> {
     database: &'a mut Database,
     id: IconId,
@@ -75,6 +78,7 @@ impl IconMut<'_> {
         IconMut { database, id }
     }
 
+    /// Get an immutable reference to the icon
     pub fn as_ref(&self) -> IconRef<'_> {
         IconRef::new(self.database, self.id)
     }
@@ -91,7 +95,7 @@ impl IconMut<'_> {
     }
 }
 
-impl std::ops::Deref for IconMut<'_> {
+impl Deref for IconMut<'_> {
     type Target = Icon;
 
     fn deref(&self) -> &Self::Target {
@@ -100,7 +104,7 @@ impl std::ops::Deref for IconMut<'_> {
     }
 }
 
-impl std::ops::DerefMut for IconMut<'_> {
+impl DerefMut for IconMut<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: IconMut can only be constructed with a valid id
         self.database.custom_icons.get_mut(&self.id).unwrap()
