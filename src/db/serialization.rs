@@ -115,4 +115,3 @@ mod tests {
         assert!(json.contains(r#""data":"SGVsbG8sIHdvcmxkIQ==""#)); // Base64-encoded "Hello, world!"
     }
 }
-
