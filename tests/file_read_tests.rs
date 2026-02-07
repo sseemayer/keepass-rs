@@ -1,3 +1,4 @@
+//! Tests for reading various example database files, including different KDBX versions and key types
 mod file_read_tests {
 
     use anyhow::Result;

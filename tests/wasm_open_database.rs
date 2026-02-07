@@ -1,3 +1,4 @@
+//! WASM-specific tests
 #![cfg(target_arch = "wasm32")]
 
 use keepass::{db::Database, DatabaseKey};

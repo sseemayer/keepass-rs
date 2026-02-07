@@ -1,3 +1,4 @@
+//! Large database tests
 #[cfg(feature = "save_kdbx4")]
 mod large_file_roundtrip_tests {
     use std::fs::File;

@@ -1,3 +1,4 @@
+//! Tests for reading entries from database files
 mod entry_tests {
     use anyhow::Result;
     use keepass::{
