@@ -219,6 +219,8 @@ pub(crate) fn decrypt_kdbx3(
     // Derive stream key for decrypting inner protected values and set up decryption context
     let stream_key = calculate_sha256(&[header.protected_stream_key.as_ref()]);
 
+    // stream key length is determined by the hash function, should always be valid for inner cipher
+    #[allow(clippy::expect_used)]
     let inner_decryptor = header
         .inner_cipher
         .get_cipher(&stream_key)

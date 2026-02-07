@@ -1,5 +1,8 @@
 use secrecy::{ExposeSecret, SecretBox};
 
+/// Value in an [Entry][crate::db::Entry]'s fields.
+///
+/// Can be either unprotected or protected text data.
 #[derive(Debug)]
 pub enum Value {
     /// unprotected text data
@@ -34,6 +37,7 @@ impl Value {
         matches!(self, Value::PString(_))
     }
 
+    /// Returns true if the value is empty
     pub fn is_empty(&self) -> bool {
         match self {
             Value::String(data) => data.is_empty(),

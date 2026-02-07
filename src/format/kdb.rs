@@ -161,6 +161,7 @@ fn parse_groups(
                     });
                 };
 
+                #[allow(clippy::expect_used)] // parent_id is guaranteed to exist
                 let mut parent = db.group_mut(parent_id).expect("parent group must exist");
 
                 let mut group = parent.add_group();
@@ -325,9 +326,8 @@ fn parse_entries(
 
             // BinaryDesc
             0x000d => {
-                if parsing_binary_data.is_some() {
-                    let data = parsing_binary_data.take().unwrap();
-                    entry_attachments.insert(from_utf8(field_value), data);
+                if let Some(ref data) = parsing_binary_data {
+                    entry_attachments.insert(from_utf8(field_value), data.clone());
                     parsing_binary_desc = None;
                 } else {
                     parsing_binary_desc = Some(from_utf8(field_value));
@@ -336,9 +336,8 @@ fn parse_entries(
 
             // BinaryData
             0x000e => {
-                if parsing_binary_desc.is_some() {
-                    let desc = parsing_binary_desc.take().unwrap();
-                    entry_attachments.insert(desc, field_value.to_vec());
+                if let Some(ref desc) = parsing_binary_desc {
+                    entry_attachments.insert(desc.clone(), field_value.to_vec());
                     parsing_binary_data = None;
                 } else {
                     parsing_binary_data = Some(field_value.to_vec());
@@ -349,6 +348,7 @@ fn parse_entries(
                 let gid = parsing_gid.ok_or(KdbParseEntryError::MissingGroupId)?;
                 let group_id = *gid_map.get(&gid).ok_or(KdbParseEntryError::UnknownGroupId(gid))?;
 
+                #[allow(clippy::expect_used)] // group_id was checked before
                 let mut group = db.group_mut(group_id).expect("group must exist");
 
                 let mut entry = group.add_entry();
@@ -419,8 +419,10 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, P
     let key_elements = db_key.get_key_elements()?;
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = if key_elements.len() == 1 {
-        #[allow(clippy::indexing_slicing)] // key_elements is guaranteed to be 1 byte
-        let key_element: [u8; 32] = key_elements[0].try_into().unwrap();
+        #[allow(clippy::indexing_slicing, clippy::expect_used)] // key_elements is guaranteed to be 1 byte
+        let key_element: [u8; 32] = key_elements[0]
+            .try_into()
+            .expect("initializing from single element should always succeed");
         GenericArray::from(key_element) // single pass of SHA256, already done before the call to parse()
     } else {
         calculate_sha256(&key_elements) // second pass of SHA256
@@ -447,6 +449,7 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, P
     };
 
     // Decrypt payload
+    #[allow(clippy::expect_used)] // master key is fixed-length, should never fail
     let payload_padded = outer_cipher_config
         .get_cipher(&master_key, header.encryption_iv.as_ref())
         .expect("Database key correctly derived")

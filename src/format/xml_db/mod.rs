@@ -145,7 +145,7 @@ impl KeePassFile {
         KeePassFile {
             meta,
             root: Root {
-                group: Group::db_to_xml(db.root(), inner_cipher, &attachment_id_numbering),
+                group: Group::db_to_xml(db.root(), inner_cipher, attachment_id_numbering),
                 deleted_objects: if db.deleted_objects.is_empty() {
                     None
                 } else {
@@ -155,7 +155,7 @@ impl KeePassFile {
                             .iter()
                             .map(|(uuid, deletion_time)| DeletedObject {
                                 uuid: UUID(*uuid),
-                                deletion_time: deletion_time.map(|dt| Timestamp::new_iso8601(dt)),
+                                deletion_time: deletion_time.map(Timestamp::new_iso8601),
                             })
                             .collect(),
                     })

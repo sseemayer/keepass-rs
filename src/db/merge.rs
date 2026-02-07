@@ -64,7 +64,7 @@ impl Database {
 }
 
 /// Get the last update time (modification or location change) of a group, considering its entries and subgroups.
-fn get_last_update(group: GroupRef) -> Option<NaiveDateTime> {
+fn get_last_update(group: GroupRef<'_>) -> Option<NaiveDateTime> {
     let last_update = group.times.last_modification.or(group.times.location_changed);
 
     group
@@ -89,6 +89,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
     // Handle groups that exist only in source and might need to be added.
     let mut groups_to_add = HashSet::new();
     for &id in source_groups.difference(&dest_groups) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
         let source = source_db.group(id).unwrap();
 
         // was the group deleted in dest?
@@ -139,10 +140,14 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
         }
 
         // get the current group from the stack
+        #[allow(clippy::expect_used)] // stack is guaranteed to be non-empty
         let &id = add_stack.last().expect("non-empty queue");
 
         // get the desired parent of the group to be re-added
+        #[allow(clippy::expect_used)] // id is guaranteed to exist in source
         let source = source_db.group(id).expect("source group exists");
+
+        #[allow(clippy::expect_used)] // this would be a severe issue with the algorithm
         let parent_id = source.parent().expect("cannot re-add root").id();
 
         // does the parent exist in dest?
@@ -179,6 +184,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
     // Handle groups that exist only in destination. These groups might need to be deleted.
     let mut to_delete = Vec::new();
     for &id in dest_groups.difference(&source_groups) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
         let dest = dest_db.group_mut(id).unwrap();
 
         // was the group deleted in source?
@@ -193,7 +199,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
 
             // queue the deletion so that all subgroups will also emit a deletion event
             to_delete.push(id);
-            dest_db.deleted_objects.insert(id.uuid(), deletion_time.clone());
+            dest_db.deleted_objects.insert(id.uuid(), *deletion_time);
 
             log.events.push(MergeEvent {
                 target: MergeEventTarget::Group(id),
@@ -221,7 +227,10 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
     let mut moves = Vec::new();
     let root_id = dest_db.root().id();
     for &id in dest_groups.intersection(&source_groups) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
         let mut dest = dest_db.group_mut(id).unwrap();
+
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
         let source = source_db.group(id).unwrap();
 
         let dest_parent_id = dest.as_ref().parent().map(|p| p.id());
@@ -321,6 +330,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
 
     // perform all the moves that were queued up
     for (group_id, parent_id) in moves {
+        #[allow(clippy::unwrap_used)] // group_id and parent_id are guaranteed to exist
         let mut group = dest_db.group_mut(group_id).unwrap();
         group.move_to(parent_id)?;
     }
@@ -335,6 +345,7 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
 
     // Handle entries that exist only in source and might need to be added.
     for &id in source_entries.difference(&dest_entries) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
         let source_entry = source_db.entry(id).unwrap();
 
         // was the entry deleted in dest?
@@ -391,6 +402,7 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
 
     // Handle entries that exist only in destination. These entries might need to be deleted.
     for &id in dest_entries.difference(&source_entries) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
         let dest_entry = dest_db.entry_mut(id).unwrap();
 
         // was the entry deleted in source?
@@ -408,7 +420,7 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
             }
 
             dest_entry.remove();
-            dest_db.deleted_objects.insert(id.uuid(), deletion_time.clone());
+            dest_db.deleted_objects.insert(id.uuid(), *deletion_time);
 
             log.events.push(MergeEvent {
                 target: MergeEventTarget::Entry(id),
@@ -419,7 +431,10 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
 
     // Handle entries that exist in both source and destination.
     for &id in dest_entries.intersection(&source_entries) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
         let mut dest_entry = dest_db.entry_mut(id).unwrap();
+
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
         let source_entry = source_db.entry(id).unwrap();
 
         let dest_parent_id = dest_entry.as_ref().parent().id();
@@ -503,7 +518,7 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
         if source_last_modification > dest_last_modification {
             // add the previous dest entry to history if it has diverged
             if let Some(last_history_entry) = merged_history.entries.first() {
-                if have_entries_diverged(&dest_entry, &last_history_entry) {
+                if have_entries_diverged(&dest_entry, last_history_entry) {
                     let mut dest_entry_for_history = dest_entry.deref().clone();
                     dest_entry_for_history.history = None;
                     merged_history.add_entry(dest_entry_for_history);
@@ -520,7 +535,7 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
             dest_entry.foreground_color = source_entry.foreground_color.clone();
             dest_entry.background_color = source_entry.background_color.clone();
             dest_entry.override_url = source_entry.override_url.clone();
-            dest_entry.quality_check = source_entry.quality_check.clone();
+            dest_entry.quality_check = source_entry.quality_check;
 
             // TODO: attachments and custom_icons_id
 
@@ -541,8 +556,8 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
 fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result<History, MergeError> {
     let mut entries: Vec<Entry> = Vec::new();
 
-    let mut entries_dest: Vec<Entry> = dest.entries.iter().cloned().collect();
-    let mut entries_source: Vec<Entry> = source.entries.iter().cloned().collect();
+    let mut entries_dest: Vec<Entry> = dest.entries.to_vec();
+    let mut entries_source: Vec<Entry> = source.entries.to_vec();
 
     for e in entries_dest.iter_mut() {
         if e.times.last_modification.is_none() {
@@ -568,6 +583,10 @@ fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result
     entries_source.sort_by_key(|e| e.times.last_modification);
 
     // perform a merge of both histories, which are sorted by last modification time.
+    //
+    // this code has a lot of unwraps but they are all checked - entry lists are checked for
+    // emptiness, and times are made not-none before sorting, so the unwraps should never panic.
+    #[allow(clippy::unwrap_used)]
     loop {
         match (entries_dest.is_empty(), entries_source.is_empty()) {
             (false, false) => {
@@ -576,28 +595,27 @@ fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result
                 let source_entry = entries_source.last().unwrap();
 
                 let dest_time = dest_entry.times.last_modification.unwrap();
+
                 let source_time = source_entry.times.last_modification.unwrap();
 
                 if dest_time > source_time {
                     entries.push(entries_dest.pop().unwrap());
                 } else if source_time > dest_time {
                     entries.push(entries_source.pop().unwrap());
-                } else {
-                    if have_entries_diverged(dest_entry, source_entry) {
-                        log.warnings.push(format!(
-                            "History entries for {} have the same modification timestamp {} but have diverged.",
-                            dest_entry.id(),
-                            source_time,
-                        ));
+                } else if have_entries_diverged(dest_entry, source_entry) {
+                    log.warnings.push(format!(
+                        "History entries for {} have the same modification timestamp {} but have diverged.",
+                        dest_entry.id(),
+                        source_time,
+                    ));
 
-                        // Both entries have the same timestamp but are different.
-                        entries.push(entries_dest.pop().unwrap());
-                        entries.push(entries_source.pop().unwrap());
-                    } else {
-                        // The entries are the same, so we can just take one of them.
-                        entries.push(entries_dest.pop().unwrap());
-                        entries_source.pop();
-                    }
+                    // Both entries have the same timestamp but are different.
+                    entries.push(entries_dest.pop().unwrap());
+                    entries.push(entries_source.pop().unwrap());
+                } else {
+                    // The entries are the same, so we can just take one of them.
+                    entries.push(entries_dest.pop().unwrap());
+                    entries_source.pop();
                 }
             }
 
@@ -613,7 +631,7 @@ fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result
         }
     }
 
-    return Ok(History { entries });
+    Ok(History { entries })
 }
 
 fn have_groups_diverged(a: &Group, b: &Group) -> bool {
@@ -1008,7 +1026,8 @@ mod merge_tests {
             .group_mut(deleted_group_id)
             .unwrap()
             .track_changes()
-            .remove();
+            .remove()
+            .unwrap();
 
         // perform the merge - the entry should be deleted
         let merge_result = destination_db.merge(&source_db).unwrap();
@@ -1114,7 +1133,8 @@ mod merge_tests {
             .group_mut(deleted_group_id)
             .unwrap()
             .track_changes()
-            .remove();
+            .remove()
+            .unwrap();
 
         let entry_count_before = destination_db.entries.len();
         let group_count_before = destination_db.groups.len();
@@ -1185,7 +1205,8 @@ mod merge_tests {
             .group_mut(deleted_group_id)
             .unwrap()
             .track_changes()
-            .remove();
+            .remove()
+            .unwrap();
 
         sleep();
 
@@ -1246,7 +1267,8 @@ mod merge_tests {
             .group_mut(deleted_group_id)
             .unwrap()
             .track_changes()
-            .remove();
+            .remove()
+            .unwrap();
 
         sleep();
 
@@ -1296,7 +1318,8 @@ mod merge_tests {
             .group_mut(deleted_group_id)
             .unwrap()
             .track_changes()
-            .remove();
+            .remove()
+            .unwrap();
 
         sleep();
 

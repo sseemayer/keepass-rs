@@ -25,6 +25,7 @@ impl GroupId {
         GroupId(uuid)
     }
 
+    /// Get the [Uuid] contained within
     pub fn uuid(&self) -> Uuid {
         self.0
     }
@@ -92,6 +93,7 @@ pub struct Group {
 }
 
 impl Group {
+    /// Get the unique identifier for this group
     pub fn id(&self) -> GroupId {
         self.id
     }
@@ -214,6 +216,7 @@ impl GroupRef<'_> {
         self.database
     }
 
+    /// Get a reference to the parent group, if any
     pub fn parent(&self) -> Option<GroupRef<'_>> {
         self.parent.map(|id| GroupRef::new(self.database, id))
     }
@@ -222,6 +225,7 @@ impl GroupRef<'_> {
 impl Deref for GroupRef<'_> {
     type Target = Group;
 
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // group existence is guaranteed
     fn deref(&self) -> &Self::Target {
         self.database
             .groups
@@ -241,16 +245,19 @@ impl GroupMut<'_> {
         GroupMut { database, id }
     }
 
+    /// Get an immutable reference to this group
     pub fn as_ref(&self) -> GroupRef<'_> {
         GroupRef::new(self.database, self.id)
     }
 
+    /// Get a mutable reference to a contained group by ID
     pub fn group_mut(&mut self, id: GroupId) -> Option<GroupMut<'_>> {
         self.groups
             .contains(&id)
             .then(move || GroupMut::new(self.database, id))
     }
 
+    /// Get a mutable reference to a contained entry by ID
     pub fn entry_mut(&mut self, id: EntryId) -> Option<EntryMut<'_>> {
         self.entries
             .contains(&id)
@@ -258,13 +265,13 @@ impl GroupMut<'_> {
     }
 
     /// Convenience method to edit the group in a closure.
-    pub fn edit(&mut self, f: impl FnOnce(&mut GroupMut)) -> &mut Self {
+    pub fn edit(&mut self, f: impl FnOnce(&mut GroupMut<'_>)) -> &mut Self {
         f(self);
         self
     }
 
     /// Convenience method to edit the group in a closure that tracks changes.
-    pub fn edit_tracking(&mut self, f: impl FnOnce(&mut GroupTrack)) -> &mut Self {
+    pub fn edit_tracking(&mut self, f: impl FnOnce(&mut GroupTrack<'_>)) -> &mut Self {
         let mut tracker = self.track_changes();
         f(&mut tracker);
         tracker.as_mut().times.last_modification = Some(Times::now());
@@ -282,6 +289,7 @@ impl GroupMut<'_> {
         GroupMut::new(self.database, id)
     }
 
+    /// Adds a new entry to this group and returns a mutable reference to it.
     pub fn add_entry(&mut self) -> EntryMut<'_> {
         let new_entry = Entry::new(self.id);
         let id = new_entry.id();
@@ -316,14 +324,21 @@ impl GroupMut<'_> {
         GroupMut::new(self.database, id)
     }
 
+    /// Get a mutable reference to the database this group belongs to
     pub fn database_mut(&mut self) -> &mut Database {
         self.database
     }
 
+    /// Get a mutable reference to the parent group, if any
     pub fn parent_mut(&mut self) -> Option<GroupMut<'_>> {
         self.parent.map(move |id| GroupMut::new(self.database, id))
     }
 
+    /// Move this group to a new parent group.
+    ///
+    /// Performs sanity checking and will return an error if the destination does not exist,
+    /// belongs to a different database, or if the move would create a cycle in the group
+    /// hierarchy.
     pub fn move_to(&mut self, new_parent_id: GroupId) -> Result<(), MoveGroupError> {
         let old_parent_id = self.parent.ok_or(MoveGroupError::CannotMoveRoot)?;
 
@@ -341,9 +356,12 @@ impl GroupMut<'_> {
         }
 
         // Remove from old parent
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // we checked that old_parent_id exists
         let mut old_parent = self.database.group_mut(old_parent_id).unwrap();
         old_parent.groups.remove(&self.id);
 
+        // Insert into new parent
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // we checked that new_parent_id exists
         let mut new_parent = self.database.group_mut(new_parent_id).unwrap();
         new_parent.groups.insert(self.id);
 
@@ -354,7 +372,7 @@ impl GroupMut<'_> {
     }
 
     /// Deletes this group and all its child groups and entries from the database.
-    pub fn remove(mut self) {
+    pub fn remove(self) {
         // Remove from parent
         if let Some(parent_id) = self.parent {
             if let Some(mut parent) = self.database.group_mut(parent_id) {
@@ -365,7 +383,9 @@ impl GroupMut<'_> {
         // Delete entries
         let entry_ids: Vec<EntryId> = self.entries.iter().cloned().collect();
         for entry_id in entry_ids {
-            self.entry_mut(entry_id).unwrap().remove();
+            if let Some(entry) = self.database.entry_mut(entry_id) {
+                entry.remove();
+            }
         }
 
         // Recursively delete child groups
@@ -390,14 +410,20 @@ impl GroupMut<'_> {
     }
 }
 
+/// Errors that can occur when moving a group to a new parent.
 #[derive(Debug, Error)]
 pub enum MoveGroupError {
+    /// The root group cannot be moved
     #[error("Cannot move the root group")]
     CannotMoveRoot,
 
+    /// The destination group was not found in the database.
+    ///
+    /// This error can also occur if the destination group belongs to a different database.
     #[error("Destination group with ID {0} not found")]
     NotFound(GroupId),
 
+    /// Moving the group would create a cycle in the group hierarchy, which is not allowed.
     #[error("Cannot move a group into itself or one of its descendants")]
     WouldCreateCycle,
 }
@@ -405,6 +431,7 @@ pub enum MoveGroupError {
 impl Deref for GroupMut<'_> {
     type Target = Group;
 
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // group existence is guaranteed
     fn deref(&self) -> &Self::Target {
         self.database
             .groups
@@ -414,6 +441,7 @@ impl Deref for GroupMut<'_> {
 }
 
 impl DerefMut for GroupMut<'_> {
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // group existence is guaranteed
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.database
             .groups
@@ -422,6 +450,8 @@ impl DerefMut for GroupMut<'_> {
     }
 }
 
+/// A variant of [GroupMut] that tracks changes to the group, such as deletions and moves, and
+/// updates the location changed time when the group is moved.
 pub struct GroupTrack<'a> {
     database: &'a mut crate::db::Database,
     id: GroupId,
@@ -441,7 +471,11 @@ impl GroupTrack<'_> {
 
     /// Deletes this group and all its child groups and entries from the database,
     /// adding them to the deleted entries and groups sets.
-    pub fn remove(mut self) {
+    pub fn remove(self) -> Result<(), CannotDeleteRootError> {
+        if self.id() == self.database.root().id() {
+            return Err(CannotDeleteRootError);
+        }
+
         // Remove from parent
         if let Some(parent_id) = self.parent {
             if let Some(mut parent) = self.database.group_mut(parent_id) {
@@ -451,19 +485,18 @@ impl GroupTrack<'_> {
 
         // Delete entries
         let entry_ids: Vec<EntryId> = self.entries.iter().cloned().collect();
+
         for entry_id in entry_ids {
-            self.as_mut()
-                .entry_mut(entry_id)
-                .unwrap()
-                .track_changes()
-                .remove();
+            if let Some(mut entry) = self.database.entry_mut(entry_id) {
+                entry.track_changes().remove();
+            }
         }
 
         // Recursively delete child groups
         let child_group_ids: Vec<GroupId> = self.groups.iter().cloned().collect();
         for child_id in child_group_ids {
             if let Some(mut child_group) = self.database.group_mut(child_id) {
-                child_group.track_changes().remove();
+                child_group.track_changes().remove()?;
             }
         }
 
@@ -472,10 +505,12 @@ impl GroupTrack<'_> {
         self.database
             .deleted_objects
             .insert(self.id.uuid(), Some(Times::now()));
+
+        Ok(())
     }
 
     /// Convenience method to edit the group in a closure, updating the last modification time.
-    pub fn edit(&mut self, f: impl FnOnce(&mut GroupTrack)) -> &mut Self {
+    pub fn edit(&mut self, f: impl FnOnce(&mut GroupTrack<'_>)) -> &mut Self {
         f(self);
         self.as_mut().times.last_modification = Some(Times::now());
         self
@@ -485,16 +520,23 @@ impl GroupTrack<'_> {
 impl Deref for GroupTrack<'_> {
     type Target = Group;
 
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // group existence is guaranteed
     fn deref(&self) -> &Self::Target {
         self.database.groups.get(&self.id).expect("Group not found")
     }
 }
 
 impl DerefMut for GroupTrack<'_> {
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // group existence is guaranteed
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.database.groups.get_mut(&self.id).expect("Group not found")
     }
 }
+
+/// Error returned when attempting to delete the root group, which is not allowed.
+#[derive(Debug, Error)]
+#[error("Cannot delete the root group")]
+pub struct CannotDeleteRootError;
 
 #[cfg(test)]
 mod tests {

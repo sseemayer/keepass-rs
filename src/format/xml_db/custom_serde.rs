@@ -43,8 +43,8 @@ pub mod cs_bool {
         let s = String::deserialize(d)?;
 
         match s.as_str().to_lowercase().as_str() {
-            "true" => Ok(true),
-            "false" => Ok(false),
+            "true" | "1" => Ok(true),
+            "false" | "0" => Ok(false),
             _ => Err(serde::de::Error::custom(format!("Invalid boolean string: {}", s))),
         }
     }
@@ -76,8 +76,8 @@ pub mod cs_opt_bool {
                     Ok(None)
                 } else {
                     match s.to_lowercase().as_str() {
-                        "true" => Ok(Some(true)),
-                        "false" => Ok(Some(false)),
+                        "true" | "1" => Ok(Some(true)),
+                        "false" | "0" => Ok(Some(false)),
                         "null" => Ok(None),
                         _ => Err(serde::de::Error::custom(format!("Invalid boolean string: {}", s))),
                     }

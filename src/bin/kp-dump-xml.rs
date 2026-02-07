@@ -1,4 +1,4 @@
-/// utility to dump keepass database internal XML data.
+//! utility to dump keepass database internal XML data.
 use std::fs::File;
 use std::io::{Read, Write};
 
@@ -25,6 +25,7 @@ struct Args {
     no_password: bool,
 }
 
+#[allow(missing_docs)]
 pub fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -48,7 +49,7 @@ pub fn main() -> Result<()> {
 
     let xml = Database::get_xml(&data, key)?;
 
-    File::create(args.out_xml)?.write_all(&xml.as_bytes())?;
+    File::create(args.out_xml)?.write_all(xml.as_bytes())?;
 
     Ok(())
 }

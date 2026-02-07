@@ -18,6 +18,7 @@ impl IconId {
         IconId(id)
     }
 
+    /// Get the [Uuid] contained within
     pub fn to_uuid(&self) -> Uuid {
         self.0
     }
@@ -41,6 +42,7 @@ pub struct Icon {
 }
 
 impl Icon {
+    /// Get the ID of the icon
     pub fn id(&self) -> IconId {
         self.id
     }
@@ -61,6 +63,7 @@ impl IconRef<'_> {
 impl Deref for IconRef<'_> {
     type Target = Icon;
 
+    #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: IconRef can only be constructed with a valid id
         self.database.custom_icons.get(&self.id).unwrap()
@@ -98,6 +101,7 @@ impl IconMut<'_> {
 impl Deref for IconMut<'_> {
     type Target = Icon;
 
+    #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: IconMut can only be constructed with a valid id
         self.database.custom_icons.get(&self.id).unwrap()
@@ -105,6 +109,7 @@ impl Deref for IconMut<'_> {
 }
 
 impl DerefMut for IconMut<'_> {
+    #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: IconMut can only be constructed with a valid id
         self.database.custom_icons.get_mut(&self.id).unwrap()

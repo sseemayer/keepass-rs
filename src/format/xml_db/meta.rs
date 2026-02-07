@@ -138,37 +138,34 @@ impl From<crate::db::Meta> for Meta {
         Self {
             generator: db.generator.clone(),
             database_name: db.database_name.clone(),
-            database_name_changed: db.database_name_changed.as_ref().map(|t| t.clone().into()),
+            database_name_changed: db.database_name_changed.as_ref().map(|t| (*t).into()),
             database_description: db.database_description.clone(),
-            database_description_changed: db.database_description_changed.as_ref().map(|t| t.clone().into()),
+            database_description_changed: db.database_description_changed.as_ref().map(|t| (*t).into()),
             default_username: db.default_username.clone(),
-            default_username_changed: db.default_username_changed.as_ref().map(|t| t.clone().into()),
+            default_username_changed: db.default_username_changed.as_ref().map(|t| (*t).into()),
             maintenance_history_days: db.maintenance_history_days,
             color: db.color.clone(),
-            master_key_changed: db.master_key_changed.as_ref().map(|t| t.clone().into()),
+            master_key_changed: db.master_key_changed.as_ref().map(|t| (*t).into()),
             master_key_change_rec: db.master_key_change_rec,
             master_key_change_force: db.master_key_change_force,
             memory_protection: db.memory_protection.as_ref().map(|mp| mp.clone().into()),
             custom_icons: None, // Handled separately
             recycle_bin_enabled: db.recyclebin_enabled,
-            recycle_bin_uuid: db.recyclebin_uuid.map(|u| UUID(u)),
-            recycle_bin_changed: db.recyclebin_changed.as_ref().map(|t| t.clone().into()),
-            entry_templates_group: db.entry_templates_group.map(|u| UUID(u)),
-            entry_templates_group_changed: db
-                .entry_templates_group_changed
-                .as_ref()
-                .map(|t| t.clone().into()),
-            last_selected_group: db.last_selected_group.map(|u| UUID(u)),
-            last_top_visible_group: db.last_top_visible_group.map(|u| UUID(u)),
+            recycle_bin_uuid: db.recyclebin_uuid.map(UUID),
+            recycle_bin_changed: db.recyclebin_changed.as_ref().map(|t| (*t).into()),
+            entry_templates_group: db.entry_templates_group.map(UUID),
+            entry_templates_group_changed: db.entry_templates_group_changed.as_ref().map(|t| (*t).into()),
+            last_selected_group: db.last_selected_group.map(UUID),
+            last_top_visible_group: db.last_top_visible_group.map(UUID),
             history_max_items: db.history_max_items,
             history_max_size: db.history_max_size,
-            settings_changed: db.settings_changed.as_ref().map(|t| t.clone().into()),
+            settings_changed: db.settings_changed.as_ref().map(|t| (*t).into()),
             binaries: None, // Handled separately
             custom_data: Some(CustomData::db_to_xml(
                 &db.custom_data
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect(),
+                    .collect::<Vec<_>>(),
             )),
         }
     }
@@ -253,7 +250,7 @@ impl CustomData {
     }
 
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(db: &Vec<(String, crate::db::CustomDataItem)>) -> Self {
+    fn db_to_xml(db: &[(String, crate::db::CustomDataItem)]) -> Self {
         let items = db
             .iter()
             .map(|(key, item)| {
@@ -263,7 +260,7 @@ impl CustomData {
                     .map(|v| v.clone().into())
                     .unwrap_or(CustomDataValue::String(String::new()));
 
-                let last_modification_time = item.last_modification_time.as_ref().map(|t| t.clone().into());
+                let last_modification_time = item.last_modification_time.as_ref().map(|t| (*t).into());
 
                 CustomDataItem {
                     key: key.clone(),

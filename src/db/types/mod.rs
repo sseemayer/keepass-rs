@@ -18,7 +18,7 @@ use chrono::NaiveDateTime;
 pub use color::Color;
 pub use custom_data::{CustomDataItem, CustomDataValue};
 pub use entry::{DestinationGroupNotFoundError, Entry, EntryId, EntryMut, EntryRef, IconNotFoundError};
-pub use group::{Group, GroupId, GroupMut, GroupRef, MoveGroupError};
+pub use group::{CannotDeleteRootError, Group, GroupId, GroupMut, GroupRef, MoveGroupError};
 pub use history::History;
 pub use icon::{Icon, IconId, IconMut, IconRef};
 pub use meta::{MemoryProtection, Meta};
@@ -38,7 +38,10 @@ use crate::config::DatabaseConfig;
 /// See the [module-level documentation](crate::db) for an example.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Database {
+    /// Configuration settings for the database, such as encryption settings
     pub config: DatabaseConfig,
+
+    /// Metadata about the database, such as the name and description
     pub meta: Meta,
 
     pub(crate) root: GroupId,
@@ -58,6 +61,9 @@ pub struct Database {
 }
 
 impl Database {
+    /// Create a new database with a single root group and no entries, groups, or attachments.
+    ///
+    /// The root group will be assigned a new random UUID.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self::new_with_root_id(GroupId::new())
@@ -99,36 +105,44 @@ impl Database {
         }
     }
 
+    /// Get an immutable reference to the root group of the database.
     pub fn root(&self) -> GroupRef<'_> {
         GroupRef::new(self, self.root)
     }
 
+    /// Get a mutable reference to the root group of the database.
     pub fn root_mut(&mut self) -> GroupMut<'_> {
         GroupMut::new(self, self.root)
     }
 
+    /// Get an immutable reference to the recycle bin group, if it exists
     pub fn recycle_bin(&self) -> Option<GroupRef<'_>> {
         let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::from_uuid)?;
         self.group(recyclebin_id)
     }
 
+    /// Get a mutable reference to the recycle bin group, if it exists
     pub fn recycle_bin_mut(&mut self) -> Option<GroupMut<'_>> {
         let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::from_uuid)?;
         self.group_mut(recyclebin_id)
     }
 
+    /// Get the number of attachments in the database
     pub fn num_attachments(&self) -> usize {
         self.attachments.len()
     }
 
+    /// Get the number of entries in the database
     pub fn num_entries(&self) -> usize {
         self.entries.len()
     }
 
+    /// Get the number of groups in the database, including the root group and the recycle bin (if it exists)
     pub fn num_groups(&self) -> usize {
         self.groups.len()
     }
 
+    /// Iterate over all entries with immutable access.
     pub fn iter_all_entries(&self) -> impl Iterator<Item = EntryRef<'_>> + '_ {
         self.entries.keys().map(move |id| EntryRef::new(self, *id))
     }
@@ -180,48 +194,56 @@ impl Database {
         }
     }
 
+    /// Get an immutable reference to the entry with the given ID, if it exists
     pub fn entry(&self, id: EntryId) -> Option<EntryRef<'_>> {
         self.entries
             .contains_key(&id)
             .then(move || EntryRef::new(self, id))
     }
 
+    /// Get a mutable reference to the entry with the given ID, if it exists
     pub fn entry_mut(&mut self, id: EntryId) -> Option<EntryMut<'_>> {
         self.entries
             .contains_key(&id)
             .then(move || EntryMut::new(self, id))
     }
 
+    /// Get an immutable reference to the group with the given ID, if it exists
     pub fn group(&self, id: GroupId) -> Option<GroupRef<'_>> {
         self.groups
             .contains_key(&id)
             .then(move || GroupRef::new(self, id))
     }
 
+    /// Get a mutable reference to the group with the given ID, if it exists
     pub fn group_mut(&mut self, id: GroupId) -> Option<GroupMut<'_>> {
         self.groups
             .contains_key(&id)
             .then(move || GroupMut::new(self, id))
     }
 
+    /// Get an immutable reference to the attachment with the given ID, if it exists
     pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
         self.attachments
             .contains_key(&id)
             .then(move || AttachmentRef::new(self, id))
     }
 
+    /// Get a mutable reference to the attachment with the given ID, if it exists
     pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
         self.attachments
             .contains_key(&id)
             .then(move || AttachmentMut::new(self, id))
     }
 
+    /// Get an immutable reference to the custom icon with the given ID, if it exists
     pub fn custom_icon(&self, id: IconId) -> Option<IconRef<'_>> {
         self.custom_icons
             .contains_key(&id)
             .then(move || IconRef::new(self, id))
     }
 
+    /// Get a mutable reference to the custom icon with the given ID, if it exists
     pub fn custom_icon_mut(&mut self, id: IconId) -> Option<IconMut<'_>> {
         self.custom_icons
             .contains_key(&id)

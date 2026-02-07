@@ -8,13 +8,27 @@ use chrono::NaiveDateTime;
 #[non_exhaustive]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Times {
+    /// The time of creation
     pub creation: Option<NaiveDateTime>,
+
+    /// The time of the last modification
     pub last_modification: Option<NaiveDateTime>,
+
+    /// The time of the last access
     pub last_access: Option<NaiveDateTime>,
+
+    /// The time of expiration
     pub expiry: Option<NaiveDateTime>,
+
+    /// The time of the last location change, which is updated when an entry is moved to a different group.
     pub location_changed: Option<NaiveDateTime>,
 
+    /// Whether the entry or group expires.
+    ///
+    /// A `None` value indicates that the expiration status is not set
     pub expires: Option<bool>,
+
+    /// The number of times the entry or group has been accessed.
     pub usage_count: Option<usize>,
 }
 
@@ -50,13 +64,17 @@ impl Times {
     ///
     /// Times are rounded to the nearest second because KeePass only stores second precision
     /// timestamps, so serialization/deserialization would lose precision otherwise.
+    // a 64-bit timestamp will not overflow until the year 292 billion, so we can safely unwrap
+    // here.
+    #[allow(clippy::missing_panics_doc, clippy::expect_used)]
     pub fn now() -> NaiveDateTime {
         chrono::DateTime::from_timestamp(now_timestamp(), 0)
-            .unwrap()
+            .expect("We are before the year 292 billion")
             .naive_utc()
     }
 
     /// Returns the Unix epoch time: 1970-01-01 00:00:00
+    #[allow(clippy::missing_panics_doc, clippy::unwrap_used)] // will not panic from constant input
     pub fn epoch() -> NaiveDateTime {
         chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
     }

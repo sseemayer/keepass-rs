@@ -1,4 +1,4 @@
-/// utility to dump keepass database internal XML data.
+//! utility to dump keepass database internal XML data.
 use std::fs::File;
 
 use anyhow::Result;
@@ -23,6 +23,7 @@ struct Args {
     entry: String,
 }
 
+#[allow(missing_docs)]
 pub fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -47,11 +48,11 @@ pub fn main() -> Result<()> {
 
     let entry = db
         .iter_all_entries()
-        .find(|e| e.get_str("Title").map_or(false, |title| title == entry_name))
+        .find(|e| e.get_str("Title") == Some(entry_name))
         .ok_or_else(|| anyhow::format_err!("Could not find entry with provided name"))?;
 
     let totp = entry.get_otp()?;
-    println!("Token is {}", totp.value_now().unwrap().code);
+    println!("Token is {}", totp.value_now()?.code);
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-/// utility to purge the history of the entries in the database
+//! utility to purge the history of the entries in the database
 use std::fs::File;
 
 use anyhow::Result;
@@ -21,6 +21,7 @@ struct Args {
     no_password: bool,
 }
 
+#[allow(missing_docs)]
 pub fn main() -> Result<()> {
     let args = Args::parse();
 

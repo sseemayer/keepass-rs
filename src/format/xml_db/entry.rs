@@ -8,7 +8,7 @@ use crate::{
     crypt::ciphers::Cipher,
     db::Color,
     format::xml_db::{
-        custom_serde::{cs_bool, cs_opt_fromstr, cs_opt_string},
+        custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         meta::CustomData,
         times::Times,
         UUID,
@@ -61,7 +61,7 @@ pub struct Entry {
 impl Entry {
     pub(crate) fn xml_to_db_handle(
         self,
-        mut target: crate::db::EntryMut,
+        mut target: crate::db::EntryMut<'_>,
         header_attachments: &[crate::db::Attachment],
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
@@ -235,9 +235,10 @@ impl Entry {
             .map(|a| BinaryField {
                 key: a.name.clone(),
                 value: BinaryValue {
+                    #[allow(clippy::expect_used)] // we generated the list of attachment before
                     value_ref: attachment_id_numbering
                         .get(&a.id())
-                        .expect("Attachment in entry not found in header attachments")
+                        .expect("Attachment in entry not found in attachments")
                         .0,
                 },
             })
@@ -312,7 +313,7 @@ impl Entry {
             .attachments
             .iter()
             .filter_map(|a| {
-                attachment_id_numbering.get(&a).map(|(id_ref, key)| BinaryField {
+                attachment_id_numbering.get(a).map(|(id_ref, key)| BinaryField {
                     key: key.clone(),
                     value: BinaryValue { value_ref: *id_ref },
                 })
@@ -417,8 +418,8 @@ pub struct AutoType {
     #[serde(default, with = "cs_bool")]
     pub enabled: bool,
 
-    #[serde(default, with = "cs_opt_fromstr")]
-    pub data_transfer_obfuscation: Option<isize>,
+    #[serde(default, with = "cs_opt_bool")]
+    pub data_transfer_obfuscation: Option<bool>,
 
     #[serde(default, with = "cs_opt_string")]
     pub default_sequence: Option<String>,
@@ -572,13 +573,13 @@ mod tests {
     fn test_deserialize_autotype() {
         let xml = r#"<AutoType>
             <Enabled>True</Enabled>
-            <DataTransferObfuscation>0</DataTransferObfuscation>
+            <DataTransferObfuscation>False</DataTransferObfuscation>
             <DefaultSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</DefaultSequence>
         </AutoType>"#;
 
         let deserialized: Test<AutoType> = quick_xml::de::from_str(xml).unwrap();
         assert_eq!(deserialized.0.enabled, true);
-        assert_eq!(deserialized.0.data_transfer_obfuscation.unwrap(), 0);
+        assert_eq!(deserialized.0.data_transfer_obfuscation.unwrap(), false);
         assert_eq!(
             deserialized.0.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
@@ -589,7 +590,7 @@ mod tests {
     fn test_serialize_autotype() {
         let autotype = AutoType {
             enabled: true,
-            data_transfer_obfuscation: Some(0),
+            data_transfer_obfuscation: Some(false),
             default_sequence: Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string()),
             associations: vec![AutoTypeAssociation {
                 window: "Example Window".to_string(),
@@ -600,7 +601,7 @@ mod tests {
         let serialized = quick_xml::se::to_string(&Test(autotype)).unwrap();
         assert_eq!(
             serialized,
-            r#"<Test><Enabled>True</Enabled><DataTransferObfuscation>0</DataTransferObfuscation><DefaultSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</DefaultSequence><Association><Window>Example Window</Window><KeystrokeSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</KeystrokeSequence></Association></Test>"#
+            r#"<Test><Enabled>True</Enabled><DataTransferObfuscation>False</DataTransferObfuscation><DefaultSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</DefaultSequence><Association><Window>Example Window</Window><KeystrokeSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</KeystrokeSequence></Association></Test>"#
         );
     }
 
@@ -632,7 +633,7 @@ mod tests {
             </Binary>
             <AutoType>
                 <Enabled>True</Enabled>
-                <DataTransferObfuscation>0</DataTransferObfuscation>
+                <DataTransferObfuscation>False</DataTransferObfuscation>
                 <DefaultSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</DefaultSequence>
             </AutoType>
         </Entry>"#;
@@ -659,7 +660,7 @@ mod tests {
         assert!(deserialized.0.auto_type.is_some());
         let autotype = deserialized.0.auto_type.unwrap();
         assert_eq!(autotype.enabled, true);
-        assert_eq!(autotype.data_transfer_obfuscation.unwrap(), 0);
+        assert_eq!(autotype.data_transfer_obfuscation.unwrap(), false);
         assert_eq!(
             autotype.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"

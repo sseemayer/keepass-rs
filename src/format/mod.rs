@@ -32,15 +32,22 @@ pub const KDBX4_CURRENT_MINOR_VERSION: u16 = 0;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum DatabaseVersion {
+    /// KeePass 1 format, with the minor version specified in the header
     KDB(u16),
+
+    /// KeePass 2 pre-release format, with the minor version specified in the header
     KDB2(u16),
+
+    /// KeePass 2 format, major version 3, with the minor version specified in the header
     KDB3(u16),
+
+    /// KeePass 2 format, major version 4, with the minor version specified in the header
     KDB4(u16),
 }
 
 impl DatabaseVersion {
     #[allow(clippy::indexing_slicing)] // data length is checked
-    pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseVersionParseError> {
+    pub(crate) fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseVersionParseError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
             return Err(DatabaseVersionParseError::InvalidKDBXIdentifier);
         }

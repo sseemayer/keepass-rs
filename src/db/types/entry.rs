@@ -22,6 +22,7 @@ impl EntryId {
         EntryId(uuid)
     }
 
+    /// Get the [Uuid] contained within
     pub fn uuid(&self) -> Uuid {
         self.0
     }
@@ -175,7 +176,7 @@ impl EntryRef<'_> {
         EntryRef { database, id }
     }
 
-    /// Get an attachment of this entry by ID.
+    /// Get an immutable reference of an attachment of this entry by ID.
     pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
         self.attachments
             .contains(&id)
@@ -191,6 +192,7 @@ impl EntryRef<'_> {
 
     /// Get a reference to the parent group of this entry.
     pub fn parent(&self) -> GroupRef<'_> {
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
         self.database.group(self.parent).unwrap()
     }
 
@@ -209,6 +211,7 @@ impl EntryRef<'_> {
 impl Deref for EntryRef<'_> {
     type Target = Entry;
 
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: EntryRef can only be constructed with a valid EntryId
         self.database.entries.get(&self.id).expect("Entry not found")
@@ -226,18 +229,19 @@ impl EntryMut<'_> {
         EntryMut { database, id }
     }
 
+    /// Get an immutable reference to the entry.
     pub fn as_ref(&self) -> EntryRef<'_> {
         EntryRef::new(self.database, self.id)
     }
 
     /// Convenience method to edit the entry in a closure.
-    pub fn edit(&mut self, f: impl FnOnce(&mut EntryMut)) -> &mut Self {
+    pub fn edit(&mut self, f: impl FnOnce(&mut EntryMut<'_>)) -> &mut Self {
         f(self);
         self
     }
 
     /// Convenience method to edit the entry in a closure, tracking changes.
-    pub fn edit_tracking(&mut self, f: impl FnOnce(&mut EntryTrack)) -> &mut Self {
+    pub fn edit_tracking(&mut self, f: impl FnOnce(&mut EntryTrack<'_>)) -> &mut Self {
         {
             let mut tracked = self.track_changes();
             f(&mut tracked);
@@ -270,6 +274,7 @@ impl EntryMut<'_> {
         AttachmentMut::new(self.database, id)
     }
 
+    /// Get a mutable reference to an attachment of this entry by ID.
     pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
         self.attachments
             .contains(&id)
@@ -278,6 +283,7 @@ impl EntryMut<'_> {
 
     /// Get a mutable reference to the parent group of this entry.
     pub fn parent_mut(&mut self) -> GroupMut<'_> {
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
         self.database.group_mut(self.parent).unwrap()
     }
 
@@ -292,6 +298,7 @@ impl EntryMut<'_> {
         let mut parent = self.parent_mut();
         parent.entries.remove(&my_id);
 
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // group existence is checked
         let mut new_parent = self.database.group_mut(group_id).unwrap();
         new_parent.entries.insert(my_id);
         self.parent = group_id;
@@ -323,6 +330,7 @@ impl EntryMut<'_> {
     }
 
     /// Remove this entry from the database, including all its attachments.
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // the entry and parent should always be found
     pub fn remove(self) {
         let entry = self.database.entries.remove(&self.id).expect("Entry not found");
 
@@ -353,6 +361,7 @@ pub struct IconNotFoundError(IconId);
 impl Deref for EntryMut<'_> {
     type Target = Entry;
 
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: EntryMut can only be constructed with a valid EntryId
         self.database.entries.get(&self.id).expect("Entry not found")
@@ -360,6 +369,7 @@ impl Deref for EntryMut<'_> {
 }
 
 impl DerefMut for EntryMut<'_> {
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: EntryMut can only be constructed with a valid EntryId
         self.database.entries.get_mut(&self.id).expect("Entry not found")
@@ -367,6 +377,7 @@ impl DerefMut for EntryMut<'_> {
 }
 
 /// A variant of [EntryMut] that will persist the history of the entry when dropped.
+#[clippy::has_significant_drop]
 pub struct EntryTrack<'a> {
     database: &'a mut Database,
     id: EntryId,
@@ -398,7 +409,7 @@ impl EntryTrack<'_> {
     }
 
     /// Convenience method to edit the entry in a closure, tracking changes.
-    pub fn edit(&mut self, f: impl FnOnce(&mut EntryTrack)) -> &mut Self {
+    pub fn edit(&mut self, f: impl FnOnce(&mut EntryTrack<'_>)) -> &mut Self {
         f(self);
         self.times.last_modification = Some(Times::now());
         self
@@ -429,12 +440,14 @@ impl EntryTrack<'_> {
 impl Deref for EntryTrack<'_> {
     type Target = Entry;
 
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
     fn deref(&self) -> &Self::Target {
         self.database.entries.get(&self.id).expect("Entry not found")
     }
 }
 
 impl DerefMut for EntryTrack<'_> {
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
     fn deref_mut(&mut self) -> &mut Self::Target {
         let entry = self.database.entries.get_mut(&self.id).expect("Entry not found");
         entry
@@ -447,7 +460,8 @@ impl Drop for EntryTrack<'_> {
         if let Some(entry) = self.database.entries.get_mut(&self.id) {
             let parent_id = entry.parent;
             let historical = std::mem::replace(&mut self.historical, Entry::new(parent_id));
-            entry.history.as_mut().unwrap().add_entry(historical);
+
+            entry.history.get_or_insert_default().add_entry(historical);
         }
     }
 }

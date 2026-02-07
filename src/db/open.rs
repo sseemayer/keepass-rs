@@ -48,38 +48,51 @@ impl Database {
     }
 }
 
+/// Errors that can occur when getting the version of a database
 #[derive(Error, Debug)]
 pub enum GetDatabaseVersionError {
+    /// I/O error reading the database version, e.g. if the source is not readable
     #[error("I/O error reading database version: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Error parsing the database version, e.g. if the database is not a valid KeePass file
     #[error(transparent)]
     Parse(#[from] DatabaseVersionParseError),
 }
 
+/// Errors that can occur when opening a database
 #[derive(Error, Debug)]
 pub enum DatabaseOpenError {
+    /// I/O error reading the database, e.g. if the source is not readable
     #[error("I/O error reading database: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Error parsing the database, e.g. if the database is not a valid KeePass file or if the key
+    /// is incorrect
     #[error(transparent)]
     Parse(#[from] DatabaseParseError),
 }
 
+/// Errors that can occur when parsing a database
 #[derive(Error, Debug)]
 pub enum DatabaseParseError {
+    /// Error parsing the database version, e.g. if the database is not a valid KeePass file
     #[error(transparent)]
     Version(#[from] DatabaseVersionParseError),
 
+    /// The database version is valid but not supported by this library
     #[error("Error parsing database: unsupported version {0}")]
     Unsupported(DatabaseVersion),
 
+    /// Error parsing a KDB database
     #[error("Error parsing KDB v1 database: {0}")]
     KDB(#[from] crate::format::kdb::ParseKdbError),
 
+    /// Error parsing a KDBX v3 database
     #[error("Error parsing KDB v3 database: {0}")]
     KDB3(#[from] crate::format::kdbx3::KDBX3ParseError),
 
+    /// Error parsing a KDBX v4 database
     #[error("Error parsing KDB v4 database: {0}")]
     KDB4(#[from] crate::format::kdbx4::ParseKdbx4Error),
 }

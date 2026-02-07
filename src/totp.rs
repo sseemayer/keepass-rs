@@ -19,8 +19,13 @@ const DEFAULT_DIGITS: u32 = 8;
 /// Choices of hash algorithm for TOTP
 #[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum TOTPAlgorithm {
+    /// SHA-1 hash algorithm (default)
     Sha1,
+
+    /// SHA-256 hash algorithm
     Sha256,
+
+    /// SHA-512 hash algorithm
     Sha512,
 }
 
@@ -40,10 +45,19 @@ impl std::str::FromStr for TOTPAlgorithm {
 /// Time-based one time password settings
 #[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct TOTP {
+    /// Label for the TOTP
     pub label: String,
+
+    /// Optional issuer for the TOTP
     pub issuer: Option<String>,
+
+    /// Time period in seconds for which a generated code is valid (default: 30)
     pub period: u64,
+
+    /// Number of digits in the generated code (default: 8)
     pub digits: u32,
+
+    /// Hash algorithm to use for generating the code (default: SHA-1)
     pub algorithm: TOTPAlgorithm,
 
     secret: Vec<u8>,
@@ -51,13 +65,18 @@ pub struct TOTP {
 
 /// A generated one time password
 pub struct OTPCode {
+    /// The generated code as a string of digits
     pub code: String,
+
+    /// Duration for which the generated code is still valid
     pub valid_for: Duration,
+
+    /// The time period in seconds for which the code is valid (same as the TOTP's period)
     pub period: Duration,
 }
 
 impl std::fmt::Display for OTPCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "Code: {}, valid for: {}/{}s",
@@ -71,27 +90,35 @@ impl std::fmt::Display for OTPCode {
 /// Errors while processing a TOTP specification
 #[derive(Debug, Error)]
 pub enum TOTPError {
+    /// Errors from parsing the otpauth:// URL
     #[error(transparent)]
     UrlFormat(#[from] url::ParseError),
 
+    /// Errors from parsing integer fields in the TOTP specification (e.g. period, digits)
     #[error(transparent)]
     IntFormat(#[from] std::num::ParseIntError),
 
+    /// Required fields are missing from the TOTP specification
     #[error("Missing TOTP field: {}", _0)]
     MissingField(&'static str),
 
+    /// Errors from getting the current system time
     #[error(transparent)]
     Time(#[from] SystemTimeError),
 
+    /// Errors from base32 decoding the secret
     #[error("Base32 decoding error")]
     Base32,
 
+    /// No OTP record found in the Entry
     #[error("No OTP record found")]
     NoRecord,
 
+    /// The otpauth:// URL has an unsupported scheme (should be "otpauth")
     #[error("Bad URL scheme: '{}'", _0)]
     BadScheme(String),
 
+    /// The otpauth:// URL has an unsupported hash algorithm
     #[error("Bad hash algorithm: '{}'", _0)]
     BadAlgorithm(String),
 }
@@ -167,6 +194,7 @@ impl TOTP {
         Ok(self.value_at(time))
     }
 
+    /// Get the Base32-encoded secret string for this TOTP
     pub fn get_secret(&self) -> String {
         base32::encode(base32::Alphabet::Rfc4648 { padding: true }, &self.secret)
     }

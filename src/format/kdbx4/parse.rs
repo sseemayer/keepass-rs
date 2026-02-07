@@ -109,6 +109,8 @@ pub(crate) fn decrypt_kdbx4(
         &hmac_block_stream::HMAC_KEY_END,
     ]);
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+
+    #[allow(clippy::expect_used)] // inputs to HMAC calculation are fixed size, should never fail
     if header_hmac
         != crypt::calculate_hmac(&[header_data], &header_hmac_key)
             .expect("Always derive a valid HMAC key")

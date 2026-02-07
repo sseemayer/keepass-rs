@@ -32,6 +32,7 @@ pub(crate) fn read_hmac_block_stream(
         let mut block_index_buf = [0u8; 8];
         LittleEndian::write_u64(&mut block_index_buf, block_index);
 
+        #[allow(clippy::expect_used)] // inputs to HMAC calculation are fixed size, should never fail
         if hmac
             != crate::crypt::calculate_hmac(&[&block_index_buf, size_bytes, block], &hmac_block_key)
                 .expect("HMAC block key calculated correctly")
@@ -73,6 +74,7 @@ pub(crate) fn write_hmac_block_stream(data: &[u8], key: &GenericArray<u8, U64>) 
     while pos < data.len() {
         let size = data.len() - pos;
 
+        #[allow(clippy::indexing_slicing)] // size is calculated to be within the bounds of data
         let block = &data[pos..(pos + size)];
 
         let mut size_bytes: Vec<u8> = vec![0; 4];
@@ -83,6 +85,7 @@ pub(crate) fn write_hmac_block_stream(data: &[u8], key: &GenericArray<u8, U64>) 
         let mut block_index_buf = [0u8; 8];
         LittleEndian::write_u64(&mut block_index_buf, block_index);
 
+        #[allow(clippy::expect_used)] // inputs to HMAC calculation are fixed size, should never fail
         let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, block], &hmac_block_key)
             .expect("Correctly constructed HMAC block key");
 
@@ -100,6 +103,8 @@ pub(crate) fn write_hmac_block_stream(data: &[u8], key: &GenericArray<u8, U64>) 
     LittleEndian::write_u64(&mut block_index_buf, block_index);
 
     let size_bytes = vec![0; 4];
+
+    #[allow(clippy::expect_used)] // inputs to HMAC calculation are fixed size, should never fail
     let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, &[]], &hmac_block_key)
         .expect("Correctly constructed HMAC block key");
 

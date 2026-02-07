@@ -29,8 +29,13 @@ impl AttachmentId {
 #[derive(Debug, Clone)]
 pub struct Attachment {
     id: AttachmentId,
+
+    /// File name of the attachment, e.g. "document.pdf"
     pub name: String,
+
+    /// Whether the attachment is protected (encrypted) or not
     pub protected: bool,
+
     data: SecretBox<[u8]>,
 }
 
@@ -44,14 +49,17 @@ impl Attachment {
         }
     }
 
+    /// Get the ID of the attachment
     pub fn id(&self) -> AttachmentId {
         self.id
     }
 
+    /// Get the data of the attachment as a byte slice
     pub fn data(&self) -> &[u8] {
         self.data.expose_secret()
     }
 
+    /// Set the data of the attachment, replacing the existing data
     pub fn set_data(&mut self, data: Vec<u8>) {
         self.data = SecretBox::new(data.into_boxed_slice());
     }
@@ -102,6 +110,7 @@ impl Deref for AttachmentRef<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentRef can only be constructed with a valid AttachmentId
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
         self.database.attachments.get(&self.id).unwrap()
     }
 }
@@ -120,7 +129,7 @@ impl AttachmentMut<'_> {
     /// Edit the attachment in place using a closure
     pub fn edit<F>(&mut self, f: F) -> &mut Self
     where
-        F: FnOnce(&mut AttachmentMut),
+        F: FnOnce(&mut AttachmentMut<'_>),
     {
         f(self);
         self
@@ -132,6 +141,7 @@ impl Deref for AttachmentMut<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentMut can only be constructed with a valid AttachmentId
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
         self.database.attachments.get(&self.id).unwrap()
     }
 }
@@ -139,6 +149,7 @@ impl Deref for AttachmentMut<'_> {
 impl DerefMut for AttachmentMut<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: AttachmentMut can only be constructed with a valid AttachmentId
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
         self.database.attachments.get_mut(&self.id).unwrap()
     }
 }

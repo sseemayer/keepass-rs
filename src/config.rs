@@ -74,8 +74,13 @@ impl Default for DatabaseConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum OuterCipherConfig {
+    /// Use AES-256 in CBC mode for the outer encryption
     AES256,
+
+    /// Use Twofish in CBC mode for the outer encryption
     Twofish,
+
+    /// Use ChaCha20 for the outer encryption
     ChaCha20,
 }
 
@@ -122,6 +127,7 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
     }
 }
 
+/// Error for invalid outer cipher IDs
 #[derive(Error, Debug)]
 #[error("Invalid outer cipher ID: {0:x?}")]
 pub struct InvalidOuterCipherId(Vec<u8>);
@@ -130,8 +136,15 @@ pub struct InvalidOuterCipherId(Vec<u8>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum InnerCipherConfig {
+    /// Don't encrypt protected values, just store them as plaintext.
+    ///
+    /// This is not recommended for security reasons, but is provided for compatibility with KeePass 1 databases.
     Plain,
+
+    /// Use Salsa20 to encrypt protected values
     Salsa20,
+
+    /// Use ChaCha20 to encrypt protected values
     ChaCha20,
 }
 
@@ -176,6 +189,7 @@ impl TryFrom<u32> for InnerCipherConfig {
     }
 }
 
+/// Error for invalid inner cipher IDs
 #[derive(Error, Debug)]
 #[error("Invalid inner cipher ID: {0}")]
 pub struct InvalidInnerCipherId(u32);
@@ -197,22 +211,37 @@ const KDF_ROUNDS: &str = "R";
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum KdfConfig {
     /// Derive keys with repeated AES encryption
-    Aes { rounds: u64 },
+    Aes {
+        /// Number of rounds of AES encryption to perform
+        rounds: u64,
+    },
     /// Derive keys with Argon2d
     Argon2 {
+        /// Iterations to perform
         iterations: u64,
+
+        /// Memory to use in KiB
         memory: u64,
+
+        /// Degree of parallelism to use
         parallelism: u32,
 
+        /// Version of Argon2 to use
         #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
     /// Derive keys with Argon2id
     Argon2id {
+        /// Iterations to perform
         iterations: u64,
+
+        /// Memory to use in KiB
         memory: u64,
+
+        /// Degree of parallelism to use
         parallelism: u32,
 
+        /// Version of Argon2 to use
         #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
@@ -395,12 +424,21 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
 /// Errors with the configuration of the Key Derivation Function
 #[derive(Debug, Error)]
 pub enum KdfConfigError {
+    /// An invalid version of Argon2 was specified in the KDF config
     #[error("Invalid KDF version: {}", version)]
-    InvalidKDFVersion { version: u32 },
+    InvalidKDFVersion {
+        /// The invalid version as a raw u32, e.g. 0x10 for Argon2 v1.0 or 0x13 for Argon2 v1.3
+        version: u32,
+    },
 
+    /// The KDF UUID specified in the KDF config is not recognized
     #[error("Invalid KDF UUID: {:x?}", uuid)]
-    InvalidKDFUUID { uuid: Vec<u8> },
+    InvalidKDFUUID {
+        /// The invalid KDF UUID as a raw byte vector
+        uuid: Vec<u8>,
+    },
 
+    /// Error reading a field from the VariantDictionary when parsing the KDF config
     #[error("Error reading KDF config from VariantDictionary: {0:?}")]
     VariantDictionary(#[from] VariantDictionaryGetError),
 }
@@ -409,7 +447,10 @@ pub enum KdfConfigError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum CompressionConfig {
+    /// Don't compress the inner data, just store it as plaintext.
     None,
+
+    /// Use GZip to compress the inner data
     GZip,
 }
 
@@ -442,6 +483,7 @@ impl TryFrom<u32> for CompressionConfig {
     }
 }
 
+/// Error for invalid compression suite IDs
 #[derive(Error, Debug)]
 #[error("Invalid compression suite ID: {0}")]
 pub struct InvalidCompressionSuiteId(u32);

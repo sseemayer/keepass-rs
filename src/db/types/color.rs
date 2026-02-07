@@ -5,8 +5,13 @@ use thiserror::Error;
 /// A color value for the [Database][crate::db::Database], or [Entry][crate::db::Entry]
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Color {
+    /// Red component of the color
     pub r: u8,
+
+    /// Green component of the color
     pub g: u8,
+
+    /// Blue component of the color
     pub b: u8,
 }
 

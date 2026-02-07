@@ -121,17 +121,21 @@ pub struct DatabaseKey {
 }
 
 impl DatabaseKey {
+    /// Specify a password for the database key
     pub fn with_password(mut self, password: &str) -> Self {
         self.password = Some(password.to_string());
         self
     }
 
+    /// Prompt the user for a password and use it for the database key
     #[cfg(feature = "utilities")]
     pub fn with_password_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
         self.password = Some(rpassword::prompt_password(prompt_message)?);
         Ok(self)
     }
 
+    /// Use a YubiKey HMAC-SHA1 challenge-response key for the database key, with the secret
+    /// provided by the user at runtime
     #[cfg(all(feature = "challenge_response", feature = "utilities"))]
     pub fn with_hmac_sha1_secret_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
         self.challenge_response_key = Some(yubikey::ChallengeResponseKey::LocalChallenge(
@@ -153,6 +157,7 @@ impl DatabaseKey {
         Ok(self)
     }
 
+    /// Use a YubiKey HMAC-SHA1 challenge-response key for the database key
     #[cfg(feature = "challenge_response")]
     pub fn with_challenge_response_key(
         mut self,
@@ -162,6 +167,8 @@ impl DatabaseKey {
         self
     }
 
+    /// Perform the challenge-response operation for the database key, using the provided KDF seed
+    /// as the challenge.
     #[cfg(feature = "challenge_response")]
     pub fn perform_challenge(mut self, kdf_seed: &[u8]) -> Result<Self, yubikey::KeyChallengeError> {
         if let Some(challenge_response_key) = &self.challenge_response_key {
@@ -172,6 +179,7 @@ impl DatabaseKey {
         Ok(self)
     }
 
+    /// Create a new, empty database key
     pub fn new() -> Self {
         Default::default()
     }

@@ -53,7 +53,7 @@ pub struct Group {
 impl Group {
     pub(crate) fn xml_to_db_handle(
         self,
-        mut target: crate::db::GroupMut,
+        mut target: crate::db::GroupMut<'_>,
         header_attachments: &[crate::db::Attachment],
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
