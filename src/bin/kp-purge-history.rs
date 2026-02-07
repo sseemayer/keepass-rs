@@ -4,7 +4,7 @@ use std::fs::File;
 use anyhow::Result;
 use clap::Parser;
 
-use keepass::{db::EntryId, Database, DatabaseKey};
+use keepass::{Database, DatabaseKey};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -41,26 +41,17 @@ pub fn main() -> Result<()> {
 
     let mut db = Database::open(&mut source, key.clone())?;
 
-    let entry_ids: Vec<EntryId> = db.iter_all_entries().map(|e| e.id()).collect();
-
-    for entry_id in entry_ids {
-        if let Some(mut entry) = db.entry_mut(entry_id) {
-            purge_history_for_entry(&mut entry)?;
+    db.foreach_entry_mut(|mut entry| {
+        if let Some(history) = &entry.history {
+            let history_size = history.entries().len();
+            if history_size != 0 {
+                println!("Removing {} history entries from {}", history_size, entry.id());
+            }
         }
-    }
+        entry.history = None;
+    });
 
     db.save(&mut File::options().write(true).open(&args.in_kdbx)?, key)?;
 
-    Ok(())
-}
-
-fn purge_history_for_entry(entry: &mut keepass::db::Entry) -> Result<()> {
-    if let Some(history) = &entry.history {
-        let history_size = history.entries().len();
-        if history_size != 0 {
-            println!("Removing {} history entries from {}", history_size, entry.id());
-        }
-    }
-    entry.history = None;
     Ok(())
 }
