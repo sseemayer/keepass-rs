@@ -1,3 +1,4 @@
+//! Example for opening and traversing a KeePass database
 use keepass::{db::fields, Database, DatabaseKey, DatabaseOpenError};
 use std::fs::File;
 

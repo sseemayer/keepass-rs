@@ -1,3 +1,4 @@
+//! Examples for creating and saving a KeePass database
 use keepass::{
     db::{fields, Database, Value},
     DatabaseKey,
