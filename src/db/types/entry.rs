@@ -510,10 +510,22 @@ mod tests {
             1
         );
 
+        assert!(db.attachment(attachment_id).is_some());
+        assert!(db.attachment_mut(attachment_id).is_some());
+
+        assert!(db.entry(entry_id).unwrap().attachment(attachment_id).is_some());
+
         assert_eq!(
             db.entry(entry_id).unwrap().get_str(fields::TITLE).unwrap(),
             "Modified Entry 1"
         );
+
+        // test moving to a non-existent group returns an error and does not modify the entry
+        assert!(db
+            .entry_mut(entry_id)
+            .unwrap()
+            .move_to(crate::db::GroupId::new())
+            .is_err());
 
         db.entry_mut(entry_id)
             .unwrap()

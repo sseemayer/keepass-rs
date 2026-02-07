@@ -495,3 +495,129 @@ impl DerefMut for GroupTrack<'_> {
         self.database.groups.get_mut(&self.id).expect("Group not found")
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::db::{fields, Database, MoveGroupError};
+
+    #[test]
+    fn test_group() {
+        let mut db = Database::new();
+
+        let root_id = db.root().id();
+        let group1_id = db.root_mut().add_group().edit(|g| g.name = "group 1".into()).id();
+        let group2_id = db.root_mut().add_group().edit(|g| g.name = "group 2".into()).id();
+        let subgroup_id = db
+            .group_mut(group1_id)
+            .unwrap()
+            .add_group()
+            .edit(|g| g.name = "subgroup".into())
+            .id();
+
+        assert!(db.group(root_id).unwrap().group(group1_id).is_some());
+        assert!(db.group(root_id).unwrap().group(group2_id).is_some());
+        assert!(db.group(group1_id).unwrap().group(group2_id).is_none());
+        assert!(db.group(group1_id).unwrap().group(subgroup_id).is_some());
+
+        let entry1_id = db
+            .group_mut(group1_id)
+            .unwrap()
+            .add_entry()
+            .edit(|e| e.set_unprotected(fields::TITLE, "entry 1"))
+            .id();
+        let entry2_id = db
+            .group_mut(group1_id)
+            .unwrap()
+            .add_entry()
+            .edit(|e| e.set_unprotected(fields::TITLE, "entry 2"))
+            .id();
+        let entry3_id = db
+            .group_mut(subgroup_id)
+            .unwrap()
+            .add_entry()
+            .edit(|e| e.set_unprotected(fields::TITLE, "entry 3"))
+            .id();
+
+        assert!(db.group(group1_id).unwrap().entry(entry1_id).is_some());
+        assert!(db.group(group1_id).unwrap().entry(entry2_id).is_some());
+        assert!(db.group(group2_id).unwrap().entry(entry1_id).is_none());
+        assert!(db.group(subgroup_id).unwrap().entry(entry3_id).is_some());
+
+        assert!(db.root().group_by_name("group 1").is_some());
+        assert!(db.root().group_by_name("GROUP 1").is_some());
+        assert!(db.root().group_by_name("nonexistent").is_none());
+
+        assert!(db.group(group1_id).unwrap().entry_by_name("entry 1").is_some());
+        assert!(db.group(group1_id).unwrap().entry_by_name("ENTRY 1").is_some());
+        assert!(db
+            .group(group1_id)
+            .unwrap()
+            .entry_by_name("nonexistent")
+            .is_none());
+        assert!(db.group(group2_id).unwrap().entry_by_name("entry 1").is_none());
+
+        assert!(db.root().group_by_path(&["group 1", "subgroup"]).is_some());
+        assert!(db.root().group_by_path(&["GROUP 1", "SUBGROUP"]).is_some());
+        assert!(db.root().group_by_path(&["group 1", "nonexistent"]).is_none());
+        assert!(db.root().group_by_path(&["group 2", "subgroup"]).is_none());
+
+        db.group_mut(group1_id).unwrap().remove();
+
+        assert!(db.group(group1_id).is_none());
+        assert!(db.group(subgroup_id).is_none());
+        assert!(db.entry(entry1_id).is_none());
+    }
+
+    #[test]
+    fn test_move_group() {
+        let mut db1 = Database::new();
+
+        // Create a group hierarchy:
+        // root
+        // ├── group1
+        // │   └── group3
+        // │       └── group4
+        // └── group2
+        let group1_id = db1.root_mut().add_group().id();
+        let group2_id = db1.root_mut().add_group().id();
+        let group3_id = db1.group_mut(group1_id).unwrap().add_group().id();
+        let group4_id = db1.group_mut(group3_id).unwrap().add_group().id();
+
+        assert!(db1.group(group1_id).unwrap().group(group3_id).is_some());
+        assert!(db1.group(group3_id).unwrap().group(group2_id).is_none());
+
+        // Cannot move root group
+        assert!(db1.root_mut().move_to(group1_id).is_err());
+
+        // Cannot move group into itself
+        assert!(matches!(
+            db1.group_mut(group1_id).unwrap().move_to(group1_id),
+            Err(MoveGroupError::WouldCreateCycle)
+        ));
+
+        // Cannot move group into its descendant
+        assert!(matches!(
+            db1.group_mut(group1_id).unwrap().move_to(group3_id),
+            Err(MoveGroupError::WouldCreateCycle)
+        ));
+        assert!(matches!(
+            db1.group_mut(group1_id).unwrap().move_to(group4_id),
+            Err(MoveGroupError::WouldCreateCycle)
+        ));
+
+        // Move group1 under group2
+        db1.group_mut(group1_id).unwrap().move_to(group2_id).unwrap();
+
+        assert!(db1.group(group2_id).unwrap().group(group1_id).is_some());
+
+        let db2 = Database::new();
+        let root2_id = db2.root().id();
+
+        // Cannot move between databases
+        assert!(matches!(
+            db1.group_mut(group1_id).unwrap().move_to(root2_id),
+            Err(MoveGroupError::NotFound(_))
+        ));
+    }
+}
