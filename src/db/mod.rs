@@ -8,17 +8,17 @@
 //! use keepass::{Database, Value, db::{fields, AttachmentMut, EntryMut, GroupMut}};
 //! # fn main() {
 //! let mut db = Database::new();
-//! let mut root: GroupMut = db.root_mut();
+//! let mut root: GroupMut<'_> = db.root_mut();
 //!
 //! // Add a new child group to the root group
-//! let mut group: GroupMut = root.add_group();
+//! let mut group: GroupMut<'_> = root.add_group();
 //!
 //! // GroupMut dereferences to &mut Group, so you can access most of its fields directly
 //! group.name = "My Group".into();
 //! group.notes = Some("This is an example group".into());
 //!
 //! // Add a new entry to the group
-//! let mut entry: EntryMut = root.add_entry();
+//! let mut entry: EntryMut<'_> = root.add_entry();
 //!
 //! // EntryMut dereferences to &mut Entry, so you can access most of its fields directly
 //! entry.set_unprotected(fields::TITLE, "My Entry");
@@ -40,7 +40,7 @@
 //!         g.notes = Some("This is another example group".into());
 //!     })
 //!     .add_entry()
-//!     .edit(|e: &mut EntryMut| {
+//!     .edit(|e: &mut EntryMut<'_>| {
 //!         e.set_unprotected(fields::TITLE, "Another Entry");
 //!         e.set_unprotected(fields::USERNAME, "asmith");
 //!         e.set_protected(fields::PASSWORD, "password123");

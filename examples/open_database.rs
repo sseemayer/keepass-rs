@@ -37,7 +37,7 @@ fn main() -> Result<(), DatabaseOpenError> {
     Ok(())
 }
 
-fn print_recursively(group: keepass::db::GroupRef, indent: usize) {
+fn print_recursively(group: keepass::db::GroupRef<'_>, indent: usize) {
     let indent_str = " ".repeat(indent);
     println!("{}\u{f07b} {}", indent_str, group.name);
 
