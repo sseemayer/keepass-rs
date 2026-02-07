@@ -39,6 +39,7 @@ pub enum DatabaseVersion {
 }
 
 impl DatabaseVersion {
+    #[allow(clippy::indexing_slicing)] // data length is checked
     pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseVersionParseError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
             return Err(DatabaseVersionParseError::InvalidKDBXIdentifier);

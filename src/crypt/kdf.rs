@@ -20,6 +20,7 @@ pub struct AesKdf {
 }
 
 impl Kdf for AesKdf {
+    #[allow(clippy::indexing_slicing)] // composite_key is always 32 bytes
     fn transform_key(
         &self,
         composite_key: &GenericArray<u8, U32>,

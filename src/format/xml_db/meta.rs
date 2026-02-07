@@ -288,7 +288,7 @@ impl From<HashMap<String, crate::db::CustomDataItem>> for CustomData {
                     .map(|v| v.clone().into())
                     .unwrap_or(CustomDataValue::String(String::new()));
 
-                let last_modification_time = item.last_modification_time.as_ref().map(|t| t.clone().into());
+                let last_modification_time = item.last_modification_time.as_ref().map(|t| (*t).into());
 
                 CustomDataItem {
                     key,

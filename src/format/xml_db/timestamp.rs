@@ -68,6 +68,7 @@ impl<'de> Deserialize<'de> for Timestamp {
 
                 // Cast the decoded base64 Vec into the array expected by i64::from_le_bytes
                 let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+                #[allow(clippy::indexing_slicing)] // v is guaranteed to be at least 8 bytes long
                 a.copy_from_slice(&v[0..8]);
                 let ndt = get_epoch_baseline() + chrono::Duration::seconds(i64::from_le_bytes(a));
 

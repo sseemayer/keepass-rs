@@ -34,6 +34,7 @@ const HEADER_SIZE: usize = 4 + 4 + 4 + 4 + 16 + 16 + 4 + 4 + 32 + 32 + 4; // fir
 impl TryFrom<&[u8]> for KDBHeader {
     type Error = InvalidFixedHeader;
 
+    #[allow(clippy::indexing_slicing)] // data length is checked
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         if data.len() < HEADER_SIZE {
             return Err(InvalidFixedHeader(data.len()));
@@ -100,9 +101,16 @@ fn parse_groups(
     let mut num_groups = 0;
     while num_groups < header_num_groups as usize {
         // Field type (2 bytes), Field size (4 bytes), Field value (variable size)
-        let ftype = LittleEndian::read_u16(&data[0..]);
-        let size = LittleEndian::read_u32(&data[2..]);
-        let value = &data[6..6 + size as usize];
+
+        let ftype = data.get(0..2).ok_or(KdbParseGroupError::UnexpectedEof)?;
+        let ftype = LittleEndian::read_u16(ftype);
+
+        let size = data.get(2..6).ok_or(KdbParseGroupError::UnexpectedEof)?;
+        let size = LittleEndian::read_u32(size);
+
+        let value = data
+            .get(6..6 + size as usize)
+            .ok_or(KdbParseGroupError::UnexpectedEof)?;
 
         if let Some(expected_size) = expected_group_field_size(ftype) {
             if expected_size != size {
@@ -173,7 +181,9 @@ fn parse_groups(
             }
         }
 
-        *data = &data[6 + size as usize..];
+        *data = data
+            .get(6 + size as usize..)
+            .ok_or(KdbParseGroupError::UnexpectedEof)?;
     }
 
     if let Some(g) = parsing_gid {
@@ -206,6 +216,9 @@ pub enum KdbParseGroupError {
 
     #[error("Invalid group level {group_level} (current level is {current_level})")]
     InvalidKDBGroupLevel { group_level: u16, current_level: u16 },
+
+    #[error("Unexpected end of file while parsing KDB groups")]
+    UnexpectedEof,
 }
 
 fn expected_entry_field_size(ftype: u16) -> Option<u32> {
@@ -246,9 +259,15 @@ fn parse_entries(
 
     let mut num_entries = 0;
     while num_entries < header_num_entries {
-        let field_type = LittleEndian::read_u16(&data[0..]);
-        let field_size = LittleEndian::read_u32(&data[2..]);
-        let field_value = &data[6..6 + field_size as usize];
+        let field_type = data.get(0..2).ok_or(KdbParseEntryError::UnexpectedEof)?;
+        let field_type = LittleEndian::read_u16(field_type);
+
+        let field_size = data.get(2..6).ok_or(KdbParseEntryError::UnexpectedEof)?;
+        let field_size = LittleEndian::read_u32(field_size);
+
+        let field_value = data
+            .get(6..6 + field_size as usize)
+            .ok_or(KdbParseEntryError::UnexpectedEof)?;
 
         if let Some(expected_size) = expected_entry_field_size(field_type) {
             if expected_size != field_size {
@@ -352,7 +371,9 @@ fn parse_entries(
             }
         }
 
-        *data = &data[6 + field_size as usize..];
+        *data = data
+            .get(6 + field_size as usize..)
+            .ok_or(KdbParseEntryError::UnexpectedEof)?;
     }
 
     if parsing_gid.is_some() {
@@ -382,6 +403,9 @@ pub enum KdbParseEntryError {
 
     #[error("Incomplete Entry")]
     IncompleteEntry,
+
+    #[error("Unexpected end of file while parsing KDB entries")]
+    UnexpectedEof,
 }
 
 pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, ParseKdbError> {
@@ -389,12 +413,13 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, P
     let version = DatabaseVersion::KDB(header.subversion as u16);
 
     // Rest of file after header is payload
-    let payload_encrypted = &data[HEADER_SIZE..];
+    let payload_encrypted = data.get(HEADER_SIZE..).ok_or(ParseKdbError::UnexpectedEof)?;
 
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
     let composite_key = if key_elements.len() == 1 {
+        #[allow(clippy::indexing_slicing)] // key_elements is guaranteed to be 1 byte
         let key_element: [u8; 32] = key_elements[0].try_into().unwrap();
         GenericArray::from(key_element) // single pass of SHA256, already done before the call to parse()
     } else {
@@ -426,8 +451,14 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, P
         .get_cipher(&master_key, header.encryption_iv.as_ref())
         .expect("Database key correctly derived")
         .decrypt(payload_encrypted)?;
-    let padlen = payload_padded[payload_padded.len() - 1] as usize;
-    let payload = &payload_padded[..payload_padded.len() - padlen];
+
+    let padlen = payload_padded
+        .last()
+        .copied()
+        .ok_or(ParseKdbError::UnexpectedEof)? as usize;
+    let payload = payload_padded
+        .get(..payload_padded.len() - padlen)
+        .ok_or(ParseKdbError::UnexpectedEof)?;
 
     // Check if we decrypted correctly
     let hash = calculate_sha256(&[payload]);
@@ -480,4 +511,7 @@ pub enum ParseKdbError {
 
     #[error("Error parsing entries: {0}")]
     KdbParseEntryError(#[from] KdbParseEntryError),
+
+    #[error("Unexpected end of file while parsing KDB database")]
+    UnexpectedEof,
 }

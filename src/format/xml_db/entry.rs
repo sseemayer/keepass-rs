@@ -149,7 +149,7 @@ impl Entry {
 
         target.custom_icon_id = self
             .custom_icon_uuid
-            .and_then(|uuid| Some(crate::db::IconId::from_uuid(uuid.0)));
+            .map(|uuid| crate::db::IconId::from_uuid(uuid.0));
 
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;

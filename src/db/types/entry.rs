@@ -262,7 +262,7 @@ impl EntryMut<'_> {
 
     /// Add a new attachment to the entry, returning a mutable reference to it.
     pub fn add_attachment(&mut self) -> AttachmentMut<'_> {
-        let id = AttachmentId::next_free(&self.database);
+        let id = AttachmentId::next_free(self.database);
         let attachment = Attachment::with_id(id);
         self.database.attachments.insert(id, attachment);
         self.attachments.insert(id);

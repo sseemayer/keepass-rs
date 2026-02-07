@@ -157,6 +157,7 @@ pub(crate) struct ChaCha20Cipher {
 
 impl ChaCha20Cipher {
     /// Create as an inner cipher by splitting up a SHA512 hash
+    #[allow(clippy::indexing_slicing)] // iv is fixed size
     pub(crate) fn new(key: &[u8]) -> Result<Self, InvalidLength> {
         let iv = crate::crypt::calculate_sha512(&[key]);
         let key = GenericArray::from_slice(&iv[0..32]);
