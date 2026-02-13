@@ -4,7 +4,7 @@ use crate::{
     crypt::ciphers::Cipher,
     db::{EntryId, GroupId},
     format::xml_db::{
-        custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
+        custom_serde::{cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         entry::{Entry, UnprotectError},
         times::Times,
         UUID,
@@ -28,8 +28,8 @@ pub struct Group {
     #[serde(default)]
     pub times: Option<Times>,
 
-    #[serde(with = "cs_bool")]
-    pub is_expanded: bool,
+    #[serde(with = "cs_opt_bool")]
+    pub is_expanded: Option<bool>,
 
     #[serde(default, with = "cs_opt_string")]
     pub default_auto_type_sequence: Option<String>,
@@ -61,7 +61,7 @@ impl Group {
         target.notes = self.notes;
         target.icon_id = self.icon_id;
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
-        target.is_expanded = self.is_expanded;
+        target.is_expanded = self.is_expanded.unwrap_or_default();
         target.default_autotype_sequence = self.default_auto_type_sequence;
         target.enable_autotype = self.enable_auto_type;
         target.enable_searching = self.enable_searching;
@@ -94,7 +94,7 @@ impl Group {
             notes: source.notes.clone(),
             icon_id: source.icon_id,
             times: Some(source.times.clone().into()),
-            is_expanded: source.is_expanded,
+            is_expanded: Some(source.is_expanded),
             default_auto_type_sequence: source.default_autotype_sequence.clone(),
             enable_auto_type: source.enable_autotype,
             enable_searching: source.enable_searching,
@@ -157,7 +157,7 @@ mod tests {
         assert_eq!(group.0.name, "Example Group");
         assert_eq!(group.0.notes.unwrap(), "This is a test group.");
         assert_eq!(group.0.icon_id.unwrap(), 48);
-        assert_eq!(group.0.is_expanded, true);
+        assert_eq!(group.0.is_expanded, Some(true));
         assert_eq!(
             group.0.default_auto_type_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
