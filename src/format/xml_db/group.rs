@@ -43,11 +43,14 @@ pub struct Group {
     #[serde(default, with = "cs_opt_string")]
     pub last_top_visible_entry: Option<UUID>,
 
-    #[serde(default, rename = "Group")]
-    pub groups: Vec<Group>,
+    #[serde(default, rename = "$value")]
+    pub children: Vec<GroupOrEntry>,
+}
 
-    #[serde(default, rename = "Entry")]
-    pub entries: Vec<Entry>,
+#[derive(Debug, Serialize, Deserialize)]
+pub enum GroupOrEntry {
+    Group(Group),
+    Entry(Entry),
 }
 
 impl Group {
@@ -69,14 +72,17 @@ impl Group {
             .last_top_visible_entry
             .map(|u| crate::db::EntryId::from_uuid(u.0));
 
-        for entry in self.entries {
-            let new_entry = target.add_entry_with_id(EntryId::from_uuid(entry.uuid.0));
-            entry.xml_to_db_handle(new_entry, header_attachments, inner_decryptor)?;
-        }
-
-        for group in self.groups {
-            let new_group = target.add_group_with_id(GroupId::from_uuid(group.uuid.0));
-            group.xml_to_db_handle(new_group, header_attachments, inner_decryptor)?;
+        for child in self.children {
+            match child {
+                GroupOrEntry::Group(g) => {
+                    let new_group = target.add_group_with_id(GroupId::from_uuid(g.uuid.0));
+                    g.xml_to_db_handle(new_group, header_attachments, inner_decryptor)?;
+                }
+                GroupOrEntry::Entry(e) => {
+                    let new_entry = target.add_entry_with_id(EntryId::from_uuid(e.uuid.0));
+                    e.xml_to_db_handle(new_entry, header_attachments, inner_decryptor)?;
+                }
+            }
         }
 
         Ok(())
@@ -88,6 +94,24 @@ impl Group {
         inner_cipher: &mut dyn Cipher,
         attachment_id_numbering: &std::collections::HashMap<crate::db::AttachmentId, (usize, String)>,
     ) -> Self {
+        let mut children = Vec::new();
+
+        for g in source.groups() {
+            children.push(GroupOrEntry::Group(Group::db_to_xml(
+                g,
+                inner_cipher,
+                attachment_id_numbering,
+            )));
+        }
+
+        for e in source.entries() {
+            children.push(GroupOrEntry::Entry(Entry::db_to_xml(
+                e,
+                inner_cipher,
+                attachment_id_numbering,
+            )));
+        }
+
         Group {
             uuid: UUID(source.id().uuid()),
             name: source.name.clone(),
@@ -99,14 +123,7 @@ impl Group {
             enable_auto_type: source.enable_autotype,
             enable_searching: source.enable_searching,
             last_top_visible_entry: source.last_top_visible_entry.map(|eid| UUID(eid.uuid())),
-            groups: source
-                .groups()
-                .map(|g| Group::db_to_xml(g, inner_cipher, attachment_id_numbering))
-                .collect(),
-            entries: source
-                .entries()
-                .map(|e| Entry::db_to_xml(e, inner_cipher, attachment_id_numbering))
-                .collect(),
+            children,
         }
     }
 }
@@ -147,6 +164,10 @@ mod tests {
             <Entry>
                 <UUID>AAECAwQFBgcICQoLDA0ODw==</UUID>
             </Entry>
+            <Group>
+                <UUID>AAECAwQFBgcICQoLDA0ODw==</UUID>
+                <Name>Another Sub Group</Name>
+            </Group>
             <Entry>
                 <UUID>AAECAwQFBgcICQoLDA0ODw==</UUID>
             </Entry>
@@ -164,7 +185,6 @@ mod tests {
         );
         assert_eq!(group.0.enable_auto_type.unwrap(), true);
         assert_eq!(group.0.enable_searching.unwrap(), false);
-        assert_eq!(group.0.entries.len(), 2);
-        assert_eq!(group.0.groups.len(), 1);
+        assert_eq!(group.0.children.len(), 4);
     }
 }

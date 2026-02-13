@@ -369,6 +369,8 @@ mod file_read_tests {
         Ok(())
     }
 
+    /// test support for strongbox-generated kdbx4 files that don't have the IsExpanded field set,
+    /// which is optional in the kdbx4 format
     #[test]
     fn open_kdbx4_strongbox_no_is_expanded() -> Result<()> {
         let path = Path::new("tests/resources/strongbox_kdbx4_no_isexpanded.kdbx");
@@ -380,6 +382,22 @@ mod file_read_tests {
         assert_eq!(db.root().name, "Datenbank");
         assert_eq!(db.root().groups().count(), 1);
         assert_eq!(db.root().entries().count(), 0);
+
+        Ok(())
+    }
+
+    /// test support for strongbox-generated kdbx4 files that have groups and entries alternating
+    #[test]
+    fn open_kdbx4_groups_entries_alternating() -> Result<()> {
+        let path = Path::new("tests/resources/groups_entries_alternating.kdbx");
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("TestTestTest"),
+        )?;
+
+        assert_eq!(db.root().name, "Datenbank");
+        assert_eq!(db.root().groups().count(), 1);
+        assert_eq!(db.root().entries().count(), 2);
 
         Ok(())
     }
