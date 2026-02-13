@@ -73,6 +73,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
             .trim()
             .replace(" ", "")
             .replace("\n", "")
+            .replace("\t", "")
             .replace("\r", "");
 
         return if let Ok(key) = hex::decode(&trimmed_key) {

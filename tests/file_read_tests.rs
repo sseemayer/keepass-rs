@@ -280,6 +280,27 @@ mod file_read_tests {
         Ok(())
     }
 
+    /// keyfile with tabs in the keyfile content (#284)
+    #[test]
+    fn open_kdbx4_with_keyfile_v2_alt() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_keyfile_v2_alt.kdbx");
+        let kf_path = Path::new("tests/resources/test_db_kdbx4_with_keyfile_v2_alt.keyx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new()
+                .with_password("123123")
+                .with_keyfile(&mut File::open(kf_path)?)?,
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root.name, "testdb02");
+        assert_eq!(db.root.children.len(), 8);
+
+        Ok(())
+    }
+
     #[test]
     #[should_panic(expected = r#"InvalidKDBXIdentifier"#)]
     fn open_broken_random_data() {
