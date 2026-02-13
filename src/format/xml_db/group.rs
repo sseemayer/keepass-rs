@@ -28,7 +28,7 @@ pub struct Group {
     #[serde(default)]
     pub times: Option<Times>,
 
-    #[serde(with = "cs_opt_bool")]
+    #[serde(default, with = "cs_opt_bool")]
     pub is_expanded: Option<bool>,
 
     #[serde(default, with = "cs_opt_string")]

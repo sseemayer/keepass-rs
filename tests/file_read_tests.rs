@@ -368,4 +368,19 @@ mod file_read_tests {
 
         Ok(())
     }
+
+    #[test]
+    fn open_kdbx4_strongbox_no_is_expanded() -> Result<()> {
+        let path = Path::new("tests/resources/strongbox_kdbx4_no_isexpanded.kdbx");
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("TestTestTest"),
+        )?;
+
+        assert_eq!(db.root().name, "Datenbank");
+        assert_eq!(db.root().groups().count(), 1);
+        assert_eq!(db.root().entries().count(), 0);
+
+        Ok(())
+    }
 }
