@@ -185,8 +185,12 @@ impl Entry {
         // only create references to existing attachments
         for field in self.binary_fields {
             if let Some(attachment) = header_attachments.get(field.value.value_ref) {
-                database.attachments.insert(attachment.id(), attachment.clone());
-                target.attachments.insert(attachment.id());
+                let id = attachment.id();
+                let mut attachment = attachment.clone();
+                attachment.name = field.key;
+
+                database.attachments.insert(id, attachment);
+                target.attachments.insert(id);
             }
         }
 
