@@ -124,7 +124,12 @@ impl Entry {
                             crate::db::EntryId::from_uuid(e.uuid.0),
                             target.as_ref().parent().id(),
                         );
-                        e.xml_to_history(&mut he, header_attachments, inner_decryptor)?;
+                        e.xml_to_history(
+                            &mut he,
+                            target.database_mut(),
+                            header_attachments,
+                            inner_decryptor,
+                        )?;
                         Ok(he)
                     })
                     .collect::<Result<_, UnprotectError>>()?,
@@ -142,6 +147,7 @@ impl Entry {
     pub(crate) fn xml_to_history(
         self,
         target: &mut crate::db::Entry,
+        database: &mut crate::db::Database,
         header_attachments: &[crate::db::Attachment],
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
@@ -179,6 +185,7 @@ impl Entry {
         // only create references to existing attachments
         for field in self.binary_fields {
             if let Some(attachment) = header_attachments.get(field.value.value_ref) {
+                database.attachments.insert(attachment.id(), attachment.clone());
                 target.attachments.insert(attachment.id());
             }
         }

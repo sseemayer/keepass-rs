@@ -8,6 +8,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::db::{
+    types::history::{HistoryMut, HistoryRef},
     Attachment, AttachmentId, AttachmentMut, AttachmentRef, AutoType, Color, CustomDataItem, Database, GroupId,
     GroupMut, GroupRef, History, IconId, IconMut, IconRef, Times, Value,
 };
@@ -190,6 +191,13 @@ impl EntryRef<'_> {
             .map(move |id| AttachmentRef::new(self.database, *id))
     }
 
+    /// Get a reference to the history of this entry, if it exists.
+    pub fn history(&self) -> Option<HistoryRef<'_>> {
+        self.history
+            .is_some()
+            .then(|| HistoryRef::new(self.database, self.id))
+    }
+
     /// Get a reference to the parent group of this entry.
     pub fn parent(&self) -> GroupRef<'_> {
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
@@ -281,6 +289,13 @@ impl EntryMut<'_> {
             .then(move || AttachmentMut::new(self.database, id))
     }
 
+    /// Get a mutable reference to the history of this entry, if it exists, or create one.
+    pub fn history_mut(&mut self) -> HistoryMut<'_> {
+        self.history.get_or_insert_default();
+
+        HistoryMut::new(self.database, self.id)
+    }
+
     /// Get a mutable reference to the parent group of this entry.
     pub fn parent_mut(&mut self) -> GroupMut<'_> {
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
@@ -351,7 +366,7 @@ impl EntryMut<'_> {
 /// Error type for when a destination [GroupId] is provided that does not exist in the database
 #[derive(Error, Debug)]
 #[error("Destination group {0} not found")]
-pub struct DestinationGroupNotFoundError(GroupId);
+pub struct DestinationGroupNotFoundError(pub(crate) GroupId);
 
 /// Error type for when an [IconId] is provided that does not exist in the database
 #[derive(Error, Debug)]

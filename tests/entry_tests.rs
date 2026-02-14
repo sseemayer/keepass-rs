@@ -122,4 +122,62 @@ mod entry_tests {
 
         Ok(())
     }
+
+    #[test]
+    fn attachment_history() -> Result<()> {
+        let path = Path::new("tests/resources/attachment_history.kdbx");
+        let mut db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("demopass"),
+        )?;
+
+        let root_id = db.root().id();
+
+        // historical attachments should be kept
+        assert_eq!(db.num_entries(), 1);
+        assert_eq!(db.num_groups(), 1);
+        assert_eq!(db.num_attachments(), 3);
+
+        let root = db.root();
+        let entry_id = root.entry_by_name("Entry with attachment").unwrap().id();
+
+        let mut entry_v3 = db.entry_mut(entry_id).unwrap();
+
+        assert_eq!(
+            entry_v3.as_ref().attachments().next().unwrap().data(),
+            b"Hi I am version 3"
+        );
+
+        let mut history_v3 = entry_v3.history_mut();
+        let mut entry_v2 = history_v3.restore_entry(1, root_id).unwrap();
+
+        println!(
+            "{}",
+            str::from_utf8(entry_v2.as_ref().attachments().next().unwrap().data()).unwrap()
+        );
+
+        assert_eq!(
+            entry_v2.as_ref().attachments().next().unwrap().data(),
+            b"Hi I am version 2"
+        );
+
+        let mut history_v2 = entry_v2.history_mut();
+        let entry_v1 = history_v2.restore_entry(0, root_id).unwrap();
+        let entry_v1 = entry_v1.as_ref();
+
+        println!(
+            "{}",
+            str::from_utf8(entry_v1.attachments().next().unwrap().data()).unwrap()
+        );
+
+        assert_eq!(
+            entry_v1.attachments().next().unwrap().data(),
+            b"Hi I am version 1\n"
+        );
+
+        let history_v1 = entry_v1.history().unwrap();
+        assert_eq!(history_v1.entries().len(), 0);
+
+        Ok(())
+    }
 }
