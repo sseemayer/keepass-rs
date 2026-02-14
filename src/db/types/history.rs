@@ -46,6 +46,7 @@ impl Deref for HistoryRef<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: HistoryRef may only be constructed on valid entries that have a history
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
         self.database
             .entries
             .get(&self.entry_id)
@@ -100,6 +101,7 @@ impl<'a> HistoryMut<'a> {
             .ok_or(RestoreEntryError::EntryNotFound(index))?
             .clone();
 
+        #[allow(clippy::indexing_slicing)] // we have checked that index is valid
         let entry_history = History {
             entries: history.entries[..index].to_vec(),
         };
@@ -126,6 +128,8 @@ impl<'a> HistoryMut<'a> {
             })
             .id();
 
+        // entry was just created, so it must exist
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
         Ok(self.database.entry_mut(entry_id).unwrap())
     }
 }
@@ -135,6 +139,7 @@ impl Deref for HistoryMut<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: HistoryMut may only be constructed on valid entries that have a history
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
         self.database
             .entries
             .get(&self.entry_id)
@@ -148,6 +153,7 @@ impl Deref for HistoryMut<'_> {
 impl DerefMut for HistoryMut<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: HistoryMut may only be constructed on valid entries that have a history
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
         self.database
             .entries
             .get_mut(&self.entry_id)
