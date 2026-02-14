@@ -137,6 +137,16 @@ impl Group {
             last_top_visible_entry: None,
         }
     }
+
+    /// Get an iterator over the IDs of all contained groups
+    pub fn group_ids(&self) -> impl Iterator<Item = GroupId> + '_ {
+        self.groups.iter().cloned()
+    }
+
+    /// Get an iterator over the IDs of all contained entries
+    pub fn entry_ids(&self) -> impl Iterator<Item = EntryId> + '_ {
+        self.entries.iter().cloned()
+    }
 }
 
 /// Immutable reference to a [Group]. Implements [Deref] to [&Group][Group].

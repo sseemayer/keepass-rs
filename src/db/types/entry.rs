@@ -164,6 +164,16 @@ impl Entry {
     pub fn get_str(&self, key: &str) -> Option<&str> {
         self.fields.get(key).map(|v| v.as_str())
     }
+
+    /// Get an iterator over the attachment IDs of this entry.
+    pub fn attachment_ids(&self) -> impl Iterator<Item = AttachmentId> + use<'_> {
+        self.attachments.iter().copied()
+    }
+
+    /// Get the custom icon ID associated with this entry, if any.
+    pub fn custom_icon_id(&self) -> Option<IconId> {
+        self.custom_icon_id
+    }
 }
 
 /// An immutable reference to an [Entry]. Implements [Deref] to [&Entry][Entry].

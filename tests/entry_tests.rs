@@ -141,34 +141,49 @@ mod entry_tests {
         let root = db.root();
         let entry_id = root.entry_by_name("Entry with attachment").unwrap().id();
 
-        let mut entry_v3 = db.entry_mut(entry_id).unwrap();
+        let entry_v3 = db.entry(entry_id).unwrap();
 
+        // the current version of the entry should have the most recent attachment
         assert_eq!(
-            entry_v3.as_ref().attachments().next().unwrap().data(),
+            entry_v3.attachments().next().unwrap().data(),
             b"Hi I am version 3"
         );
 
+        // the history should have the previous versions of the attachment
+        let attachment_id_v2 = entry_v3.history.as_ref().unwrap().entries()[1]
+            .attachment_ids()
+            .next()
+            .unwrap();
+
+        let attachment_id_v1 = entry_v3.history.as_ref().unwrap().entries()[0]
+            .attachment_ids()
+            .next()
+            .unwrap();
+
+        assert_eq!(
+            db.attachment(attachment_id_v2).unwrap().data(),
+            b"Hi I am version 2"
+        );
+
+        assert_eq!(
+            db.attachment(attachment_id_v1).unwrap().data(),
+            b"Hi I am version 1\n"
+        );
+
+        // recover from entry_v3's history
+        let mut entry_v3 = db.entry_mut(entry_id).unwrap();
         let mut history_v3 = entry_v3.history_mut();
         let mut entry_v2 = history_v3.restore_entry(1, root_id).unwrap();
-
-        println!(
-            "{}",
-            str::from_utf8(entry_v2.as_ref().attachments().next().unwrap().data()).unwrap()
-        );
 
         assert_eq!(
             entry_v2.as_ref().attachments().next().unwrap().data(),
             b"Hi I am version 2"
         );
 
+        // recover from entry_v2's history
         let mut history_v2 = entry_v2.history_mut();
         let entry_v1 = history_v2.restore_entry(0, root_id).unwrap();
         let entry_v1 = entry_v1.as_ref();
-
-        println!(
-            "{}",
-            str::from_utf8(entry_v1.attachments().next().unwrap().data()).unwrap()
-        );
 
         assert_eq!(
             entry_v1.attachments().next().unwrap().data(),
