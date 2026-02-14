@@ -369,6 +369,28 @@ mod file_read_tests {
         Ok(())
     }
 
+    /// keyfile with tabs in the keyfile content (#284)
+    #[test]
+    fn open_kdbx4_with_keyfile_v2_alt() -> Result<()> {
+        let path = Path::new("tests/resources/test_db_kdbx4_with_keyfile_v2_alt.kdbx");
+        let kf_path = Path::new("tests/resources/test_db_kdbx4_with_keyfile_v2_alt.keyx");
+
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new()
+                .with_password("123123")
+                .with_keyfile(&mut File::open(kf_path)?)?,
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.root().name, "testdb02");
+        assert_eq!(db.num_entries(), 2);
+        assert_eq!(db.num_groups(), 7);
+
+        Ok(())
+    }
+
     /// test support for strongbox-generated kdbx4 files that don't have the IsExpanded field set,
     /// which is optional in the kdbx4 format
     #[test]
