@@ -1,9 +1,5 @@
 //! Types for representing data contained in a KeePass database
-
-pub(crate) mod entry;
-pub(crate) mod group;
-pub(crate) mod meta;
-pub(crate) mod node;
+pub(crate) mod types;
 
 #[cfg(feature = "_merge")]
 pub(crate) mod merge;
@@ -18,12 +14,7 @@ use std::{collections::HashMap, str::FromStr};
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-pub use crate::db::{
-    entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
-    group::Group,
-    meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
-    node::{Node, NodeIter, NodeRef, NodeRefMut},
-};
+pub use crate::db::types::*;
 
 #[cfg(feature = "_merge")]
 use crate::db::merge::{MergeError, MergeEvent, MergeEventType, MergeLog};
