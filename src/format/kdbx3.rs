@@ -160,8 +160,8 @@ pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
     let (config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
 
     // Parse XML data blocks
-    let database_content =
-        crate::xml_db::parse::parse(&xml, &mut *inner_decryptor).map_err(DatabaseIntegrityError::from)?;
+    let database_content = crate::format::xml_db::parse::parse(&xml, &mut *inner_decryptor)
+        .map_err(DatabaseIntegrityError::from)?;
 
     let db = Database {
         config,

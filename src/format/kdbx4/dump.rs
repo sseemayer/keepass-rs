@@ -98,7 +98,7 @@ pub fn dump_kdbx4(
     .dump(&db.header_attachments, &mut payload)?;
 
     // after inner header is one XML document
-    crate::xml_db::dump::dump(db, &mut *inner_cipher, &mut payload)?;
+    crate::format::xml_db::dump::dump(db, &mut *inner_cipher, &mut payload)?;
 
     let payload_compressed = db
         .config

@@ -12,7 +12,6 @@ pub(crate) mod hmac_block_stream;
 mod io;
 mod key;
 pub(crate) mod variant_dictionary;
-pub(crate) mod xml_db;
 
 pub use self::db::Database;
 #[cfg(feature = "challenge_response")]

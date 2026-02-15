@@ -311,7 +311,7 @@ pub enum XmlParseError {
     #[error("Bad XML event: expected {}, got {:?}", expected, event)]
     BadEvent {
         expected: &'static str,
-        event: crate::xml_db::parse::SimpleXmlEvent,
+        event: crate::format::xml_db::parse::SimpleXmlEvent,
     },
 
     /// The stream of XML events ended when more events were expected

@@ -7,7 +7,9 @@ use uuid::Uuid;
 use crate::{
     crypt::ciphers::Cipher,
     db::{AutoType, AutoTypeAssociation, Color, Entry, History, Times, Value},
-    xml_db::parse::{bad_event, CustomData, FromXml, IgnoreSubfield, SimpleTag, SimpleXmlEvent, XmlParseError},
+    format::xml_db::parse::{
+        bad_event, CustomData, FromXml, IgnoreSubfield, SimpleTag, SimpleXmlEvent, XmlParseError,
+    },
 };
 
 impl FromXml for Entry {

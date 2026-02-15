@@ -24,9 +24,8 @@ mod tests {
             AutoType, AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database,
             DeletedObject, Entry, Group, Meta, Node, Times, Value,
         },
-        format::kdbx4,
+        format::{kdbx4, xml_db::dump::DumpXml},
         key::DatabaseKey,
-        xml_db::dump::DumpXml,
     };
 
     fn make_key() -> DatabaseKey {

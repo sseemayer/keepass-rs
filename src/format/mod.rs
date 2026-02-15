@@ -2,6 +2,8 @@ pub(crate) mod kdb;
 pub(crate) mod kdbx3;
 pub(crate) mod kdbx4;
 
+pub(crate) mod xml_db;
+
 #[cfg(feature = "save_kdbx4")]
 use std::io::Write;
 

@@ -5,7 +5,7 @@ use crate::{
     compression::{Compression, GZipCompression},
     crypt::ciphers::Cipher,
     db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
-    xml_db::dump::{DumpXml, SimpleTag},
+    format::xml_db::dump::{DumpXml, SimpleTag},
 };
 
 impl DumpXml for Meta {

@@ -41,7 +41,7 @@ impl From<&[u8]> for HeaderAttachment {
 pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database, DatabaseOpenError> {
     let (config, header_attachments, mut inner_decryptor, xml) = decrypt_kdbx4(data, db_key)?;
 
-    let database_content = crate::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
+    let database_content = crate::format::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
 
     let db = Database {
         config,

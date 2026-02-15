@@ -3,7 +3,7 @@ use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 use crate::{
     crypt::ciphers::Cipher,
     db::{Group, Node},
-    xml_db::dump::{DumpXml, SimpleTag},
+    format::xml_db::dump::{DumpXml, SimpleTag},
 };
 
 impl DumpXml for Group {

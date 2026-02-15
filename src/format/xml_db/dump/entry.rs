@@ -4,7 +4,7 @@ use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 use crate::{
     crypt::ciphers::Cipher,
     db::{AutoType, AutoTypeAssociation, Entry, History, Value},
-    xml_db::dump::{DumpXml, SimpleTag},
+    format::xml_db::dump::{DumpXml, SimpleTag},
 };
 
 impl DumpXml for Entry {
