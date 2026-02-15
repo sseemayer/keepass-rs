@@ -106,9 +106,12 @@ impl Entry {
 
         for field in self.binary_fields {
             if let Some(attachment) = header_attachments.get(field.value.value_ref) {
-                let mut ar = target.add_attachment();
-                ar.name = field.key;
-                ar.set_data(attachment.data().to_vec());
+                let id = attachment.id();
+                let mut attachment = attachment.clone();
+                attachment.name = field.key;
+
+                target.database_mut().attachments.insert(id, attachment);
+                target.attachments.insert(id);
             }
         }
 
