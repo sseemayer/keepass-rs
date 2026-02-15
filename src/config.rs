@@ -1,25 +1,22 @@
 //! Configuration options for how to compress and encrypt databases
 use hex_literal::hex;
+use thiserror::Error;
 
 use std::convert::TryFrom;
 
 pub use crate::format::DatabaseVersion;
 
-#[cfg(feature = "save_kdbx4")]
-use crate::crypt::ciphers::Cipher;
 use crate::{
     compression,
     crypt::{
-        ciphers::{self},
+        ciphers::{self, Cipher},
         kdf,
     },
-    error::{
-        CompressionConfigError, CryptographyError, InnerCipherConfigError, KdfConfigError,
-        OuterCipherConfigError,
-    },
     format::KDBX4_CURRENT_MINOR_VERSION,
-    variant_dictionary::VariantDictionary,
+    variant_dictionary::{VariantDictionary, VariantDictionaryGetError},
 };
+
+use cipher::InvalidLength;
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
 const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
@@ -77,17 +74,18 @@ impl Default for DatabaseConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum OuterCipherConfig {
+    /// Use AES-256 in CBC mode for the outer encryption
     AES256,
+
+    /// Use Twofish in CBC mode for the outer encryption
     Twofish,
+
+    /// Use ChaCha20 for the outer encryption
     ChaCha20,
 }
 
 impl OuterCipherConfig {
-    pub(crate) fn get_cipher(
-        &self,
-        key: &[u8],
-        iv: &[u8],
-    ) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
+    pub(crate) fn get_cipher(&self, key: &[u8], iv: &[u8]) -> Result<Box<dyn Cipher>, InvalidLength> {
         match self {
             OuterCipherConfig::AES256 => Ok(Box::new(ciphers::AES256Cipher::new(key, iv)?)),
             OuterCipherConfig::Twofish => Ok(Box::new(ciphers::TwofishCipher::new(key, iv)?)),
@@ -115,7 +113,7 @@ impl OuterCipherConfig {
 }
 
 impl TryFrom<&[u8]> for OuterCipherConfig {
-    type Error = OuterCipherConfigError;
+    type Error = InvalidOuterCipherId;
     fn try_from(v: &[u8]) -> Result<OuterCipherConfig, Self::Error> {
         if v == CIPHERSUITE_AES256 {
             Ok(OuterCipherConfig::AES256)
@@ -124,22 +122,34 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
         } else if v == CIPHERSUITE_CHACHA20 {
             Ok(OuterCipherConfig::ChaCha20)
         } else {
-            Err(OuterCipherConfigError::InvalidOuterCipherID { cid: v.to_vec() })
+            Err(InvalidOuterCipherId(v.to_vec()))
         }
     }
 }
+
+/// Error for invalid outer cipher IDs
+#[derive(Error, Debug)]
+#[error("Invalid outer cipher ID: {0:x?}")]
+pub struct InvalidOuterCipherId(Vec<u8>);
 
 /// Choices for encrypting protected values inside of databases
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum InnerCipherConfig {
+    /// Don't encrypt protected values, just store them as plaintext.
+    ///
+    /// This is not recommended for security reasons, but is provided for compatibility with KeePass 1 databases.
     Plain,
+
+    /// Use Salsa20 to encrypt protected values
     Salsa20,
+
+    /// Use ChaCha20 to encrypt protected values
     ChaCha20,
 }
 
 impl InnerCipherConfig {
-    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
+    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn Cipher>, InvalidLength> {
         match self {
             InnerCipherConfig::Plain => Ok(Box::new(ciphers::PlainCipher::new(key)?)),
             InnerCipherConfig::Salsa20 => Ok(Box::new(ciphers::Salsa20Cipher::new(key)?)),
@@ -167,17 +177,22 @@ impl InnerCipherConfig {
 }
 
 impl TryFrom<u32> for InnerCipherConfig {
-    type Error = InnerCipherConfigError;
+    type Error = InvalidInnerCipherId;
 
     fn try_from(v: u32) -> Result<InnerCipherConfig, Self::Error> {
         match v {
             PLAIN => Ok(InnerCipherConfig::Plain),
             SALSA_20 => Ok(InnerCipherConfig::Salsa20),
             CHA_CHA_20 => Ok(InnerCipherConfig::ChaCha20),
-            _ => Err(InnerCipherConfigError::InvalidInnerCipherID { cid: v }),
+            _ => Err(InvalidInnerCipherId(v)),
         }
     }
 }
+
+/// Error for invalid inner cipher IDs
+#[derive(Error, Debug)]
+#[error("Invalid inner cipher ID: {0}")]
+pub struct InvalidInnerCipherId(u32);
 
 // Name of the KDF fields in the variant dictionaries.
 const KDF_ID: &str = "$UUID";
@@ -196,22 +211,37 @@ const KDF_ROUNDS: &str = "R";
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum KdfConfig {
     /// Derive keys with repeated AES encryption
-    Aes { rounds: u64 },
+    Aes {
+        /// Number of rounds of AES encryption to perform
+        rounds: u64,
+    },
     /// Derive keys with Argon2d
     Argon2 {
+        /// Iterations to perform
         iterations: u64,
+
+        /// Memory to use in KiB
         memory: u64,
+
+        /// Degree of parallelism to use
         parallelism: u32,
 
+        /// Version of Argon2 to use
         #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
     /// Derive keys with Argon2id
     Argon2id {
+        /// Iterations to perform
         iterations: u64,
+
+        /// Memory to use in KiB
         memory: u64,
+
+        /// Degree of parallelism to use
         parallelism: u32,
 
+        /// Version of Argon2 to use
         #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
@@ -391,11 +421,36 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
     }
 }
 
+/// Errors with the configuration of the Key Derivation Function
+#[derive(Debug, Error)]
+pub enum KdfConfigError {
+    /// An invalid version of Argon2 was specified in the KDF config
+    #[error("Invalid KDF version: {}", version)]
+    InvalidKDFVersion {
+        /// The invalid version as a raw u32, e.g. 0x10 for Argon2 v1.0 or 0x13 for Argon2 v1.3
+        version: u32,
+    },
+
+    /// The KDF UUID specified in the KDF config is not recognized
+    #[error("Invalid KDF UUID: {:x?}", uuid)]
+    InvalidKDFUUID {
+        /// The invalid KDF UUID as a raw byte vector
+        uuid: Vec<u8>,
+    },
+
+    /// Error reading a field from the VariantDictionary when parsing the KDF config
+    #[error("Error reading KDF config from VariantDictionary: {0:?}")]
+    VariantDictionary(#[from] VariantDictionaryGetError),
+}
+
 /// Choices of compression algorithm
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum CompressionConfig {
+    /// Don't compress the inner data, just store it as plaintext.
     None,
+
+    /// Use GZip to compress the inner data
     GZip,
 }
 
@@ -417,13 +472,18 @@ impl CompressionConfig {
 }
 
 impl TryFrom<u32> for CompressionConfig {
-    type Error = CompressionConfigError;
+    type Error = InvalidCompressionSuiteId;
 
     fn try_from(v: u32) -> Result<CompressionConfig, Self::Error> {
         match v {
             0 => Ok(CompressionConfig::None),
             1 => Ok(CompressionConfig::GZip),
-            _ => Err(CompressionConfigError::InvalidCompressionSuite { cid: v }),
+            _ => Err(InvalidCompressionSuiteId(v)),
         }
     }
 }
+
+/// Error for invalid compression suite IDs
+#[derive(Error, Debug)]
+#[error("Invalid compression suite ID: {0}")]
+pub struct InvalidCompressionSuiteId(u32);

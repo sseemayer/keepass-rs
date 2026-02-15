@@ -1,4 +1,4 @@
-/// utility to purge the history of the entries in the database
+//! utility to purge the history of the entries in the database
 use std::fs::File;
 
 use anyhow::Result;
@@ -21,6 +21,7 @@ struct Args {
     no_password: bool,
 }
 
+#[allow(missing_docs)]
 pub fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -41,30 +42,17 @@ pub fn main() -> Result<()> {
 
     let mut db = Database::open(&mut source, key.clone())?;
 
-    purge_history(&mut db.root)?;
+    db.foreach_entry_mut(|mut entry| {
+        if let Some(history) = &entry.history {
+            let history_size = history.entries().len();
+            if history_size != 0 {
+                println!("Removing {} history entries from {}", history_size, entry.id());
+            }
+        }
+        entry.history = None;
+    });
 
     db.save(&mut File::options().write(true).open(&args.in_kdbx)?, key)?;
 
-    Ok(())
-}
-
-fn purge_history_for_entry(entry: &mut keepass::db::Entry) -> Result<()> {
-    if let Some(history) = &entry.history {
-        let history_size = history.get_entries().len();
-        if history_size != 0 {
-            println!("Removing {} history entries from {}", history_size, entry.uuid);
-        }
-    }
-    entry.history = None;
-    Ok(())
-}
-
-fn purge_history(group: &mut keepass::db::Group) -> Result<()> {
-    for node in &mut group.children {
-        match node {
-            keepass::db::Node::Entry(ref mut e) => purge_history_for_entry(e)?,
-            keepass::db::Node::Group(ref mut g) => purge_history(g)?,
-        };
-    }
     Ok(())
 }

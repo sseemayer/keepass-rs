@@ -1,3 +1,9 @@
+//! Time-based One-Time Password (TOTP) implementation
+//!
+//! This module provides functionality to parse TOTP specifications from otpauth:// URLs,
+//! generate one-time passwords based on the current time, and handle different hash algorithms.
+//!
+//! You most likely want to use this together with [Entry::get_otp](crate::db::Entry::get_otp)
 use base32;
 use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
 use thiserror::Error;
@@ -5,14 +11,21 @@ use totp_lite::{totp_custom, Sha1, Sha256, Sha512};
 use url::Url;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::db::Entry;
+
 const DEFAULT_PERIOD: u64 = 30;
 const DEFAULT_DIGITS: u32 = 8;
 
 /// Choices of hash algorithm for TOTP
 #[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum TOTPAlgorithm {
+    /// SHA-1 hash algorithm (default)
     Sha1,
+
+    /// SHA-256 hash algorithm
     Sha256,
+
+    /// SHA-512 hash algorithm
     Sha512,
 }
 
@@ -32,10 +45,19 @@ impl std::str::FromStr for TOTPAlgorithm {
 /// Time-based one time password settings
 #[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct TOTP {
+    /// Label for the TOTP
     pub label: String,
+
+    /// Optional issuer for the TOTP
     pub issuer: Option<String>,
+
+    /// Time period in seconds for which a generated code is valid (default: 30)
     pub period: u64,
+
+    /// Number of digits in the generated code (default: 8)
     pub digits: u32,
+
+    /// Hash algorithm to use for generating the code (default: SHA-1)
     pub algorithm: TOTPAlgorithm,
 
     secret: Vec<u8>,
@@ -43,13 +65,18 @@ pub struct TOTP {
 
 /// A generated one time password
 pub struct OTPCode {
+    /// The generated code as a string of digits
     pub code: String,
+
+    /// Duration for which the generated code is still valid
     pub valid_for: Duration,
+
+    /// The time period in seconds for which the code is valid (same as the TOTP's period)
     pub period: Duration,
 }
 
 impl std::fmt::Display for OTPCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "Code: {}, valid for: {}/{}s",
@@ -63,31 +90,40 @@ impl std::fmt::Display for OTPCode {
 /// Errors while processing a TOTP specification
 #[derive(Debug, Error)]
 pub enum TOTPError {
+    /// Errors from parsing the otpauth:// URL
     #[error(transparent)]
     UrlFormat(#[from] url::ParseError),
 
+    /// Errors from parsing integer fields in the TOTP specification (e.g. period, digits)
     #[error(transparent)]
     IntFormat(#[from] std::num::ParseIntError),
 
+    /// Required fields are missing from the TOTP specification
     #[error("Missing TOTP field: {}", _0)]
     MissingField(&'static str),
 
+    /// Errors from getting the current system time
     #[error(transparent)]
     Time(#[from] SystemTimeError),
 
+    /// Errors from base32 decoding the secret
     #[error("Base32 decoding error")]
     Base32,
 
+    /// No OTP record found in the Entry
     #[error("No OTP record found")]
     NoRecord,
 
+    /// The otpauth:// URL has an unsupported scheme (should be "otpauth")
     #[error("Bad URL scheme: '{}'", _0)]
     BadScheme(String),
 
+    /// The otpauth:// URL has an unsupported hash algorithm
     #[error("Bad hash algorithm: '{}'", _0)]
     BadAlgorithm(String),
 }
 
+/// Parse a TOTP specification from an otpauth:// URL
 impl std::str::FromStr for TOTP {
     type Err = TOTPError;
 
@@ -158,18 +194,38 @@ impl TOTP {
         Ok(self.value_at(time))
     }
 
+    /// Get the Base32-encoded secret string for this TOTP
     pub fn get_secret(&self) -> String {
         base32::encode(base32::Alphabet::Rfc4648 { padding: true }, &self.secret)
+    }
+}
+
+impl Entry {
+    /// Convenience method for getting a TOTP from this entry
+    ///
+    /// ```
+    /// use keepass::{Database, DatabaseKey};
+    /// use keepass::totp::TOTP;
+    ///
+    /// let db = Database::open(&mut std::fs::File::open("tests/resources/test_db_kdbx4_with_totp_entry.kdbx").unwrap(), DatabaseKey::new().with_password("test")).unwrap();
+    /// let entry = db.iter_all_entries()
+    ///     .find(|e| e.get_str("Title") == Some("this entry has totp"))
+    ///     .expect("Entry not found");
+    ///
+    /// let totp = entry.get_otp().unwrap();
+    /// println!("TOTP code is {}", totp.value_now().unwrap().code);
+    /// ```
+    pub fn get_otp(&self) -> Result<TOTP, TOTPError> {
+        self.get_str(crate::db::fields::OTP)
+            .ok_or(TOTPError::NoRecord)?
+            .parse()
     }
 }
 
 #[cfg(test)]
 mod kdbx4_otp_tests {
     use super::{TOTPAlgorithm, TOTPError, TOTP};
-    use crate::{
-        db::{Database, NodeRef},
-        key::DatabaseKey,
-    };
+    use crate::{db::Database, key::DatabaseKey};
     use std::{fs::File, path::Path};
 
     #[test]
@@ -181,13 +237,16 @@ mod kdbx4_otp_tests {
         let otp_str =
             "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
-        // get an entry on the root node
-        if let Some(NodeRef::Entry(e)) = db.root.get(&["this entry has totp"]) {
-            assert_eq!(e.get_title(), Some("this entry has totp"));
-            assert_eq!(e.get_raw_otp_value(), Some(otp_str));
-        } else {
-            panic!("Expected an entry");
-        }
+        let entry = db
+            .iter_all_entries()
+            .find(|e| e.get_str(crate::db::fields::TITLE) == Some("this entry has totp"))
+            .expect("Entry not found");
+
+        assert_eq!(entry.get_str(crate::db::fields::OTP), Some(otp_str));
+
+        let otp = entry.get_otp()?;
+
+        assert_eq!(otp.value_at(1234).code, "806863");
 
         Ok(())
     }
@@ -207,6 +266,7 @@ mod kdbx4_otp_tests {
         };
 
         assert_eq!(otp_str.parse::<TOTP>()?, expected);
+        assert!(expected.value_now().is_ok());
 
         Ok(())
     }
@@ -219,6 +279,26 @@ mod kdbx4_otp_tests {
         let otp = otp_str.parse::<TOTP>()?;
 
         assert_eq!(otp.get_secret(), "JBSWY3DPEHPK3PXP".to_string());
+
+        Ok(())
+    }
+
+    #[test]
+    fn totp_sha256() -> Result<(), TOTPError> {
+        let otp_str = "otpauth://totp/sha256%20totp:none?secret=GEZDGNBVGY%3D%3D%3D%3D%3D%3D&period=30&digits=6&issuer=sha256%20totp&algorithm=SHA256";
+
+        let expected = TOTP {
+            label: "sha256%20totp:none".to_string(),
+            secret: b"123456".to_vec(),
+            issuer: Some("sha256 totp".to_string()),
+            period: 30,
+            digits: 6,
+            algorithm: TOTPAlgorithm::Sha256,
+        };
+
+        assert_eq!(otp_str.parse::<TOTP>()?, expected);
+        assert_eq!(expected.value_at(1234).code, "014448");
+        assert!(expected.value_now().is_ok());
 
         Ok(())
     }
@@ -237,6 +317,8 @@ mod kdbx4_otp_tests {
         };
 
         assert_eq!(otp_str.parse::<TOTP>()?, expected);
+        assert_eq!(expected.value_at(1234).code, "317899");
+        assert!(expected.value_now().is_ok());
 
         Ok(())
     }
@@ -252,7 +334,10 @@ mod kdbx4_otp_tests {
             algorithm: TOTPAlgorithm::Sha1,
         };
 
-        assert_eq!(totp.value_at(1234).code, "806863")
+        let value = totp.value_at(1234);
+        assert_eq!(value.code, "806863");
+        assert_eq!(format!("{}", value), "Code: 806863, valid for: 26/30s");
+        assert!(totp.value_now().is_ok());
     }
 
     #[test]

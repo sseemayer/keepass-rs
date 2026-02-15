@@ -1,4 +1,4 @@
-/// utility to add a Yubikey to a database's key
+//! utility to add a Yubikey to a database's key
 use std::fs::File;
 
 use anyhow::Result;
@@ -31,6 +31,7 @@ struct Args {
     no_password: bool,
 }
 
+#[allow(missing_docs)]
 pub fn main() -> Result<()> {
     let args = Args::parse();
 
