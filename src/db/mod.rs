@@ -794,7 +794,7 @@ mod database_tests {
     #[cfg(feature = "save_kdbx4")]
     #[test]
     fn test_save() {
-        use crate::{db::Entry, variant_dictionary::VariantDictionary};
+        use crate::{db::Entry, format::variant_dictionary::VariantDictionary};
         let mut db = Database::new(Default::default());
 
         let mut public_custom_data = VariantDictionary::new();
