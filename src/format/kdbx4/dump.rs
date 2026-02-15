@@ -8,6 +8,7 @@ use crate::{
     error::DatabaseSaveError,
     format::{
         hmac_block_stream,
+        io::WriteLengthTaggedExt,
         kdbx4::{
             KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
             HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_MASTER_SEED_SIZE, HEADER_OUTER_ENCRYPTION_ID,
@@ -17,7 +18,6 @@ use crate::{
         variant_dictionary::VariantDictionary,
         DatabaseVersion,
     },
-    io::WriteLengthTaggedExt,
     key::DatabaseKey,
 };
 

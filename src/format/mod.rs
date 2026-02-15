@@ -7,6 +7,9 @@ pub(crate) mod variant_dictionary;
 pub(crate) mod xml_db;
 
 #[cfg(feature = "save_kdbx4")]
+mod io;
+
+#[cfg(feature = "save_kdbx4")]
 use std::io::Write;
 
 #[cfg(feature = "save_kdbx4")]

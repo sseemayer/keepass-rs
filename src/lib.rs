@@ -8,8 +8,6 @@ pub mod db;
 pub mod error;
 pub(crate) mod format;
 
-#[cfg(feature = "save_kdbx4")]
-mod io;
 mod key;
 
 pub use self::db::Database;
