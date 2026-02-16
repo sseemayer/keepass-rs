@@ -5,6 +5,8 @@ use totp_lite::{totp_custom, Sha1, Sha256, Sha512};
 use url::Url;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::db::Entry;
+
 const DEFAULT_PERIOD: u64 = 30;
 const DEFAULT_DIGITS: u32 = 8;
 
@@ -160,6 +162,13 @@ impl TOTP {
 
     pub fn get_secret(&self) -> String {
         base32::encode(base32::Alphabet::Rfc4648 { padding: true }, &self.secret)
+    }
+}
+
+impl Entry {
+    /// Convenience method for getting a TOTP from this entry
+    pub fn get_otp(&self) -> Result<TOTP, TOTPError> {
+        self.get_raw_otp_value().ok_or(TOTPError::NoRecord)?.parse()
     }
 }
 

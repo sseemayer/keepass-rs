@@ -4,9 +4,6 @@ use uuid::Uuid;
 
 use crate::db::{AutoType, Color, CustomData, History, Times, Value};
 
-#[cfg(feature = "totp")]
-use crate::db::otp::{TOTPError, TOTP};
-
 /// A database entry containing several key-value fields.
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
@@ -78,12 +75,6 @@ impl<'a> Entry {
     /// This value is usually only meaningful/useful when expires == true
     pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
         self.times.get_expiry()
-    }
-
-    /// Convenience method for getting a TOTP from this entry
-    #[cfg(feature = "totp")]
-    pub fn get_otp(&'a self) -> Result<TOTP, TOTPError> {
-        self.get_raw_otp_value().ok_or(TOTPError::NoRecord)?.parse()
     }
 
     /// Convenience method for getting the raw value of the 'otp' field
@@ -281,15 +272,6 @@ mod entry_tests {
         for history_entry in &entry.history.unwrap().entries {
             assert!(history_entry.history.is_none());
         }
-    }
-
-    #[cfg(feature = "totp")]
-    #[test]
-    fn totp() {
-        let mut entry = Entry::new();
-        entry.fields.insert("otp".to_string(), Value::Unprotected("otpauth://totp/ACME%20Co:john.doe@email.com?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=ACME%20Co&algorithm=SHA1&digits=6&period=30".to_string()));
-
-        assert!(entry.get_otp().is_ok());
     }
 
     #[cfg(feature = "serialization")]
