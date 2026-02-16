@@ -1,9 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{
-    db::{group::NodeLocation, DeletedObject, Entry, Group, History, Node, Times},
-    Database,
-};
+use crate::db::{Database, DeletedObject, Entry, Group, History, Node, NodeRef, NodeRefMut, Times};
 use chrono::NaiveDateTime;
 use thiserror::Error;
 use uuid::Uuid;
@@ -37,8 +34,7 @@ pub struct MergeLog {
 }
 
 /// Errors while merge two databases
-#[derive(Error)]
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum MergeError {
     #[error("{0}")]
     GenericError(String),
@@ -74,6 +70,8 @@ impl MergeLog {
         self.events.append(other.events.clone().as_mut());
     }
 }
+
+pub(crate) type NodeLocation = Vec<Uuid>;
 
 impl Database {
     /// Merge this database with another version of this same database.
@@ -492,6 +490,179 @@ impl Database {
         };
         destination_group.children.push(relocated_node);
         Ok(())
+    }
+}
+
+impl Group {
+    pub(crate) fn remove_node(&mut self, uuid: &Uuid) -> Result<Node, MergeError> {
+        let mut removed_node: Option<Node> = None;
+        let mut new_nodes: Vec<Node> = vec![];
+        for node in &self.children {
+            match node {
+                Node::Entry(e) => {
+                    if &e.uuid != uuid {
+                        new_nodes.push(node.clone());
+                        continue;
+                    }
+                    removed_node = Some(node.clone());
+                }
+                Node::Group(g) => {
+                    if &g.uuid != uuid {
+                        new_nodes.push(node.clone());
+                        continue;
+                    }
+                    removed_node = Some(node.clone());
+                }
+            }
+        }
+
+        if let Some(node) = removed_node {
+            self.children = new_nodes;
+            return Ok(node);
+        }
+
+        Err(MergeError::GenericError(format!(
+            "Could not find node {} in group {}.",
+            uuid, self.name
+        )))
+    }
+
+    pub(crate) fn find_node_location(&self, id: Uuid) -> Option<NodeLocation> {
+        let mut current_location = vec![self.uuid];
+        for node in &self.children {
+            match node {
+                Node::Entry(e) => {
+                    if e.uuid == id {
+                        return Some(current_location);
+                    }
+                }
+                Node::Group(g) => {
+                    if g.uuid == id {
+                        return Some(current_location);
+                    }
+                    if let Some(mut location) = g.find_node_location(id) {
+                        current_location.append(&mut location);
+                        return Some(current_location);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub(crate) fn merge_with(&mut self, other: &Group) -> Result<MergeLog, MergeError> {
+        let mut log = MergeLog::default();
+
+        let source_last_modification = match other.times.get_last_modification() {
+            Some(t) => *t,
+            None => {
+                log.warnings.push(format!(
+                    "Group {} did not have a last modification timestamp",
+                    self.uuid
+                ));
+                Times::epoch()
+            }
+        };
+        let destination_last_modification = match self.times.get_last_modification() {
+            Some(t) => *t,
+            None => {
+                log.warnings.push(format!(
+                    "Group {} did not have a last modification timestamp",
+                    self.uuid
+                ));
+                Times::now()
+            }
+        };
+
+        if destination_last_modification == source_last_modification {
+            if self.has_diverged_from(other) {
+                // This should never happen.
+                // This means that a group was updated without updating the last modification
+                // timestamp.
+                return Err(MergeError::GroupModificationTimeNotUpdated(
+                    other.uuid.to_string(),
+                ));
+            }
+            return Ok(log);
+        }
+
+        if destination_last_modification > source_last_modification {
+            return Ok(log);
+        }
+
+        self.name = other.name.clone();
+        self.notes = other.notes.clone();
+        self.icon_id = other.icon_id;
+        self.custom_icon_uuid = other.custom_icon_uuid;
+        self.custom_data = other.custom_data.clone();
+
+        // The location changed timestamp is handled separately when merging two databases.
+        let current_times = self.times.clone();
+        self.times = other.times.clone();
+        if let Some(t) = current_times.get_location_changed() {
+            self.times.set_location_changed(*t);
+        }
+
+        self.is_expanded = other.is_expanded;
+        self.default_autotype_sequence = other.default_autotype_sequence.clone();
+        self.enable_autotype = other.enable_autotype.clone();
+        self.enable_searching = other.enable_searching.clone();
+        self.last_top_visible_entry = other.last_top_visible_entry;
+
+        log.events.push(MergeEvent {
+            event_type: MergeEventType::GroupUpdated,
+            node_uuid: self.uuid,
+        });
+
+        Ok(log)
+    }
+
+    pub(crate) fn has_diverged_from(&self, other: &Group) -> bool {
+        let new_times = Times::new();
+        let mut self_purged = self.clone();
+        self_purged.times = new_times.clone();
+        self_purged.children = vec![];
+
+        let mut other_purged = other.clone();
+        other_purged.times = new_times.clone();
+        other_purged.children = vec![];
+        !self_purged.eq(&other_purged)
+    }
+
+    pub(crate) fn find_group(&self, path: &[Uuid]) -> Option<&Group> {
+        let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
+        let node_ref = self.get_by_uuid(&path)?;
+        match node_ref {
+            NodeRef::Group(g) => Some(g),
+            NodeRef::Entry(_) => None,
+        }
+    }
+
+    pub(crate) fn find_entry(&self, path: &[Uuid]) -> Option<&Entry> {
+        let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
+        let node_ref = self.get_by_uuid(&path)?;
+        match node_ref {
+            NodeRef::Entry(e) => Some(e),
+            NodeRef::Group(_) => None,
+        }
+    }
+
+    pub(crate) fn find_entry_mut(&mut self, path: &[Uuid]) -> Option<&mut Entry> {
+        let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
+        let node_ref = self.get_by_uuid_mut(&path)?;
+        match node_ref {
+            NodeRefMut::Entry(e) => Some(e),
+            NodeRefMut::Group(_) => None,
+        }
+    }
+
+    pub(crate) fn find_group_mut(&mut self, path: &[Uuid]) -> Option<&mut Group> {
+        let path: Vec<String> = path.iter().map(|p| p.to_string()).collect();
+        let node_ref = self.get_by_uuid_mut(&path)?;
+        match node_ref {
+            NodeRefMut::Group(g) => Some(g),
+            NodeRefMut::Entry(_) => None,
+        }
     }
 }
 

@@ -9,18 +9,20 @@ pub(crate) mod icon;
 pub(crate) mod meta;
 pub(crate) mod node;
 pub(crate) mod times;
+pub(crate) mod value;
 
 pub use attachment::{BinaryAttachment, BinaryAttachments, HeaderAttachment};
 pub use autotype::{AutoType, AutoTypeAssociation};
 pub use color::Color;
 pub use custom_data::{CustomData, CustomDataItem, CustomDataItemDenormalized};
-pub use entry::{Entry, Value};
+pub use entry::Entry;
 pub use group::Group;
 pub use history::History;
 pub use icon::{CustomIcons, Icon};
 pub use meta::{MemoryProtection, Meta};
 pub use node::{Node, NodeIter, NodeRef, NodeRefMut};
 pub use times::Times;
+pub use value::Value;
 
 use crate::config::DatabaseConfig;
 
