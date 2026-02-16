@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 #[cfg(feature = "totp")]
-pub use crate::db::otp::TOTPError;
+pub use crate::db::TOTPError;
 
 /// Errors upon reading a Database
 #[derive(Debug, Error)]

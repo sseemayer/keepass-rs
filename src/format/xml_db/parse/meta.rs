@@ -5,8 +5,7 @@ use uuid::Uuid;
 use crate::{
     compression::{Compression, GZipCompression},
     db::{
-        meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
-        Color,
+        Color, {BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     },
     format::xml_db::{
         self,
@@ -349,7 +348,7 @@ impl FromXml for Icon {
 mod parse_meta_test {
 
     use crate::{
-        db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
+        db::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
         format::xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
     };
 

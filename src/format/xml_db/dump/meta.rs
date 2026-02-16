@@ -4,7 +4,7 @@ use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 use crate::{
     compression::{Compression, GZipCompression},
     crypt::ciphers::Cipher,
-    db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
+    db::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     format::xml_db::dump::{DumpXml, SimpleTag},
 };
 
