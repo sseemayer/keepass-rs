@@ -1,14 +1,11 @@
 #[cfg(feature = "challenge_response")]
-use cipher::generic_array::typenum::U20;
-use cipher::{
-    block_padding::UnpadError,
-    generic_array::{
-        typenum::{U32, U64},
-        GenericArray,
-    },
-    InvalidLength,
+use hybrid_array::typenum::U20;
+use hybrid_array::{
+    typenum::{U32, U64},
+    Array as GenericArray,
 };
 
+use cipher::{InvalidLength, KeyInit};
 use hmac::{Hmac, Mac};
 #[cfg(feature = "challenge_response")]
 use sha1::Sha1;
@@ -72,7 +69,7 @@ pub enum CryptographyError {
     InvalidLength(#[from] InvalidLength),
 
     #[error(transparent)]
-    InvalidPadding(#[from] UnpadError),
+    InvalidPadding(#[from] cipher::block_padding::Error),
 
     #[error(transparent)]
     Argon2(#[from] argon2::Error),
