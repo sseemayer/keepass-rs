@@ -16,7 +16,7 @@ use crate::{
         Meta, Times, Value,
     },
     error::XmlParseError,
-    xml_db::get_epoch_baseline,
+    format::xml_db::get_epoch_baseline,
 };
 
 /// Parse a KeePass timestamp string
@@ -545,7 +545,7 @@ mod parse_test {
         db::{
             AutoType, AutoTypeAssociation, CustomData, CustomDataItemDenormalized, Entry, History, Times, Value,
         },
-        xml_db::parse::{entry::StringField, DeletedObject, DeletedObjects, IgnoreSubfield, Root},
+        format::xml_db::parse::{entry::StringField, DeletedObject, DeletedObjects, IgnoreSubfield, Root},
     };
 
     use super::{entry::BinaryField, parse, parse_from_bytes, FromXml, KeePassXml, SimpleTag, XmlParseError};
@@ -556,7 +556,7 @@ mod parse_test {
 
     #[test]
     fn test_custom_xml_fields() -> Result<(), XmlParseError> {
-        let xml = include_bytes!("../../../tests/resources/inner_xml_with_custom_fields.xml");
+        let xml = include_bytes!("../../../../tests/resources/inner_xml_with_custom_fields.xml");
 
         let mut inner_cipher = InnerCipherConfig::Plain.get_cipher(&[])?;
 

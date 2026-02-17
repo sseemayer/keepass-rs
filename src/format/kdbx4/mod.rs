@@ -4,8 +4,7 @@ mod parse;
 
 use crate::{
     config::{CompressionConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-    format::DatabaseVersion,
-    variant_dictionary::VariantDictionary,
+    format::{variant_dictionary::VariantDictionary, DatabaseVersion},
 };
 
 #[cfg(feature = "save_kdbx4")]

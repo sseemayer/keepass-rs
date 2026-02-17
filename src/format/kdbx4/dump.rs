@@ -7,18 +7,18 @@ use crate::{
     db::{Database, HeaderAttachment},
     error::DatabaseSaveError,
     format::{
+        hmac_block_stream,
+        io::WriteLengthTaggedExt,
         kdbx4::{
             KDBX4InnerHeader, KDBX4OuterHeader, HEADER_COMPRESSION_ID, HEADER_ENCRYPTION_IV, HEADER_END,
             HEADER_KDF_PARAMS, HEADER_MASTER_SEED, HEADER_MASTER_SEED_SIZE, HEADER_OUTER_ENCRYPTION_ID,
             INNER_HEADER_BINARY_ATTACHMENTS, INNER_HEADER_END, INNER_HEADER_RANDOM_STREAM_ID,
             INNER_HEADER_RANDOM_STREAM_KEY,
         },
+        variant_dictionary::VariantDictionary,
         DatabaseVersion,
     },
-    hmac_block_stream,
-    io::WriteLengthTaggedExt,
     key::DatabaseKey,
-    variant_dictionary::VariantDictionary,
 };
 
 use super::HEADER_PUBLIC_CUSTOM_DATA;
@@ -98,7 +98,7 @@ pub fn dump_kdbx4(
     .dump(&db.header_attachments, &mut payload)?;
 
     // after inner header is one XML document
-    crate::xml_db::dump::dump(db, &mut *inner_cipher, &mut payload)?;
+    crate::format::xml_db::dump::dump(db, &mut *inner_cipher, &mut payload)?;
 
     let payload_compressed = db
         .config

@@ -19,14 +19,12 @@ mod tests {
     use crate::{
         config::{DatabaseConfig, InnerCipherConfig},
         db::{
-            entry::History,
-            meta::{BinaryAttachments, CustomIcons, Icon, MemoryProtection},
-            AutoType, AutoTypeAssociation, BinaryAttachment, CustomData, CustomDataItem, Database,
-            DeletedObject, Entry, Group, Meta, Node, Times, Value,
+            AutoType, AutoTypeAssociation, BinaryAttachment, BinaryAttachments, CustomData, CustomDataItem,
+            CustomIcons, Database, DeletedObject, Entry, Group, History, Icon, MemoryProtection, Meta, Node,
+            Times, Value,
         },
-        format::kdbx4,
+        format::{kdbx4, xml_db::dump::DumpXml},
         key::DatabaseKey,
-        xml_db::dump::DumpXml,
     };
 
     fn make_key() -> DatabaseKey {
@@ -112,7 +110,7 @@ mod tests {
 
         let mut encrypted_db = Vec::new();
         kdbx4::dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
-        let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
+        let decrypted_db = crate::format::kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
         assert_eq!(decrypted_db.root.children.len(), 1);
 

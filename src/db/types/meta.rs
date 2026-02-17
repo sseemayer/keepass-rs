@@ -1,7 +1,7 @@
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::db::{Color, CustomData};
+use crate::db::{BinaryAttachments, Color, CustomData, CustomIcons};
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -114,38 +114,4 @@ impl Default for MemoryProtection {
             protect_notes: false,
         }
     }
-}
-
-/// Collection of custom icons
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct CustomIcons {
-    pub icons: Vec<Icon>,
-}
-
-/// A custom icon
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct Icon {
-    /// UUID, to reference the icon
-    pub uuid: Uuid,
-
-    /// Image data
-    pub data: Vec<u8>,
-}
-
-/// Collection of binary attachments in the metadata of an XML database
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachments {
-    pub binaries: Vec<BinaryAttachment>,
-}
-
-/// Binary attachment in the metadata of a XML database
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachment {
-    pub identifier: Option<String>,
-    pub compressed: bool,
-    pub content: Vec<u8>,
 }

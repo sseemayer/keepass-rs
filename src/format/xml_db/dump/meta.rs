@@ -4,8 +4,8 @@ use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 use crate::{
     compression::{Compression, GZipCompression},
     crypt::ciphers::Cipher,
-    db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
-    xml_db::dump::{DumpXml, SimpleTag},
+    db::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
+    format::xml_db::dump::{DumpXml, SimpleTag},
 };
 
 impl DumpXml for Meta {

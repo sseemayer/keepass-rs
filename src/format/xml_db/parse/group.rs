@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{CustomData, Entry, Group, Times},
-    xml_db::parse::{bad_event, FromXml, IgnoreSubfield, SimpleTag, SimpleXmlEvent, XmlParseError},
+    format::xml_db::parse::{bad_event, FromXml, IgnoreSubfield, SimpleTag, SimpleXmlEvent, XmlParseError},
 };
 
 impl FromXml for Group {
@@ -92,7 +92,7 @@ mod parse_group_test {
 
     use crate::{
         db::Group,
-        xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
+        format::xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
     };
 
     use uuid::uuid;

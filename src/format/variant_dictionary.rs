@@ -7,7 +7,7 @@ use std::io::Write;
 
 use crate::error::VariantDictionaryError;
 #[cfg(feature = "save_kdbx4")]
-use crate::io::WriteLengthTaggedExt;
+use crate::format::io::WriteLengthTaggedExt;
 
 pub const VARIANT_DICTIONARY_VERSION: u16 = 0x100;
 pub const VARIANT_DICTIONARY_END: u8 = 0x0;

@@ -5,19 +5,21 @@ use uuid::Uuid;
 use crate::{
     compression::{Compression, GZipCompression},
     db::{
-        meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
-        Color,
+        Color, {BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
     },
-    xml_db::parse::{bad_event, CustomData, FromXml, IgnoreSubfield, SimpleTag, SimpleXmlEvent, XmlParseError},
+    format::xml_db::{
+        self,
+        parse::{bad_event, CustomData, FromXml, IgnoreSubfield, SimpleTag, SimpleXmlEvent, XmlParseError},
+    },
 };
 
 impl FromXml for Meta {
     type Parses = Self;
 
-    fn from_xml<I: Iterator<Item = crate::xml_db::parse::SimpleXmlEvent>>(
+    fn from_xml<I: Iterator<Item = SimpleXmlEvent>>(
         iterator: &mut std::iter::Peekable<I>,
         inner_cipher: &mut dyn crate::crypt::ciphers::Cipher,
-    ) -> Result<Self::Parses, crate::xml_db::parse::XmlParseError> {
+    ) -> Result<Self::Parses, xml_db::parse::XmlParseError> {
         let open_tag = iterator.next().ok_or(XmlParseError::Eof)?;
         if !matches!(open_tag, SimpleXmlEvent::Start(ref tag, _) if tag == "Meta") {
             return Err(bad_event("Open Meta tag", open_tag));
@@ -346,8 +348,8 @@ impl FromXml for Icon {
 mod parse_meta_test {
 
     use crate::{
-        db::meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
-        xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
+        db::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
+        format::xml_db::parse::{parse_test::parse_test_xml, XmlParseError},
     };
 
     use uuid::{uuid, Uuid};

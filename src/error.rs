@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 #[cfg(feature = "totp")]
-pub use crate::db::otp::TOTPError;
+pub use crate::db::TOTPError;
 
 /// Errors upon reading a Database
 #[derive(Debug, Error)]
@@ -311,7 +311,7 @@ pub enum XmlParseError {
     #[error("Bad XML event: expected {}, got {:?}", expected, event)]
     BadEvent {
         expected: &'static str,
-        event: crate::xml_db::parse::SimpleXmlEvent,
+        event: crate::format::xml_db::parse::SimpleXmlEvent,
     },
 
     /// The stream of XML events ended when more events were expected
