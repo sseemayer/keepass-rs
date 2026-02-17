@@ -48,21 +48,22 @@ chrono = { version = "0.4.23", default-features = false, features = [
 
 # cryptography
 rust-argon2 = "3.0"
-sha1 = { version = "0.10", optional = true }
-sha2 = "0.10"
-aes = "0.8"
+sha1 = { version = "0.11.0-rc.5", optional = true }
+sha2 = "0.11.0-rc.5"
+aes = "0.9.0-rc.4"
 block-modes = "0.9"
-hmac = "0.12"
-salsa20 = "0.10"
-chacha20 = "0.9"
-cipher = { version = "0.4", features = ["std"] }
-twofish = "0.7"
-cbc = "0.1"
+hmac = "0.13.0-rc.5"
+salsa20 = "0.11.0-rc.2"
+chacha20 = "0.10"
+cipher = { version = "0.5", features = ["block-padding", "alloc"] }
+twofish = "0.8.0-rc.1"
+cbc = "0.2.0-rc.3"
 
 challenge_response = { version = "0.5", optional = true, default-features = false, features = ["nusb"] }
 
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 hex = { version = "0.4" }
+hybrid-array = "0.4"
 getrandom = { version = "0.4", features = ["std"] }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 
