@@ -20,8 +20,8 @@ mod tests {
         config::{DatabaseConfig, InnerCipherConfig},
         db::{
             AutoType, AutoTypeAssociation, BinaryAttachment, BinaryAttachments, CustomData, CustomDataItem,
-            CustomIcons, Database, DeletedObject, Entry, Group, History, Icon, MemoryProtection, Meta, Node,
-            Times, Value,
+            CustomIcons, Database, DeletedObject, Entry, Group, History, Icon, MemoryProtection, Meta, Times,
+            Value,
         },
         format::{kdbx4, xml_db::dump::DumpXml},
         key::DatabaseKey,
@@ -101,7 +101,7 @@ mod tests {
 
         entry.history = Some(history);
 
-        root_group.add_child(entry.clone());
+        root_group.entries.push(entry.clone());
 
         let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group;
@@ -112,13 +112,9 @@ mod tests {
         kdbx4::dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
         let decrypted_db = crate::format::kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.children.len(), 1);
+        assert_eq!(decrypted_db.root.entries.len(), 1);
 
-        let decrypted_entry = match &decrypted_db.root.children[0] {
-            Node::Entry(e) => e,
-            Node::Group(_) => panic!("Was expecting an entry as the only child."),
-        };
-
+        let decrypted_entry = &decrypted_db.root.entries[0];
         assert_eq!(decrypted_entry, &entry);
     }
 
@@ -138,7 +134,7 @@ mod tests {
             .fields
             .insert("Title".to_string(), Value::Unprotected("ASDF".to_string()));
 
-        root_group.add_child(entry);
+        root_group.entries.push(entry.clone());
 
         let mut subgroup = Group::new("Child group");
         subgroup.notes = Some("I am a subgroup".to_string());
@@ -167,7 +163,7 @@ mod tests {
             },
         );
 
-        root_group.add_child(subgroup);
+        root_group.groups.push(subgroup);
 
         let mut db = Database::new(DatabaseConfig::default());
         db.root = root_group.clone();
@@ -178,12 +174,10 @@ mod tests {
         kdbx4::dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
         let decrypted_db = kdbx4::parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.children.len(), 2);
+        assert_eq!(decrypted_db.root.entries.len(), 1);
+        assert_eq!(decrypted_db.root.groups.len(), 1);
 
-        let decrypted_entry = match &decrypted_db.root.children[0] {
-            Node::Entry(e) => e,
-            Node::Group(_) => panic!("Was expecting an entry as the first child."),
-        };
+        let decrypted_entry = &decrypted_db.root.entries[0];
 
         assert_eq!(decrypted_entry.get_title(), Some("ASDF"));
         assert_eq!(decrypted_entry.get_uuid(), &new_entry_uuid);

@@ -60,11 +60,13 @@ fn purge_history_for_entry(entry: &mut keepass::db::Entry) -> Result<()> {
 }
 
 fn purge_history(group: &mut keepass::db::Group) -> Result<()> {
-    for node in &mut group.children {
-        match node {
-            keepass::db::Node::Entry(ref mut e) => purge_history_for_entry(e)?,
-            keepass::db::Node::Group(ref mut g) => purge_history(g)?,
-        };
+    for entry in &mut group.entries {
+        purge_history_for_entry(entry)?;
     }
+
+    for group in &mut group.groups {
+        purge_history(group)?;
+    }
+
     Ok(())
 }

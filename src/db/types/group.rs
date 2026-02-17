@@ -1,41 +1,6 @@
-use std::collections::VecDeque;
-
 use uuid::Uuid;
 
-use crate::db::{
-    entry::Entry,
-    node::{Node, NodeIter, NodeRef, NodeRefMut},
-    CustomData, Times,
-};
-
-pub(crate) enum SearchField {
-    Uuid,
-    Title,
-}
-
-impl SearchField {
-    pub(crate) fn matches(&self, node: &Node, field_value: &str) -> bool {
-        match self {
-            SearchField::Uuid => {
-                let uuid = match node {
-                    Node::Entry(e) => e.uuid,
-                    Node::Group(g) => g.uuid,
-                };
-                uuid.to_string() == field_value
-            }
-            SearchField::Title => {
-                let title = match node {
-                    Node::Entry(e) => e.get_title(),
-                    Node::Group(g) => Some(g.get_name()),
-                };
-                match title {
-                    Some(t) => t == field_value,
-                    None => false,
-                }
-            }
-        }
-    }
-}
+use crate::db::{entry::Entry, CustomData, Times};
 
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -56,8 +21,11 @@ pub struct Group {
     /// UUID for a custom group icon
     pub custom_icon_uuid: Option<Uuid>,
 
-    /// The list of child nodes (Groups or Entries)
-    pub children: Vec<Node>,
+    /// The list of child groups
+    pub groups: Vec<Group>,
+
+    /// The list of entries directly under this group
+    pub entries: Vec<Entry>,
 
     /// The list of time fields for this group
     pub times: Times,
@@ -95,100 +63,128 @@ impl Group {
         }
     }
 
-    /// Add a child node (an entry or a group) to this group.
-    pub fn add_child(&mut self, node: impl Into<Node>) {
-        self.children.push(node.into());
+    /// Get a reference to a child group by name. This will only search the immediate child groups
+    /// of the current group, not any descendant groups.
+    pub fn group_by_name(&self, name: &str) -> Option<&Group> {
+        self.groups.iter().find(|g| g.name == name)
     }
 
-    /// Recursively get a Group or Entry reference by specifying a path relative to the current Group
-    /// ```
-    /// use keepass::{Database, DatabaseKey, db::NodeRef};
-    /// use std::fs::File;
-    ///
-    /// let mut file = File::open("tests/resources/test_db_with_password.kdbx").unwrap();
-    /// let db = Database::open(
-    ///     &mut file,
-    ///     DatabaseKey::new().with_password("demopass")
-    /// ).unwrap();
-    ///
-    /// if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Sample Entry #2"]) {
-    ///     println!("User: {}", e.get_username().unwrap());
-    /// }
-    ///
-    /// if let Some(NodeRef::Group(e)) = db.root.get(&["General"]) {
-    ///    println!("Group: {}", e.name);
-    /// }
-    /// ```
-    pub fn get<'a>(&'a self, path: &[&str]) -> Option<NodeRef<'a>> {
-        self.get_internal(path, SearchField::Title)
+    /// Get a mutable reference to a child group by name. This will only search the immediate child
+    /// groups of the current group, not any descendant groups.
+    pub fn group_by_name_mut(&mut self, name: &str) -> Option<&mut Group> {
+        self.groups.iter_mut().find(|g| g.name == name)
     }
 
-    pub fn get_by_uuid<'a, T: AsRef<str>>(&'a self, path: &[T]) -> Option<NodeRef<'a>> {
-        self.get_internal(path, SearchField::Uuid)
-    }
-
-    fn get_internal<'a, T: AsRef<str>>(&'a self, path: &[T], search_field: SearchField) -> Option<NodeRef<'a>> {
+    /// Recursively get a group reference by specifying a path of group names relative to the
+    /// current Group
+    pub fn group_by_path(&self, path: &[&str]) -> Option<&Group> {
         if path.is_empty() {
-            Some(NodeRef::Group(self))
-        } else if path.len() == 1 {
-            let head = &path[0];
-            self.children.iter().find_map(|n| {
-                if search_field.matches(n, head.as_ref()) {
-                    return Some(n.as_ref());
-                }
-                None
-            })
-        } else {
-            let head = &path[0];
-            let tail = &path[1..path.len()];
-
-            let head_group = self.children.iter().find_map(|n| match n {
-                Node::Group(g) if search_field.matches(n, head.as_ref()) => Some(g),
-                _ => None,
-            })?;
-
-            head_group.get_internal(tail, search_field)
+            return Some(self);
         }
+
+        self.groups.iter().find(|g| g.name == path[0]).and_then(|g| {
+            if path.len() > 1 {
+                g.group_by_path(&path[1..])
+            } else {
+                Some(g)
+            }
+        })
     }
 
-    /// Recursively get a mutable reference to a Group or Entry by specifying a path relative to
+    /// Recursively get a mutable group reference by specifying a path of group names relative to
     /// the current Group
-    pub fn get_mut<'a>(&'a mut self, path: &[&str]) -> Option<NodeRefMut<'a>> {
-        self.get_mut_internal(path, SearchField::Title)
-    }
-
-    pub fn get_by_uuid_mut<'a, T: AsRef<str>>(&'a mut self, path: &[T]) -> Option<NodeRefMut<'a>> {
-        self.get_mut_internal(path, SearchField::Uuid)
-    }
-
-    fn get_mut_internal<'a, T: AsRef<str>>(
-        &'a mut self,
-        path: &[T],
-        search_field: SearchField,
-    ) -> Option<NodeRefMut<'a>> {
+    pub fn group_by_path_mut(&mut self, path: &[&str]) -> Option<&mut Group> {
         if path.is_empty() {
-            Some(NodeRefMut::Group(self))
-        } else if path.len() == 1 {
-            let head = &path[0];
-            self.children
-                .iter_mut()
-                .filter(|n| search_field.matches(n, head.as_ref()))
-                .map(|t| t.as_mut())
-                .next()
-        } else {
-            let head = &path[0];
-            let tail = &path[1..path.len()];
-
-            let head_group: &mut Group = self.children.iter_mut().find_map(|n| {
-                let node_matches = search_field.matches(n, head.as_ref());
-                match n {
-                    Node::Group(g) if node_matches => Some(g),
-                    _ => None,
-                }
-            })?;
-
-            head_group.get_mut_internal(tail, search_field)
+            return Some(self);
         }
+
+        self.groups.iter_mut().find(|g| g.name == path[0]).and_then(|g| {
+            if path.len() > 1 {
+                g.group_by_path_mut(&path[1..])
+            } else {
+                Some(g)
+            }
+        })
+    }
+
+    /// Get a group reference by specifying a UUID. This will search the current group and all
+    /// descendant groups for a matching UUID.
+    pub fn group_by_uuid(&self, uuid: Uuid) -> Option<&Group> {
+        if self.uuid == uuid {
+            return Some(self);
+        }
+
+        for g in &self.groups {
+            if let Some(group) = g.group_by_uuid(uuid) {
+                return Some(group);
+            }
+        }
+
+        None
+    }
+
+    /// Get a mutable group reference by specifying a UUID. This will search the current group and
+    /// all descendant groups for a matching UUID.
+    pub fn group_by_uuid_mut(&mut self, uuid: Uuid) -> Option<&mut Group> {
+        if self.uuid == uuid {
+            return Some(self);
+        }
+
+        for g in &mut self.groups {
+            if let Some(group) = g.group_by_uuid_mut(uuid) {
+                return Some(group);
+            }
+        }
+
+        None
+    }
+
+    /// Get an entry by name. This will only search the immediate child entries of the current
+    /// group, not any descendant entries in child groups.
+    pub fn entry_by_name(&self, name: &str) -> Option<&Entry> {
+        self.entries.iter().find(|e| e.get_title() == Some(name))
+    }
+
+    /// Get a mutable entry by name. This will only search the immediate child entries of the
+    /// current group, not any descendant entries in child groups.
+    pub fn entry_by_name_mut(&mut self, name: &str) -> Option<&mut Entry> {
+        self.entries.iter_mut().find(|e| e.get_title() == Some(name))
+    }
+
+    /// Get an entry by UUID. This will search the immediate child entries of the current group and
+    /// all descendant entries in child groups for a matching UUID.
+    pub fn entry_by_uuid(&self, uuid: Uuid) -> Option<&Entry> {
+        for e in &self.entries {
+            if e.uuid == uuid {
+                return Some(e);
+            }
+        }
+
+        for g in &self.groups {
+            if let Some(e) = g.entry_by_uuid(uuid) {
+                return Some(e);
+            }
+        }
+
+        None
+    }
+
+    /// Get a mutable entry by UUID. This will search the immediate child entries of the current
+    /// group and all descendant entries in child groups for a matching UUID.
+    pub fn entry_by_uuid_mut(&mut self, uuid: Uuid) -> Option<&mut Entry> {
+        for e in &mut self.entries {
+            if e.uuid == uuid {
+                return Some(e);
+            }
+        }
+
+        for g in &mut self.groups {
+            if let Some(e) = g.entry_by_uuid_mut(uuid) {
+                return Some(e);
+            }
+        }
+
+        None
     }
 
     /// Convenience method for getting the name of the Group
@@ -210,64 +206,6 @@ impl Group {
     pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
         self.times.get_expiry()
     }
-
-    pub fn entries(&self) -> Vec<&Entry> {
-        let mut response: Vec<&Entry> = vec![];
-        for node in &self.children {
-            if let Node::Entry(e) = node {
-                response.push(e)
-            }
-        }
-        response
-    }
-
-    pub fn entries_mut(&mut self) -> Vec<&mut Entry> {
-        let mut response: Vec<&mut Entry> = vec![];
-        for node in &mut self.children {
-            if let Node::Entry(e) = node {
-                response.push(e)
-            }
-        }
-        response
-    }
-
-    pub fn groups(&self) -> Vec<&Group> {
-        let mut response: Vec<&Group> = vec![];
-        for node in &self.children {
-            if let Node::Group(g) = node {
-                response.push(g);
-            }
-        }
-        response
-    }
-
-    pub fn groups_mut(&mut self) -> Vec<&mut Group> {
-        let mut response: Vec<&mut Group> = vec![];
-        for node in &mut self.children {
-            if let Node::Group(g) = node {
-                response.push(g);
-            }
-        }
-        response
-    }
-}
-
-impl<'a> Group {
-    pub fn iter(&'a self) -> NodeIter<'a> {
-        self.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a Group {
-    type Item = NodeRef<'a>;
-    type IntoIter = NodeIter<'a>;
-
-    fn into_iter(self) -> NodeIter<'a> {
-        let mut queue: VecDeque<NodeRef> = VecDeque::new();
-        queue.push_back(NodeRef::Group(self));
-
-        NodeIter::new(queue)
-    }
 }
 
 #[cfg(test)]
@@ -286,13 +224,20 @@ mod group_tests {
             "Title".to_string(),
             crate::db::Value::Unprotected("Sample Entry #2".to_string()),
         );
-        general_group.add_child(sample_entry);
-        db.root.add_child(general_group);
+        general_group.entries.push(sample_entry);
+        db.root.groups.push(general_group);
 
-        assert!(db.root.get(&["General", "Sample Entry #2"]).is_some());
-        assert!(db.root.get(&["General"]).is_some());
-        assert!(db.root.get(&["Invalid Group"]).is_none());
-        assert!(db.root.get(&[]).is_some());
+        assert!(db
+            .root
+            .group_by_path(&["General"])
+            .and_then(|g| g.entry_by_name("Sample Entry #2"))
+            .is_some());
+
+        assert!(db.root.group_by_name("General").is_some());
+
+        assert!(db.root.group_by_name("Invalid Group").is_none());
+
+        assert!(db.root.group_by_path(&[]).is_some());
     }
 
     #[test]
@@ -305,13 +250,18 @@ mod group_tests {
             "Title".to_string(),
             crate::db::Value::Unprotected("Sample Entry #2".to_string()),
         );
-        general_group.add_child(sample_entry);
-        db.root.add_child(general_group);
+        general_group.entries.push(sample_entry);
+        db.root.groups.push(general_group);
 
-        assert!(db.root.get_mut(&["General", "Sample Entry #2"]).is_some());
-        assert!(db.root.get_mut(&["General"]).is_some());
-        assert!(db.root.get_mut(&["Invalid Group"]).is_none());
-        assert!(db.root.get_mut(&[]).is_some());
+        assert!(db
+            .root
+            .group_by_path_mut(&["General"])
+            .and_then(|g| g.entry_by_name_mut("Sample Entry #2"))
+            .is_some());
+
+        assert!(db.root.group_by_name_mut("General").is_some());
+        assert!(db.root.group_by_name_mut("Invalid Group").is_none());
+        assert!(db.root.group_by_path_mut(&[]).is_some());
     }
 
     #[test]
@@ -324,34 +274,20 @@ mod group_tests {
             "Title".to_string(),
             crate::db::Value::Unprotected("Sample Entry #2".to_string()),
         );
-        general_group.add_child(sample_entry.clone());
-        db.root.add_child(general_group.clone());
+        general_group.entries.push(sample_entry.clone());
+        db.root.groups.push(general_group.clone());
 
-        let general_group_uuid = general_group.uuid.to_string();
-        let sample_entry_uuid = sample_entry.uuid.to_string();
-        let invalid_uuid = uuid::Uuid::new_v4().to_string();
+        let general_group_uuid = general_group.uuid;
+        let sample_entry_uuid = sample_entry.uuid;
+        let invalid_uuid = uuid::Uuid::new_v4();
 
-        // Testing with references to the UUIDs
-        let group_path: [&str; 1] = [general_group_uuid.as_ref()];
-        let entry_path: [&str; 2] = [general_group_uuid.as_ref(), sample_entry_uuid.as_ref()];
-        let invalid_path: [&str; 1] = [invalid_uuid.as_ref()];
-        let empty_path: [&str; 0] = [];
+        assert!(db.root.group_by_uuid(general_group_uuid).is_some());
+        assert!(db.root.group_by_uuid(sample_entry_uuid).is_none());
+        assert!(db.root.group_by_uuid(invalid_uuid).is_none());
 
-        assert!(db.root.get_by_uuid(&group_path).is_some());
-        assert!(db.root.get_by_uuid(&entry_path).is_some());
-        assert!(db.root.get_by_uuid(&invalid_path).is_none());
-        assert!(db.root.get_by_uuid(&empty_path).is_some());
-
-        // Testing with owned versions of the UUIDs.
-        let group_path = vec![general_group_uuid.clone()];
-        let entry_path = vec![general_group_uuid.clone(), sample_entry_uuid.clone()];
-        let invalid_path = vec![invalid_uuid.clone()];
-        let empty_path: Vec<String> = vec![];
-
-        assert!(db.root.get_by_uuid(&group_path).is_some());
-        assert!(db.root.get_by_uuid(&entry_path).is_some());
-        assert!(db.root.get_by_uuid(&invalid_path).is_none());
-        assert!(db.root.get_by_uuid(&empty_path).is_some());
+        assert!(db.root.entry_by_uuid(general_group_uuid).is_none());
+        assert!(db.root.entry_by_uuid(sample_entry_uuid).is_some());
+        assert!(db.root.entry_by_uuid(invalid_uuid).is_none());
     }
 
     #[test]
@@ -364,33 +300,19 @@ mod group_tests {
             "Title".to_string(),
             crate::db::Value::Unprotected("Sample Entry #2".to_string()),
         );
-        general_group.add_child(sample_entry.clone());
-        db.root.add_child(general_group.clone());
+        general_group.entries.push(sample_entry.clone());
+        db.root.groups.push(general_group.clone());
 
-        let general_group_uuid = general_group.uuid.to_string();
-        let sample_entry_uuid = sample_entry.uuid.to_string();
-        let invalid_uuid = uuid::Uuid::new_v4().to_string();
+        let general_group_uuid = general_group.uuid;
+        let sample_entry_uuid = sample_entry.uuid;
+        let invalid_uuid = uuid::Uuid::new_v4();
 
-        // Testing with references to the UUIDs
-        let group_path: [&str; 1] = [general_group_uuid.as_ref()];
-        let entry_path: [&str; 2] = [general_group_uuid.as_ref(), sample_entry_uuid.as_ref()];
-        let invalid_path: [&str; 1] = [invalid_uuid.as_ref()];
-        let empty_path: [&str; 0] = [];
+        assert!(db.root.group_by_uuid_mut(general_group_uuid).is_some());
+        assert!(db.root.group_by_uuid_mut(sample_entry_uuid).is_none());
+        assert!(db.root.group_by_uuid_mut(invalid_uuid).is_none());
 
-        assert!(db.root.get_by_uuid_mut(&group_path).is_some());
-        assert!(db.root.get_by_uuid_mut(&entry_path).is_some());
-        assert!(db.root.get_by_uuid_mut(&invalid_path).is_none());
-        assert!(db.root.get_by_uuid_mut(&empty_path).is_some());
-
-        // Testing with owned versions of the UUIDs.
-        let group_path = vec![general_group_uuid.clone()];
-        let entry_path = vec![general_group_uuid.clone(), sample_entry_uuid.clone()];
-        let invalid_path = vec![invalid_uuid.clone()];
-        let empty_path: Vec<String> = vec![];
-
-        assert!(db.root.get_by_uuid_mut(&group_path).is_some());
-        assert!(db.root.get_by_uuid_mut(&entry_path).is_some());
-        assert!(db.root.get_by_uuid_mut(&invalid_path).is_none());
-        assert!(db.root.get_by_uuid_mut(&empty_path).is_some());
+        assert!(db.root.entry_by_uuid_mut(general_group_uuid).is_none());
+        assert!(db.root.entry_by_uuid_mut(sample_entry_uuid).is_some());
+        assert!(db.root.entry_by_uuid_mut(invalid_uuid).is_none());
     }
 }

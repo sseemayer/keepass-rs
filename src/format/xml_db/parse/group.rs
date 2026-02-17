@@ -63,12 +63,10 @@ impl FromXml for Group {
                             SimpleTag::<Option<Uuid>>::from_xml(iterator, inner_cipher)?.value;
                     }
                     "Entry" => {
-                        let entry = Entry::from_xml(iterator, inner_cipher)?;
-                        out.add_child(entry);
+                        out.entries.push(Entry::from_xml(iterator, inner_cipher)?);
                     }
                     "Group" => {
-                        let group = Group::from_xml(iterator, inner_cipher)?;
-                        out.add_child(group);
+                        out.groups.push(Group::from_xml(iterator, inner_cipher)?);
                     }
                     "CustomData" => {
                         out.custom_data = CustomData::from_xml(iterator, inner_cipher)?;

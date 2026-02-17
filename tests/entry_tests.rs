@@ -1,6 +1,6 @@
 mod entry_tests {
     use keepass::{
-        db::{Database, NodeRef},
+        db::Database,
         error::{DatabaseKeyError, DatabaseOpenError},
         DatabaseKey,
     };
@@ -16,47 +16,50 @@ mod entry_tests {
         )?;
 
         // get an entry on the root node
-        if let Some(NodeRef::Entry(e)) = db.root.get(&["Sample Entry"]) {
-            assert_eq!(e.get_uuid(), &uuid!("0ebeddb2-ed4e-5144-bc34-1a309266a513"));
-            assert_eq!(e.get_title(), Some("Sample Entry"));
-            assert_eq!(e.get_username(), Some("User Name"));
-            assert_eq!(e.get_password(), Some("Password"));
-            assert_eq!(e.get_url(), Some("http://keepass.info/"));
-            assert_eq!(e.get("custom attribute"), Some("data for custom attribute"));
-            assert_eq!(e.get("URL"), Some("http://keepass.info/"));
-            assert!(!e.times.expires);
+        let e = db.root.entry_by_name("Sample Entry").expect("Expected an entry");
 
-            let et = chrono::NaiveDateTime::parse_from_str("2016-01-06 09:43:01", "%Y-%m-%d %H:%M:%S").unwrap();
-            assert_eq!(e.get_expiry_time(), Some(&et));
-            assert_eq!(e.get_time("ExpiryTime"), Some(&et));
+        assert_eq!(e.get_uuid(), &uuid!("0ebeddb2-ed4e-5144-bc34-1a309266a513"));
+        assert_eq!(e.get_title(), Some("Sample Entry"));
+        assert_eq!(e.get_username(), Some("User Name"));
+        assert_eq!(e.get_password(), Some("Password"));
+        assert_eq!(e.get_url(), Some("http://keepass.info/"));
+        assert_eq!(e.get("custom attribute"), Some("data for custom attribute"));
+        assert_eq!(e.get("URL"), Some("http://keepass.info/"));
+        assert!(!e.times.expires);
 
-            if let Some(ref at) = e.autotype {
-                if let Some(ref s) = at.sequence {
-                    assert_eq!(s, "{USERNAME}{TAB}{TAB}{PASSWORD}{ENTER}");
-                } else {
-                    panic!("Expected a sequence")
-                }
+        let et = chrono::NaiveDateTime::parse_from_str("2016-01-06 09:43:01", "%Y-%m-%d %H:%M:%S").unwrap();
+        assert_eq!(e.get_expiry_time(), Some(&et));
+        assert_eq!(e.get_time("ExpiryTime"), Some(&et));
+
+        if let Some(ref at) = e.autotype {
+            if let Some(ref s) = at.sequence {
+                assert_eq!(s, "{USERNAME}{TAB}{TAB}{PASSWORD}{ENTER}");
             } else {
-                panic!("Expected an AutoType entry");
+                panic!("Expected a sequence")
             }
         } else {
-            panic!("Expected an entry");
+            panic!("Expected an AutoType entry");
         }
 
-        if let Some(NodeRef::Entry(e)) = db.root.get(&["General", "Subgroup", "test entry"]) {
-            assert_eq!(e.get_uuid(), &uuid!("5e4c8ad1-9cd5-394c-9039-1178dc140b4a"));
-            assert_eq!(e.get_title(), Some("test entry"));
-            assert_eq!(e.get_username(), Some("jdoe"));
-            assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
-            assert_eq!(e.get_url(), None);
-            assert!(!e.times.expires);
-            if let Some(t) = e.get_time("ExpiryTime") {
-                assert_eq!(format!("{}", t), "2016-01-28 12:25:36");
-            } else {
-                panic!("Expected an ExpiryTime");
-            }
+        // get an entry in a subgroup
+        let e = db
+            .root
+            .group_by_path(&["General", "Subgroup"])
+            .expect("Expected a subgroup")
+            .entry_by_name("test entry")
+            .expect("Expected an entry");
+
+        assert_eq!(e.get_uuid(), &uuid!("5e4c8ad1-9cd5-394c-9039-1178dc140b4a"));
+        assert_eq!(e.get_title(), Some("test entry"));
+        assert_eq!(e.get_username(), Some("jdoe"));
+        assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
+        assert_eq!(e.get_url(), None);
+        assert!(!e.times.expires);
+
+        if let Some(t) = e.get_time("ExpiryTime") {
+            assert_eq!(format!("{}", t), "2016-01-28 12:25:36");
         } else {
-            panic!("Expected an entry");
+            panic!("Expected an ExpiryTime");
         }
 
         Ok(())
@@ -72,21 +75,18 @@ mod entry_tests {
         )?;
 
         // get an entry on the root node
-        if let Some(NodeRef::Entry(e)) = db.root.get(&["ASDF"]) {
-            assert_eq!(e.get_uuid(), &uuid!("4f3816bd83304865879fa108a12f285c"));
-            assert_eq!(e.get_title(), Some("ASDF"));
-            assert_eq!(e.get_username(), Some("ghj"));
-            assert_eq!(e.get_password(), Some("klmno"));
-            assert_eq!(e.get_url(), Some("https://example.com"));
-            assert_eq!(e.tags, vec!["keepass-rs".to_string(), "test".to_string()]);
-            assert!(e.times.expires);
-            if let Some(t) = e.get_time("ExpiryTime") {
-                assert_eq!(format!("{}", t), "2021-04-10 16:53:18");
-            } else {
-                panic!("Expected an ExpiryTime");
-            }
+        let e = db.root.entry_by_name("ASDF").expect("Expected an entry");
+        assert_eq!(e.get_uuid(), &uuid!("4f3816bd83304865879fa108a12f285c"));
+        assert_eq!(e.get_title(), Some("ASDF"));
+        assert_eq!(e.get_username(), Some("ghj"));
+        assert_eq!(e.get_password(), Some("klmno"));
+        assert_eq!(e.get_url(), Some("https://example.com"));
+        assert_eq!(e.tags, vec!["keepass-rs".to_string(), "test".to_string()]);
+        assert!(e.times.expires);
+        if let Some(t) = e.get_time("ExpiryTime") {
+            assert_eq!(format!("{}", t), "2021-04-10 16:53:18");
         } else {
-            panic!("Expected an entry");
+            panic!("Expected an ExpiryTime");
         }
 
         Ok(())

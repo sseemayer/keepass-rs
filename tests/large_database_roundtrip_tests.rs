@@ -3,7 +3,7 @@ mod large_file_roundtrip_tests {
     use std::fs::File;
 
     use keepass::{
-        db::{Database, Entry, NodeRef, Value},
+        db::{Database, Entry, Group, Value},
         DatabaseKey,
     };
 
@@ -35,7 +35,7 @@ mod large_file_roundtrip_tests {
                 "Password".to_string(),
                 Value::Protected(format!("Password_{i}").as_bytes().into()),
             );
-            db.root.add_child(entry);
+            db.root.entries.push(entry);
         }
 
         // Define database key.
@@ -46,28 +46,32 @@ mod large_file_roundtrip_tests {
         let db = Database::open(&mut File::open(TEST_DATABASE_FILE_NAME)?, key)?;
         // Validate that the data is what we expect.
         let mut entry_counter = 0;
-        for node in &db.root {
-            match node {
-                NodeRef::Group(g) => {
-                    println!("Saw group '{0}'", g.name);
-                }
-                NodeRef::Entry(e) => {
-                    assert_eq!(
-                        format!("Entry_{entry_counter}"),
-                        e.get_title().expect("Title should be defined")
-                    );
-                    assert_eq!(
-                        format!("UserName_{entry_counter}"),
-                        e.get_username().expect("Username should be defined")
-                    );
-                    assert_eq!(
-                        format!("Password_{entry_counter}"),
-                        e.get_password().expect("Password should be defined")
-                    );
-                    entry_counter += 1;
-                }
+
+        fn explore(group: &Group, entry_counter: &mut usize) {
+            for group in &group.groups {
+                println!("Saw group '{0}'", group.name);
+                explore(group, entry_counter);
+            }
+
+            for entry in &group.entries {
+                assert_eq!(
+                    format!("Entry_{entry_counter}"),
+                    entry.get_title().expect("Title should be defined")
+                );
+                assert_eq!(
+                    format!("UserName_{entry_counter}"),
+                    entry.get_username().expect("Username should be defined")
+                );
+                assert_eq!(
+                    format!("Password_{entry_counter}"),
+                    entry.get_password().expect("Password should be defined")
+                );
+                *entry_counter += 1;
             }
         }
+
+        explore(&db.root, &mut entry_counter);
+
         assert_eq!(entry_counter, LARGE_DATABASE_ENTRY_COUNT);
         Ok(())
     }
