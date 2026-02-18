@@ -1,6 +1,5 @@
 use std::str::FromStr;
-
-use crate::error::ParseColorError;
+use thiserror::Error;
 
 /// A color value for the Database, or Entry
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -44,3 +43,8 @@ impl std::fmt::Display for Color {
         write!(f, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 }
+
+/// Error parsing a color code
+#[derive(Debug, Error)]
+#[error("Cannot parse color: '{}'", _0)]
+pub struct ParseColorError(pub String);

@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 use crate::{config::DatabaseVersion, db::Database, DatabaseKey};
 
 impl Database {
@@ -5,8 +7,7 @@ impl Database {
         &self,
         destination: &mut dyn std::io::Write,
         key: DatabaseKey,
-    ) -> Result<(), crate::error::DatabaseSaveError> {
-        use crate::error::DatabaseSaveError;
+    ) -> Result<(), DatabaseSaveError> {
         use crate::format::kdbx4::dump_kdbx4;
 
         match self.config.version {
@@ -16,4 +17,25 @@ impl Database {
             DatabaseVersion::KDB4(_) => dump_kdbx4(self, &key, destination),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum DatabaseSaveError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Xml(#[from] xml::writer::Error),
+
+    #[error(transparent)]
+    Key(#[from] crate::key::DatabaseKeyError),
+
+    #[error(transparent)]
+    Cryptography(#[from] crate::crypt::CryptographyError),
+
+    #[error(transparent)]
+    Random(#[from] getrandom::Error),
+
+    #[error("Unsupported database version")]
+    UnsupportedVersion,
 }

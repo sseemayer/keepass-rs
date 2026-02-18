@@ -171,7 +171,7 @@ pub(crate) struct ChaCha20Cipher {
 impl ChaCha20Cipher {
     /// Create as an inner cipher by splitting up a SHA512 hash
     pub(crate) fn new(key: &[u8]) -> Result<Self, CryptographyError> {
-        let iv = crate::crypt::calculate_sha512(&[key])?;
+        let iv = crate::crypt::calculate_sha512(&[key]);
 
         let key = GenericArray::from_slice(&iv[0..32]);
         let nonce = GenericArray::from_slice(&iv[32..44]);

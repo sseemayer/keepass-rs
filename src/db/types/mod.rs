@@ -12,7 +12,7 @@ pub(crate) mod value;
 
 pub use attachment::{BinaryAttachment, BinaryAttachments, HeaderAttachment};
 pub use autotype::{AutoType, AutoTypeAssociation};
-pub use color::Color;
+pub use color::{Color, ParseColorError};
 pub use custom_data::{CustomData, CustomDataItem, CustomDataItemDenormalized};
 pub use entry::Entry;
 pub use group::Group;

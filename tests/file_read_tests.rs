@@ -1,9 +1,9 @@
 mod file_read_tests {
     use keepass::{
-        db::{Database, Group},
-        error::{DatabaseIntegrityError, DatabaseOpenError},
+        db::{Database, DatabaseOpenError, Group},
         DatabaseKey,
     };
+
     use uuid::uuid;
 
     use std::{fs::File, path::Path};
@@ -392,7 +392,7 @@ mod file_read_tests {
     #[cfg(feature = "challenge_response")]
     fn open_kdbx4_with_yubikey_challenge_response_key() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_challenge_response_key.kdbx");
-        let yubikey = keepass::ChallengeResponseKey::get_yubikey(None)?;
+        let yubikey = keepass::ChallengeResponseKey::get_yubikey(None).expect("Failed to get Yubikey");
         let db = Database::open(
             &mut File::open(path)?,
             DatabaseKey::new()
@@ -410,7 +410,7 @@ mod file_read_tests {
     }
 
     #[test]
-    fn test_get_version() -> Result<(), DatabaseIntegrityError> {
+    fn test_get_version() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_password.kdbx");
         let version = Database::get_version(&mut File::open(path)?)?;
         assert_eq!(version.to_string(), "KDBX3.1");

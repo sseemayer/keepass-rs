@@ -79,15 +79,3 @@ impl Kdf for Argon2Kdf {
         Ok(*GenericArray::from_slice(&key))
     }
 }
-
-/*
-pub(crate) fn transform_key_argon2(
-    composite_key: &GenericArray<u8, U32>,
-) -> Result<GenericArray<u8, U32>> {
-    let version = match version {
-        0x10 => argon2::Version::Version10,
-        0x13 => argon2::Version::Version13,
-        _ => return Err(DatabaseIntegrityError::InvalidKDFVersion { version: version }.into()),
-    };
-}
-*/

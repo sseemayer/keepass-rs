@@ -4,8 +4,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 
 use crate::{
     crypt,
-    db::{Database, HeaderAttachment},
-    error::DatabaseSaveError,
+    db::{Database, DatabaseSaveError, HeaderAttachment},
     format::{
         hmac_block_stream,
         io::WriteLengthTaggedExt,
@@ -50,8 +49,10 @@ pub fn dump_kdbx4(
 
     // dump the outer header - need to buffer so that SHA256 can be computed
     let mut header_data = Vec::new();
+
+    db.config.version.dump(&mut header_data)?;
+
     KDBX4OuterHeader {
-        version: db.config.version.clone(),
         outer_cipher_config: db.config.outer_cipher_config.clone(),
         compression_config: db.config.compression_config.clone(),
         master_seed: master_seed.clone(),
@@ -62,7 +63,7 @@ pub fn dump_kdbx4(
     }
     .dump(&mut header_data)?;
 
-    let header_sha256 = crypt::calculate_sha256(&[&header_data])?;
+    let header_sha256 = crypt::calculate_sha256(&[&header_data]);
 
     // write out header and header hash
     writer.write_all(&header_data)?;
@@ -71,15 +72,15 @@ pub fn dump_kdbx4(
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
-    let composite_key = crypt::calculate_sha256(&key_elements)?;
+    let composite_key = crypt::calculate_sha256(&key_elements);
     let transformed_key = kdf.transform_key(&composite_key)?;
-    let master_key = crypt::calculate_sha256(&[&master_seed, &transformed_key])?;
+    let master_key = crypt::calculate_sha256(&[&master_seed, &transformed_key]);
 
     // verify credentials
-    let hmac_key =
-        crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END])?;
-    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key)?;
-    let header_hmac = crypt::calculate_hmac(&[&header_data], &header_hmac_key)?;
+    let hmac_key = crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END]);
+    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+    let header_hmac =
+        crypt::calculate_hmac(&[&header_data], &header_hmac_key).expect("HMAC key always correctly sized");
 
     writer.write_all(&header_hmac)?;
 
@@ -112,7 +113,7 @@ pub fn dump_kdbx4(
         .get_cipher(&master_key, &outer_iv)?
         .encrypt(&payload_compressed)?;
 
-    let payload_hmac = hmac_block_stream::write_hmac_block_stream(&payload_encrypted, &hmac_key)?;
+    let payload_hmac = hmac_block_stream::write_hmac_block_stream(&payload_encrypted, &hmac_key);
     writer.write_all(&payload_hmac)?;
 
     Ok(())
@@ -128,8 +129,6 @@ impl HeaderAttachment {
 
 impl KDBX4OuterHeader {
     fn dump(&self, writer: &mut dyn Write) -> Result<(), DatabaseSaveError> {
-        self.version.dump(writer)?;
-
         writer.write_u8(HEADER_OUTER_ENCRYPTION_ID)?;
         writer.write_with_len(&self.outer_cipher_config.dump())?;
 

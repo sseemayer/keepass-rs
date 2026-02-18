@@ -1,5 +1,6 @@
 //! Configuration options for how to compress and encrypt databases
 use hex_literal::hex;
+use thiserror::Error;
 
 use std::convert::TryFrom;
 
@@ -11,13 +12,12 @@ use crate::{
     compression,
     crypt::{
         ciphers::{self},
-        kdf,
+        kdf, CryptographyError,
     },
-    error::{
-        CompressionConfigError, CryptographyError, InnerCipherConfigError, KdfConfigError,
-        OuterCipherConfigError,
+    format::{
+        variant_dictionary::{VariantDictionary, VariantDictionaryError},
+        KDBX4_CURRENT_MINOR_VERSION,
     },
-    format::{variant_dictionary::VariantDictionary, KDBX4_CURRENT_MINOR_VERSION},
 };
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
@@ -128,6 +128,16 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
     }
 }
 
+/// Errors with the configuration of the outer encryption
+#[derive(Debug, Error)]
+pub enum OuterCipherConfigError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Invalid outer cipher ID: {:?}", cid)]
+    InvalidOuterCipherID { cid: Vec<u8> },
+}
+
 /// Choices for encrypting protected values inside of databases
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
@@ -176,6 +186,16 @@ impl TryFrom<u32> for InnerCipherConfig {
             _ => Err(InnerCipherConfigError::InvalidInnerCipherID { cid: v }),
         }
     }
+}
+
+/// Errors with the configuration of the inner encryption
+#[derive(Debug, Error)]
+pub enum InnerCipherConfigError {
+    #[error(transparent)]
+    Cryptography(#[from] CryptographyError),
+
+    #[error("Invalid inner cipher ID: {}", cid)]
+    InvalidInnerCipherID { cid: u32 },
 }
 
 // Name of the KDF fields in the variant dictionaries.
@@ -390,6 +410,19 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
     }
 }
 
+/// Errors with the configuration of the Key Derivation Function
+#[derive(Debug, Error)]
+pub enum KdfConfigError {
+    #[error("Invalid KDF version: {}", version)]
+    InvalidKDFVersion { version: u32 },
+
+    #[error("Invalid KDF UUID: {:?}", uuid)]
+    InvalidKDFUUID { uuid: Vec<u8> },
+
+    #[error(transparent)]
+    VariantDictionary(#[from] VariantDictionaryError),
+}
+
 /// Choices of compression algorithm
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
@@ -425,4 +458,12 @@ impl TryFrom<u32> for CompressionConfig {
             _ => Err(CompressionConfigError::InvalidCompressionSuite { cid: v }),
         }
     }
+}
+
+/// Errors with the configuration of the compression algorithm
+#[derive(Debug, Error)]
+pub enum CompressionConfigError {
+    /// The identifier for the compression algorithm specified in the database is invalid
+    #[error("Invalid compression algorithm: {}", cid)]
+    InvalidCompressionSuite { cid: u32 },
 }

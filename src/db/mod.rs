@@ -12,7 +12,13 @@ mod otp;
 #[cfg(feature = "save_kdbx4")]
 mod save;
 
-pub use crate::db::types::*;
+#[cfg(feature = "save_kdbx4")]
+pub use crate::db::save::DatabaseSaveError;
+
+pub use crate::db::{
+    open::{DatabaseFormatError, DatabaseOpenError},
+    types::*,
+};
 
 #[cfg(feature = "totp")]
 pub use crate::db::otp::{TOTPAlgorithm, TOTPError, TOTP};
@@ -21,7 +27,7 @@ pub use crate::db::otp::{TOTPAlgorithm, TOTPError, TOTP};
 mod database_tests {
     use std::fs::File;
 
-    use crate::{error::DatabaseOpenError, Database, DatabaseKey};
+    use crate::{db::DatabaseOpenError, Database, DatabaseKey};
 
     #[test]
     fn test_xml() -> Result<(), DatabaseOpenError> {
