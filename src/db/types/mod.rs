@@ -7,7 +7,6 @@ pub(crate) mod group;
 pub(crate) mod history;
 pub(crate) mod icon;
 pub(crate) mod meta;
-pub(crate) mod node;
 pub(crate) mod times;
 pub(crate) mod value;
 
@@ -20,7 +19,6 @@ pub use group::Group;
 pub use history::History;
 pub use icon::{CustomIcons, Icon};
 pub use meta::{MemoryProtection, Meta};
-pub use node::{Node, NodeIter, NodeRef, NodeRefMut};
 pub use times::Times;
 pub use value::Value;
 

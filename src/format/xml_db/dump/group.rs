@@ -2,7 +2,7 @@ use xml::writer::{EventWriter, XmlEvent as WriterEvent};
 
 use crate::{
     crypt::ciphers::Cipher,
-    db::{Group, Node},
+    db::Group,
     format::xml_db::dump::{DumpXml, SimpleTag},
 };
 
@@ -50,25 +50,16 @@ impl DumpXml for Group {
             SimpleTag("LastTopVisibleEntry", value).dump_xml(writer, inner_cipher)?;
         }
 
-        for child in &self.children {
-            child.dump_xml(writer, inner_cipher)?;
+        for group in &self.groups {
+            group.dump_xml(writer, inner_cipher)?;
+        }
+
+        for entry in &self.entries {
+            entry.dump_xml(writer, inner_cipher)?;
         }
 
         writer.write(WriterEvent::end_element())?; // Group
 
         Ok(())
-    }
-}
-
-impl DumpXml for Node {
-    fn dump_xml<E: std::io::Write>(
-        &self,
-        writer: &mut EventWriter<E>,
-        inner_cipher: &mut dyn Cipher,
-    ) -> Result<(), xml::writer::Error> {
-        match self {
-            Node::Group(g) => g.dump_xml(writer, inner_cipher),
-            Node::Entry(e) => e.dump_xml(writer, inner_cipher),
-        }
     }
 }

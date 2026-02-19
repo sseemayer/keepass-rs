@@ -61,9 +61,9 @@ mod database_tests {
 
         db.config.public_custom_data = Some(public_custom_data);
 
-        db.root.add_child(Entry::new());
-        db.root.add_child(Entry::new());
-        db.root.add_child(Entry::new());
+        db.root.entries.push(Entry::new());
+        db.root.entries.push(Entry::new());
+        db.root.entries.push(Entry::new());
 
         let mut buffer = Vec::new();
 

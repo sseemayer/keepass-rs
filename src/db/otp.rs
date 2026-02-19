@@ -175,10 +175,7 @@ impl Entry {
 #[cfg(test)]
 mod kdbx4_otp_tests {
     use super::{TOTPAlgorithm, TOTPError, TOTP};
-    use crate::{
-        db::{Database, NodeRef},
-        key::DatabaseKey,
-    };
+    use crate::{db::Database, key::DatabaseKey};
     use std::{fs::File, path::Path};
 
     #[test]
@@ -190,13 +187,12 @@ mod kdbx4_otp_tests {
         let otp_str =
             "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
-        // get an entry on the root node
-        if let Some(NodeRef::Entry(e)) = db.root.get(&["this entry has totp"]) {
-            assert_eq!(e.get_title(), Some("this entry has totp"));
-            assert_eq!(e.get_raw_otp_value(), Some(otp_str));
-        } else {
-            panic!("Expected an entry");
-        }
+        let entry = db
+            .root
+            .entry_by_name("this entry has totp")
+            .ok_or("Entry not found")?;
+        assert_eq!(entry.get_title(), Some("this entry has totp"));
+        assert_eq!(entry.get_raw_otp_value(), Some(otp_str));
 
         Ok(())
     }

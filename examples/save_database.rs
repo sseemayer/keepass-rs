@@ -23,9 +23,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Value::Protected("hunter2".as_bytes().into()),
     );
 
-    group.add_child(entry);
+    group.entries.push(entry);
 
-    db.root.add_child(group);
+    db.root.groups.push(group);
 
     #[cfg(feature = "save_kdbx4")]
     db.save(
