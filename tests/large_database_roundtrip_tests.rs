@@ -3,7 +3,7 @@ mod large_file_roundtrip_tests {
     use std::fs::File;
 
     use keepass::{
-        db::{Database, Entry, Group, Value},
+        db::{fields, Database, Entry, Group},
         DatabaseKey,
     };
 
@@ -24,17 +24,9 @@ mod large_file_roundtrip_tests {
 
         for i in 0..LARGE_DATABASE_ENTRY_COUNT {
             let mut entry = Entry::new();
-            entry
-                .fields
-                .insert("Title".to_string(), Value::Unprotected(format!("Entry_{i}")));
-            entry.fields.insert(
-                "UserName".to_string(),
-                Value::Unprotected(format!("UserName_{i}")),
-            );
-            entry.fields.insert(
-                "Password".to_string(),
-                Value::Protected(format!("Password_{i}").as_bytes().into()),
-            );
+            entry.set_unprotected(fields::TITLE, format!("Entry_{i}"));
+            entry.set_unprotected(fields::USERNAME, format!("UserName_{i}"));
+            entry.set_protected(fields::PASSWORD, format!("Password_{i}"));
             db.root.entries.push(entry);
         }
 
@@ -56,15 +48,15 @@ mod large_file_roundtrip_tests {
             for entry in &group.entries {
                 assert_eq!(
                     format!("Entry_{entry_counter}"),
-                    entry.get_title().expect("Title should be defined")
+                    entry.get(fields::TITLE).unwrap()
                 );
                 assert_eq!(
                     format!("UserName_{entry_counter}"),
-                    entry.get_username().expect("Username should be defined")
+                    entry.get(fields::USERNAME).unwrap()
                 );
                 assert_eq!(
                     format!("Password_{entry_counter}"),
-                    entry.get_password().expect("Password should be defined")
+                    entry.get(fields::PASSWORD).unwrap()
                 );
                 *entry_counter += 1;
             }

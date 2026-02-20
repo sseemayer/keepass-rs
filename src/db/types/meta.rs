@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::db::{BinaryAttachments, Color, CustomData, CustomIcons};
+use crate::db::{Color, CustomDataItem};
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -44,9 +46,6 @@ pub struct Meta {
     /// memory protection settings
     pub memory_protection: Option<MemoryProtection>,
 
-    /// custom icons
-    pub custom_icons: CustomIcons,
-
     /// whether the recycle bin is enabled
     pub recyclebin_enabled: Option<bool>,
 
@@ -77,11 +76,8 @@ pub struct Meta {
     /// Last time the settings were changed
     pub settings_changed: Option<NaiveDateTime>,
 
-    /// Binary attachments in the Metadata header
-    pub binaries: BinaryAttachments,
-
     /// Additional custom data fields
-    pub custom_data: CustomData,
+    pub custom_data: HashMap<String, CustomDataItem>,
 }
 
 /// Database memory protection settings

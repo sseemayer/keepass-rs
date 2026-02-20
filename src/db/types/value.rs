@@ -1,22 +1,79 @@
-use secstr::SecStr;
+use secrecy::{ExposeSecret, SecretBox};
 
-/// A value that can be a raw string, byte array, or protected memory region
-#[derive(Debug, Eq, PartialEq, Clone)]
+/// Value in an [Entry][crate::db::Entry]'s fields.
+///
+/// Can be either unprotected or protected text data.
+#[derive(Debug)]
 pub enum Value {
-    Bytes(Vec<u8>),
-    Unprotected(String),
-    Protected(SecStr),
+    /// unprotected text data
+    String(String),
+
+    /// protected text data
+    PString(SecretBox<String>),
 }
 
-impl Value {
-    pub fn is_empty(&self) -> bool {
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Bytes(b) => b.is_empty(),
-            Value::Unprotected(u) => u.is_empty(),
-            Value::Protected(p) => p.unsecure().is_empty(),
+            Value::String(data) => write!(f, "{}", data),
+            Value::PString(_) => write!(f, "[redacted]"),
         }
     }
 }
+
+impl Value {
+    /// Create a new unprotected text data value
+    pub fn string(data: impl Into<String>) -> Self {
+        Value::String(data.into())
+    }
+
+    /// Create a new protected text data value
+    pub fn protected_string(data: impl Into<String>) -> Self {
+        Value::PString(SecretBox::new(Box::new(data.into())))
+    }
+
+    /// Returns true if the value is protected (either PBytes or PString)
+    pub fn is_protected(&self) -> bool {
+        matches!(self, Value::PString(_))
+    }
+
+    /// Returns true if the value is empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Value::String(data) => data.is_empty(),
+            Value::PString(data) => data.expose_secret().is_empty(),
+        }
+    }
+
+    /// Returns the value as a string slice
+    pub fn as_str(&self) -> &str {
+        match self {
+            Value::String(data) => data,
+            Value::PString(data) => data.expose_secret(),
+        }
+    }
+}
+
+impl Clone for Value {
+    fn clone(&self) -> Self {
+        match self {
+            Value::String(data) => Value::String(data.clone()),
+            Value::PString(data) => Value::PString(SecretBox::new(Box::new(data.expose_secret().clone()))),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::PString(a), Value::PString(b)) => a.expose_secret() == b.expose_secret(),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Value {}
 
 #[cfg(feature = "serialization")]
 impl serde::Serialize for Value {
@@ -25,9 +82,31 @@ impl serde::Serialize for Value {
         S: serde::Serializer,
     {
         match self {
-            Value::Bytes(b) => serializer.serialize_bytes(b),
-            Value::Unprotected(u) => serializer.serialize_str(u),
-            Value::Protected(p) => serializer.serialize_str(String::from_utf8_lossy(p.unsecure()).as_ref()),
+            Value::String(data) => serializer.serialize_str(data),
+            Value::PString(data) => serializer.serialize_str(data.expose_secret()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Value;
+
+    #[test]
+    fn test_value() {
+        let unprotected = Value::string("test");
+        let protected = Value::protected_string("test");
+        assert!(!unprotected.is_protected());
+        assert!(protected.is_protected());
+        assert!(!unprotected.is_empty());
+        assert!(!protected.is_empty());
+
+        assert_eq!(unprotected.as_str(), "test");
+        assert_eq!(protected.as_str(), "test");
+
+        assert_eq!(format!("{}", unprotected), "test");
+        assert_eq!(format!("{}", protected), "[redacted]");
+
+        assert_ne!(unprotected, protected);
     }
 }

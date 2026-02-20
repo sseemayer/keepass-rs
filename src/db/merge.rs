@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::db::{Database, DeletedObject, Entry, Group, History, Times};
+use crate::db::{Database, Entry, Group, History, Times};
 use chrono::NaiveDateTime;
 use thiserror::Error;
 use uuid::Uuid;
@@ -84,38 +84,39 @@ impl Database {
 
     fn merge_deletions(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
         // Utility function to search for a UUID in the VecDeque of deleted objects.
-        let is_in_deleted_queue = |uuid: Uuid, deleted_groups_queue: &VecDeque<DeletedObject>| -> bool {
-            for deleted_object in deleted_groups_queue {
-                // This group still has a child group, but it is not going to be deleted.
-                if deleted_object.uuid == uuid {
-                    return true;
+        let is_in_deleted_queue =
+            |uuid: Uuid, deleted_groups_queue: &VecDeque<(Uuid, Option<NaiveDateTime>)>| -> bool {
+                for (deleted_uuid, _) in deleted_groups_queue {
+                    // This group still has a child group, but it is not going to be deleted.
+                    if *deleted_uuid == uuid {
+                        return true;
+                    }
                 }
-            }
-            false
-        };
+                false
+            };
 
         let mut log = MergeLog::default();
 
         let mut new_deleted_objects = self.deleted_objects.clone();
 
         // We start by deleting the entries, since we will only remove groups if they are empty.
-        for deleted_object in &other.deleted_objects.objects {
-            if new_deleted_objects.contains(deleted_object.uuid) {
+        for (&other_uuid, &other_time) in &other.deleted_objects {
+            if new_deleted_objects.contains_key(&other_uuid) {
                 continue;
             }
 
-            let Some(entry) = self.root.entry_by_uuid(deleted_object.uuid) else {
+            let Some(entry) = self.root.entry_by_uuid(other_uuid) else {
                 // This uuid might refer to a group, which will be handled later.
                 continue;
             };
 
             let parent_uuid = self
                 .root
-                .find_entry_parent(deleted_object.uuid)
-                .ok_or(MergeError::FindEntryError(deleted_object.uuid))?;
+                .find_entry_parent(other_uuid)
+                .ok_or(MergeError::FindEntryError(other_uuid))?;
 
-            let entry_last_modification = match entry.times.get_last_modification() {
-                Some(t) => *t,
+            let entry_last_modification = match entry.times.last_modification {
+                Some(t) => t,
                 None => {
                     log.warnings.push(format!(
                         "Entry {} did not have a last modification timestamp",
@@ -125,43 +126,51 @@ impl Database {
                 }
             };
 
+            let other_time = other_time.unwrap_or_else(|| {
+                log.warnings.push(format!(
+                    "Entry {} did not have a last modification timestamp",
+                    other_uuid
+                ));
+                Times::epoch()
+            });
+
             let parent_group = self
                 .root
                 .group_by_uuid_mut(parent_uuid)
                 .ok_or(MergeError::FindGroupError(parent_uuid))?;
 
-            if entry_last_modification < deleted_object.deletion_time {
-                parent_group.remove_entry(deleted_object.uuid)?;
+            if entry_last_modification < other_time {
+                parent_group.remove_entry(other_uuid)?;
                 log.events.push(MergeEvent {
                     event_type: MergeEventType::EntryDeleted,
-                    node_uuid: deleted_object.uuid,
+                    node_uuid: other_uuid,
                 });
 
-                new_deleted_objects.objects.push(deleted_object.clone());
+                new_deleted_objects.insert(other_uuid, Some(other_time));
             }
         }
 
-        let mut deleted_groups_queue: VecDeque<DeletedObject> = vec![].into();
-        for deleted_object in &other.deleted_objects.objects {
-            if new_deleted_objects.contains(deleted_object.uuid) {
+        let mut deleted_groups_queue: VecDeque<(Uuid, Option<NaiveDateTime>)> = VecDeque::new();
+        for (&deleted_uuid, &deleted_time) in &other.deleted_objects {
+            if new_deleted_objects.contains_key(&deleted_uuid) {
                 continue;
             }
-            deleted_groups_queue.push_back(deleted_object.clone());
+            deleted_groups_queue.push_back((deleted_uuid, deleted_time));
         }
 
         while !deleted_groups_queue.is_empty() {
-            let deleted_object = deleted_groups_queue.pop_front().unwrap();
-            if new_deleted_objects.contains(deleted_object.uuid) {
+            let (deleted_uuid, deleted_time) = deleted_groups_queue.pop_front().unwrap();
+            if new_deleted_objects.contains_key(&deleted_uuid) {
                 continue;
             }
 
-            let Some(parent_uuid) = self.root.find_group_parent(deleted_object.uuid) else {
+            let Some(parent_uuid) = self.root.find_group_parent(deleted_uuid) else {
                 // The node might be an entry, since we didn't necessarily removed all the
                 // entries that were in the deleted objects of the source database.
                 continue;
             };
 
-            let Some(group) = self.root.group_by_uuid_mut(deleted_object.uuid) else {
+            let Some(group) = self.root.group_by_uuid_mut(deleted_uuid) else {
                 // The node might be an entry, since we didn't necessarily removed all the
                 // entries that were in the deleted objects of the source database.
                 continue;
@@ -177,11 +186,11 @@ impl Database {
             if !group
                 .groups
                 .iter()
-                .filter(|g| !is_in_deleted_queue(g.uuid, &deleted_groups_queue))
+                .filter(|g| is_in_deleted_queue(g.uuid, &deleted_groups_queue))
                 .collect::<Vec<_>>()
                 .is_empty()
             {
-                deleted_groups_queue.push_back(deleted_object.clone());
+                deleted_groups_queue.push_back((deleted_uuid, deleted_time));
                 continue;
             }
 
@@ -190,8 +199,8 @@ impl Database {
                 continue;
             }
 
-            let group_last_modification = match group.times.get_last_modification() {
-                Some(t) => *t,
+            let group_last_modification = match group.times.last_modification {
+                Some(t) => t,
                 None => {
                     log.warnings.push(format!(
                         "Group {} did not have a last modification timestamp",
@@ -201,19 +210,27 @@ impl Database {
                 }
             };
 
-            if group_last_modification < deleted_object.deletion_time {
+            let deleted_time = deleted_time.unwrap_or_else(|| {
+                log.warnings.push(format!(
+                    "Group {} did not have a deletion timestamp",
+                    deleted_uuid
+                ));
+                Times::epoch()
+            });
+
+            if group_last_modification < deleted_time {
                 let parent_group = self
                     .root
                     .group_by_uuid_mut(parent_uuid)
                     .ok_or(MergeError::FindGroupError(parent_uuid))?;
 
-                parent_group.remove_group(deleted_object.uuid)?;
+                parent_group.remove_group(deleted_uuid)?;
                 log.events.push(MergeEvent {
                     event_type: MergeEventType::GroupDeleted,
-                    node_uuid: deleted_object.uuid,
+                    node_uuid: deleted_uuid,
                 });
 
-                new_deleted_objects.objects.push(deleted_object.clone());
+                new_deleted_objects.insert(deleted_uuid, Some(deleted_time));
             }
         }
 
@@ -239,17 +256,14 @@ impl Database {
             // does the entry exist in the destination database?
             if let Some(existing_entry) = self.root.entry_by_uuid(other_entry.uuid).cloned() {
                 let existing_parent = self.root.find_entry_parent(other_entry.uuid).unwrap();
-                let mut existing_time = existing_entry.times.get_location_changed().cloned();
+                let mut existing_time = existing_entry.times.location_changed.clone();
 
                 // is the location of the entry the same in both databases?
                 if current_group.uuid != existing_parent && !is_in_deleted_group {
                     // we might have to relocate the entry, but we first check timestamps
 
-                    let source_location_changed = other_entry
-                        .times
-                        .get_location_changed()
-                        .cloned()
-                        .unwrap_or_else(|| {
+                    let source_location_changed =
+                        other_entry.times.location_changed.clone().unwrap_or_else(|| {
                             log.warnings.push(format!(
                                 "Entry {} did not have a location updated timestamp",
                                 other_entry.uuid
@@ -257,11 +271,8 @@ impl Database {
                             Times::epoch()
                         });
 
-                    let destination_location_changed = existing_entry
-                        .times
-                        .get_location_changed()
-                        .cloned()
-                        .unwrap_or_else(|| {
+                    let destination_location_changed =
+                        existing_entry.times.location_changed.clone().unwrap_or_else(|| {
                             log.warnings.push(format!(
                                 "Entry {} did not have a location updated timestamp",
                                 other_entry.uuid
@@ -308,7 +319,7 @@ impl Database {
                 *existing_entry = merged_entry.clone();
 
                 if let Some(et) = existing_time {
-                    existing_entry.times.set_location_changed(et);
+                    existing_entry.times.location_changed = Some(et);
                 }
 
                 log.events.push(MergeEvent {
@@ -322,7 +333,7 @@ impl Database {
                 continue;
             }
 
-            if self.deleted_objects.contains(other_entry.uuid) {
+            if self.deleted_objects.contains_key(&other_entry.uuid) {
                 continue;
             }
 
@@ -350,7 +361,7 @@ impl Database {
 
         // merge groups by iterating over groups in source (aka current_group)
         for other_group in &current_group.groups {
-            if self.deleted_objects.contains(other_group.uuid) || is_in_deleted_group {
+            if self.deleted_objects.contains_key(&other_group.uuid) || is_in_deleted_group {
                 let new_merge_log = self.merge_group(other_group, true)?;
                 log.append(&new_merge_log);
                 continue;
@@ -363,11 +374,8 @@ impl Database {
                 if current_group.uuid != existing_parent {
                     // we might have to relocate the entry, but we first check timestamps
 
-                    let source_location_changed_time = other_group
-                        .times
-                        .get_location_changed()
-                        .cloned()
-                        .unwrap_or_else(|| {
+                    let source_location_changed_time =
+                        other_group.times.location_changed.clone().unwrap_or_else(|| {
                             log.warnings.push(format!(
                                 "Group {} did not have a location updated timestamp",
                                 other_group.uuid
@@ -375,11 +383,8 @@ impl Database {
                             Times::epoch()
                         });
 
-                    let destination_location_changed_time = existing_group
-                        .times
-                        .get_location_changed()
-                        .cloned()
-                        .unwrap_or_else(|| {
+                    let destination_location_changed_time =
+                        existing_group.times.location_changed.clone().unwrap_or_else(|| {
                             log.warnings.push(format!(
                                 "Group {} did not have a location updated timestamp",
                                 other_group.uuid
@@ -447,9 +452,7 @@ impl Database {
             .ok_or(MergeError::FindGroupError(from_parent))?;
 
         let mut relocated_entry = from_parent.remove_entry(entry_uuid)?;
-        relocated_entry
-            .times
-            .set_location_changed(new_location_changed_timestamp);
+        relocated_entry.times.location_changed = Some(new_location_changed_timestamp);
 
         let to_parent = self
             .root
@@ -474,9 +477,7 @@ impl Database {
             .ok_or(MergeError::FindGroupError(from_parent))?;
 
         let mut relocated_group = from_parent.remove_group(group_uuid)?;
-        relocated_group
-            .times
-            .set_location_changed(new_location_changed_timestamp);
+        relocated_group.times.location_changed = Some(new_location_changed_timestamp);
 
         let to_parent = self
             .root
@@ -552,8 +553,8 @@ impl Group {
     pub(crate) fn merge_with(&mut self, other: &Group) -> Result<MergeLog, MergeError> {
         let mut log = MergeLog::default();
 
-        let source_last_modification = match other.times.get_last_modification() {
-            Some(t) => *t,
+        let source_last_modification = match other.times.last_modification {
+            Some(t) => t,
             None => {
                 log.warnings.push(format!(
                     "Group {} did not have a last modification timestamp",
@@ -562,8 +563,8 @@ impl Group {
                 Times::epoch()
             }
         };
-        let destination_last_modification = match self.times.get_last_modification() {
-            Some(t) => *t,
+        let destination_last_modification = match self.times.last_modification {
+            Some(t) => t,
             None => {
                 log.warnings.push(format!(
                     "Group {} did not have a last modification timestamp",
@@ -598,8 +599,8 @@ impl Group {
         // The location changed timestamp is handled separately when merging two databases.
         let current_times = self.times.clone();
         self.times = other.times.clone();
-        if let Some(t) = current_times.get_location_changed() {
-            self.times.set_location_changed(*t);
+        if let Some(t) = current_times.location_changed {
+            self.times.location_changed = Some(t);
         }
 
         self.is_expanded = other.is_expanded;
@@ -635,8 +636,8 @@ impl Entry {
     pub(crate) fn merge(&self, other: &Entry) -> Result<(Option<Entry>, MergeLog), MergeError> {
         let mut log = MergeLog::default();
 
-        let source_last_modification = match other.times.get_last_modification() {
-            Some(t) => *t,
+        let source_last_modification = match other.times.last_modification {
+            Some(t) => t,
             None => {
                 log.warnings.push(format!(
                     "Entry {} did not have a last modification timestamp",
@@ -645,8 +646,8 @@ impl Entry {
                 Times::epoch()
             }
         };
-        let destination_last_modification = match self.times.get_last_modification() {
-            Some(t) => *t,
+        let destination_last_modification = match self.times.last_modification {
+            Some(t) => t,
             None => {
                 log.warnings.push(format!(
                     "Entry {} did not have a last modification timestamp",
@@ -675,10 +676,8 @@ impl Entry {
         };
 
         // The location changed timestamp is handled separately when merging two databases.
-        if let Some(location_changed_timestamp) = self.times.get_location_changed() {
-            merged_entry
-                .times
-                .set_location_changed(*location_changed_timestamp);
+        if let Some(location_changed_timestamp) = self.times.location_changed {
+            merged_entry.times.location_changed = Some(location_changed_timestamp);
         }
 
         Ok((Some(merged_entry), entry_merge_log))
@@ -733,12 +732,8 @@ impl Entry {
     //    do not preserve the msecs.
     #[cfg(test)]
     pub(crate) fn set_field_and_commit(&mut self, field_name: &str, field_value: &str) {
-        use crate::db::Value;
+        self.set_unprotected(field_name, field_value);
 
-        self.fields.insert(
-            field_name.to_string(),
-            Value::Unprotected(field_value.to_string()),
-        );
         std::thread::sleep(std::time::Duration::from_secs(1));
         self.update_history();
     }
@@ -762,13 +757,13 @@ impl History {
     // ordered by last modification time.
     #[cfg(test)]
     pub(crate) fn is_ordered(&self) -> bool {
-        let mut last_modification_time: Option<&chrono::NaiveDateTime> = None;
+        let mut last_modification_time: Option<chrono::NaiveDateTime> = None;
         for entry in &self.entries {
             if last_modification_time.is_none() {
-                last_modification_time = entry.times.get_last_modification();
+                last_modification_time = entry.times.last_modification;
             }
 
-            let entry_modification_time = entry.times.get_last_modification().unwrap();
+            let entry_modification_time = entry.times.last_modification.unwrap();
             // FIXME should we also handle equal modification times??
             if last_modification_time.unwrap() < entry_modification_time {
                 return false;
@@ -784,19 +779,26 @@ impl History {
         let mut new_history_entries: HashMap<chrono::NaiveDateTime, Entry> = HashMap::new();
 
         for history_entry in &self.entries {
-            let modification_time = history_entry.times.get_last_modification().unwrap();
-            if new_history_entries.contains_key(modification_time) {
+            let modification_time = history_entry.times.last_modification.unwrap_or_else(|| {
+                log.warnings.push(format!(
+                    "Destination history entry {} did not have a last modification timestamp",
+                    history_entry.uuid
+                ));
+                Times::epoch()
+            });
+
+            if new_history_entries.contains_key(&modification_time) {
                 return Err(MergeError::DuplicateHistoryEntries(
                     modification_time.to_string(),
                     history_entry.uuid.to_string(),
                 ));
             }
-            new_history_entries.insert(*modification_time, history_entry.clone());
+            new_history_entries.insert(modification_time, history_entry.clone());
         }
 
         for history_entry in &other.entries {
-            let modification_time = history_entry.times.get_last_modification().unwrap();
-            let existing_history_entry = new_history_entries.get(modification_time);
+            let modification_time = history_entry.times.last_modification.unwrap();
+            let existing_history_entry = new_history_entries.get(&modification_time);
             if let Some(existing_history_entry) = existing_history_entry {
                 if existing_history_entry.has_diverged_from(history_entry) {
                     log.warnings.push(format!(
@@ -805,7 +807,7 @@ impl History {
                     ));
                 }
             } else {
-                new_history_entries.insert(*modification_time, history_entry.clone());
+                new_history_entries.insert(modification_time, history_entry.clone());
             }
         }
 
@@ -827,7 +829,7 @@ mod merge_tests {
     use std::{thread, time};
     use uuid::{uuid, Uuid};
 
-    use crate::db::{Entry, Group, Times};
+    use crate::db::{fields, Entry, Group, Times};
     use crate::Database;
 
     fn get_all_groups(parent: &Group) -> Vec<&Group> {
@@ -886,13 +888,13 @@ mod merge_tests {
         // Placing the first entry in the root group
         let mut entry1 = Entry::new();
         entry1.uuid = ENTRY1_ID;
-        entry1.set_field_and_commit("Title", "entry1");
+        entry1.set_field_and_commit(fields::TITLE, "entry1");
         root_group.entries.push(entry1);
 
         // Placing the second entry in a subgroup
         let mut entry2 = Entry::new();
         entry2.uuid = ENTRY2_ID;
-        entry2.set_field_and_commit("Title", "entry2");
+        entry2.set_field_and_commit(fields::TITLE, "entry2");
         subgroup1.entries.push(entry2);
 
         group1.groups.push(subgroup1);
@@ -929,7 +931,7 @@ mod merge_tests {
         assert_eq!(group_count_after, group_count_before);
 
         let entry = &mut destination_db.root.entries[0];
-        entry.set_field_and_commit("Title", "entry1_updated");
+        entry.set_field_and_commit(fields::TITLE, "entry1_updated");
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -953,7 +955,7 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         let mut new_entry = Entry::new();
-        new_entry.set_field_and_commit("Title", "new_entry");
+        new_entry.set_field_and_commit(fields::TITLE, "new_entry");
         source_db.root.entries.push(new_entry);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
@@ -991,16 +993,12 @@ mod merge_tests {
 
         let mut deleted_entry = Entry::new();
         let deleted_entry_uuid = deleted_entry.uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
+        deleted_entry.set_field_and_commit(fields::TITLE, "deleted_entry");
         source_db.root.entries.push(deleted_entry);
 
         destination_db
             .deleted_objects
-            .objects
-            .push(crate::db::DeletedObject {
-                uuid: deleted_entry_uuid,
-                deletion_time: Times::now(),
-            });
+            .insert(deleted_entry_uuid, Some(Times::now()));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1021,13 +1019,13 @@ mod merge_tests {
         let mut source_db = destination_db.clone();
 
         let mut modified_entry = Entry::new();
-        modified_entry.set_field_and_commit("Title", "original_title");
+        modified_entry.set_field_and_commit(fields::TITLE, "original_title");
         destination_db.root.entries.push(modified_entry.clone());
 
         let mut deleted_group = Group::new("deleted_group");
         let deleted_group_uuid = deleted_group.uuid;
         let modified_entry_uuid = modified_entry.uuid;
-        modified_entry.set_field_and_commit("Title", "modified_title");
+        modified_entry.set_field_and_commit(fields::TITLE, "modified_title");
         deleted_group.entries.push(modified_entry);
         source_db.root.groups.push(deleted_group);
 
@@ -1036,11 +1034,7 @@ mod merge_tests {
 
         destination_db
             .deleted_objects
-            .objects
-            .push(crate::db::DeletedObject {
-                uuid: deleted_group_uuid,
-                deletion_time: Times::now(),
-            });
+            .insert(deleted_group_uuid, Some(Times::now()));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1075,11 +1069,7 @@ mod merge_tests {
 
         destination_db
             .deleted_objects
-            .objects
-            .push(crate::db::DeletedObject {
-                uuid: deleted_group_uuid,
-                deletion_time: Times::now(),
-            });
+            .insert(deleted_group_uuid, Some(Times::now()));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1101,17 +1091,16 @@ mod merge_tests {
 
         let mut deleted_entry = Entry::new();
         let deleted_entry_uuid = deleted_entry.uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
+        deleted_entry.set_field_and_commit(fields::TITLE, "deleted_entry");
         destination_db.root.entries.push(deleted_entry);
 
         let entry_count_before = get_all_entries(&destination_db.root).len();
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_entry_uuid, Some(Times::now()));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1125,7 +1114,7 @@ mod merge_tests {
         let new_entry = destination_db.root.entry_by_uuid(deleted_entry_uuid);
         assert!(new_entry.is_none());
 
-        assert!(destination_db.deleted_objects.contains(deleted_entry_uuid));
+        assert!(destination_db.deleted_objects.contains_key(&deleted_entry_uuid));
     }
 
     #[test]
@@ -1141,10 +1130,9 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_group_uuid, Some(Times::now()));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1158,7 +1146,7 @@ mod merge_tests {
         let deleted_group = destination_db.root.group_by_uuid(deleted_group_uuid);
         assert!(deleted_group.is_none());
 
-        assert!(destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(destination_db.deleted_objects.contains_key(&deleted_group_uuid));
     }
 
     #[test]
@@ -1169,15 +1157,14 @@ mod merge_tests {
         let deleted_entry_uuid = Uuid::new_v4();
 
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_entry_uuid, Some(Times::now()));
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_entry = Entry::new();
         deleted_entry.uuid = deleted_entry_uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
+        deleted_entry.set_field_and_commit(fields::TITLE, "deleted_entry");
         destination_db.root.entries.push(deleted_entry);
 
         let entry_count_before = get_all_entries(&destination_db.root).len();
@@ -1195,7 +1182,7 @@ mod merge_tests {
         let new_entry = destination_db.root.entry_by_uuid(deleted_entry_uuid);
         assert!(new_entry.is_some());
 
-        assert!(!destination_db.deleted_objects.contains(deleted_entry_uuid));
+        assert!(!destination_db.deleted_objects.contains_key(&deleted_entry_uuid));
     }
 
     #[test]
@@ -1210,7 +1197,7 @@ mod merge_tests {
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_entry = Entry::new();
         deleted_entry.uuid = deleted_entry_uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
+        deleted_entry.set_field_and_commit(fields::TITLE, "deleted_entry");
 
         let mut deleted_subgroup = Group::new("deleted_subgroup");
         deleted_subgroup.uuid = deleted_subgroup_uuid;
@@ -1223,18 +1210,15 @@ mod merge_tests {
         destination_db.root.groups.push(deleted_group);
 
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_subgroup_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_entry_uuid, Some(Times::now()));
+        source_db
+            .deleted_objects
+            .insert(deleted_subgroup_uuid, Some(Times::now()));
+        source_db
+            .deleted_objects
+            .insert(deleted_group_uuid, Some(Times::now()));
 
         let entry_count_before = get_all_entries(&destination_db.root).len();
         let group_count_before = get_all_groups(&destination_db.root).len();
@@ -1255,9 +1239,11 @@ mod merge_tests {
         let deleted_group = destination_db.root.group_by_uuid(deleted_group_uuid);
         assert!(deleted_group.is_none());
 
-        assert!(destination_db.deleted_objects.contains(deleted_entry_uuid));
-        assert!(destination_db.deleted_objects.contains(deleted_subgroup_uuid));
-        assert!(destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(destination_db.deleted_objects.contains_key(&deleted_entry_uuid));
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_subgroup_uuid));
+        assert!(destination_db.deleted_objects.contains_key(&deleted_group_uuid));
     }
 
     #[test]
@@ -1272,25 +1258,22 @@ mod merge_tests {
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_entry = Entry::new();
         deleted_entry.uuid = deleted_entry_uuid;
-        deleted_entry.set_field_and_commit("Title", "deleted_entry");
+        deleted_entry.set_field_and_commit(fields::TITLE, "deleted_entry");
 
         let mut deleted_subgroup = Group::new("deleted_subgroup");
         deleted_subgroup.uuid = deleted_subgroup_uuid;
         deleted_subgroup.entries.push(deleted_entry);
 
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_entry_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_subgroup_uuid,
-            deletion_time: Times::now(),
-        });
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_entry_uuid, Some(Times::now()));
+        source_db
+            .deleted_objects
+            .insert(deleted_subgroup_uuid, Some(Times::now()));
+        source_db
+            .deleted_objects
+            .insert(deleted_group_uuid, Some(Times::now()));
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_group = Group::new("deleted_group");
@@ -1318,9 +1301,11 @@ mod merge_tests {
         let deleted_group = destination_db.root.group_by_uuid(deleted_group_uuid);
         assert!(deleted_group.is_some());
 
-        assert!(destination_db.deleted_objects.contains(deleted_entry_uuid));
-        assert!(destination_db.deleted_objects.contains(deleted_subgroup_uuid));
-        assert!(!destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(destination_db.deleted_objects.contains_key(&deleted_entry_uuid));
+        assert!(destination_db
+            .deleted_objects
+            .contains_key(&deleted_subgroup_uuid));
+        assert!(!destination_db.deleted_objects.contains_key(&deleted_group_uuid));
     }
 
     #[test]
@@ -1331,10 +1316,9 @@ mod merge_tests {
         let deleted_group_uuid = Uuid::new_v4();
 
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_group_uuid, Some(Times::now()));
 
         thread::sleep(time::Duration::from_secs(1));
         let mut deleted_group = Group::new("deleted_group");
@@ -1356,7 +1340,7 @@ mod merge_tests {
         let deleted_group = destination_db.root.group_by_uuid(deleted_group_uuid);
         assert!(deleted_group.is_some());
 
-        assert!(!destination_db.deleted_objects.contains(deleted_group_uuid));
+        assert!(!destination_db.deleted_objects.contains_key(&deleted_group_uuid));
     }
 
     #[test]
@@ -1369,7 +1353,7 @@ mod merge_tests {
 
         let mut new_entry = Entry::new();
         let new_entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "new_entry");
+        new_entry.set_field_and_commit(fields::TITLE, "new_entry");
         deleted_group.entries.push(new_entry);
         destination_db.root.groups.push(deleted_group);
 
@@ -1377,10 +1361,9 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         thread::sleep(time::Duration::from_secs(1));
-        source_db.deleted_objects.objects.push(crate::db::DeletedObject {
-            uuid: deleted_group_uuid,
-            deletion_time: Times::now(),
-        });
+        source_db
+            .deleted_objects
+            .insert(deleted_group_uuid, Some(Times::now()));
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1396,8 +1379,8 @@ mod merge_tests {
         let new_entry = destination_db.root.entry_by_uuid(new_entry_uuid);
         assert!(new_entry.is_some());
 
-        assert!(!destination_db.deleted_objects.contains(deleted_group_uuid));
-        assert!(!destination_db.deleted_objects.contains(new_entry_uuid));
+        assert!(!destination_db.deleted_objects.contains_key(&deleted_group_uuid));
+        assert!(!destination_db.deleted_objects.contains_key(&new_entry_uuid));
     }
 
     #[test]
@@ -1413,7 +1396,7 @@ mod merge_tests {
 
         let mut new_entry = Entry::new();
         let new_entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "new_entry");
+        new_entry.set_field_and_commit(fields::TITLE, "new_entry");
         source_sub_group.entries.push(new_entry);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
@@ -1442,7 +1425,7 @@ mod merge_tests {
 
         let mut new_entry = Entry::new();
         let new_entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "new_entry");
+        new_entry.set_field_and_commit(fields::TITLE, "new_entry");
         source_sub_group.entries.push(new_entry);
         source_group.groups.push(source_sub_group.clone());
         source_db.root.groups.push(source_group);
@@ -1494,7 +1477,7 @@ mod merge_tests {
             .unwrap();
 
         assert_eq!(
-            *moved_entry.times.get_location_changed().unwrap(),
+            moved_entry.times.location_changed.unwrap(),
             new_location_changed_timestamp
         );
     }
@@ -1508,7 +1491,7 @@ mod merge_tests {
         let entry_count_before = get_all_entries(&destination_db.root).len();
 
         let entry2 = source_db.root.entry_by_uuid_mut(ENTRY2_ID).unwrap();
-        entry2.set_field_and_commit("Title", "entry2_modified_in_source");
+        entry2.set_field_and_commit(fields::TITLE, "entry2_modified_in_source");
 
         thread::sleep(time::Duration::from_secs(1));
         let new_location_changed_timestamp = Times::now();
@@ -1517,8 +1500,8 @@ mod merge_tests {
             .unwrap();
 
         let entry2 = destination_db.root.entry_by_uuid_mut(ENTRY2_ID).unwrap();
-        entry2.set_field_and_commit("Title", "entry2_modified_in_destination");
-        let entry_modified_timestamp = *entry2.times.get_last_modification().unwrap();
+        entry2.set_field_and_commit(fields::TITLE, "entry2_modified_in_destination");
+        let entry_modified_timestamp = entry2.times.last_modification.unwrap();
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1539,11 +1522,11 @@ mod merge_tests {
             .unwrap();
 
         assert_eq!(
-            *moved_entry.times.get_last_modification().unwrap(),
+            moved_entry.times.last_modification.unwrap(),
             entry_modified_timestamp,
         );
         assert_eq!(
-            *moved_entry.times.get_location_changed().unwrap(),
+            moved_entry.times.location_changed.unwrap(),
             new_location_changed_timestamp
         );
     }
@@ -1557,9 +1540,9 @@ mod merge_tests {
         let entry_count_before = get_all_entries(&destination_db.root).len();
 
         let entry2 = source_db.root.entry_by_uuid_mut(ENTRY2_ID).unwrap();
-        entry2.set_field_and_commit("Title", "entry2_modified_in_source");
+        entry2.set_field_and_commit(fields::TITLE, "entry2_modified_in_source");
 
-        let entry_modified_timestamp = *entry2.times.get_last_modification().unwrap();
+        let entry_modified_timestamp = entry2.times.last_modification.unwrap();
 
         thread::sleep(time::Duration::from_secs(1));
         let new_location_changed_timestamp = Times::now();
@@ -1586,11 +1569,11 @@ mod merge_tests {
             .unwrap();
 
         assert_eq!(
-            *moved_entry.times.get_last_modification().unwrap(),
+            moved_entry.times.last_modification.unwrap(),
             entry_modified_timestamp,
         );
         assert_eq!(
-            *moved_entry.times.get_location_changed().unwrap(),
+            moved_entry.times.location_changed.unwrap(),
             new_location_changed_timestamp
         );
     }
@@ -1608,10 +1591,10 @@ mod merge_tests {
 
         let mut new_entry = Entry::new();
         let entry_uuid = new_entry.uuid;
-        new_entry.set_field_and_commit("Title", "entry1");
+        new_entry.set_field_and_commit(fields::TITLE, "entry1");
 
         thread::sleep(time::Duration::from_secs(1));
-        new_entry.times.set_location_changed(Times::now());
+        new_entry.times.location_changed = Some(Times::now());
         // FIXME we should not have to update the history here. We should
         // have a better compare function in the merge function instead.
         new_entry.update_history();
@@ -1644,9 +1627,7 @@ mod merge_tests {
 
         thread::sleep(time::Duration::from_secs(1));
         let new_location_changed_timestamp = Times::now();
-        source_sub_group_1
-            .times
-            .set_location_changed(new_location_changed_timestamp);
+        source_sub_group_1.times.location_changed = Some(new_location_changed_timestamp);
 
         let source_group_2 = source_db.root.group_by_name_mut("group2").unwrap();
         source_group_2.groups.push(source_sub_group_1);
@@ -1669,7 +1650,7 @@ mod merge_tests {
             .unwrap();
 
         assert_eq!(
-            *relocated_group.times.get_location_changed().unwrap(),
+            relocated_group.times.location_changed.unwrap(),
             new_location_changed_timestamp
         );
     }
@@ -1683,7 +1664,7 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         let entry = &mut destination_db.root.entries[0];
-        entry.set_field_and_commit("Title", "entry1_updated");
+        entry.set_field_and_commit(fields::TITLE, "entry1_updated");
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1714,7 +1695,7 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         let entry = &mut source_db.root.entries[0];
-        entry.set_field_and_commit("Title", "entry1_updated");
+        entry.set_field_and_commit(fields::TITLE, "entry1_updated");
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1745,10 +1726,10 @@ mod merge_tests {
         let group_count_before = get_all_groups(&destination_db.root).len();
 
         let entry = &mut destination_db.root.entries[0];
-        entry.set_field_and_commit("Title", "entry1_updated_from_destination");
+        entry.set_field_and_commit(fields::TITLE, "entry1_updated_from_destination");
 
         let entry = &mut source_db.root.entries[0];
-        entry.set_field_and_commit("Title", "entry1_updated_from_source");
+        entry.set_field_and_commit(fields::TITLE, "entry1_updated_from_source");
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1792,7 +1773,7 @@ mod merge_tests {
         // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
         let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
+        group.times.last_modification = Some(new_modification_timestamp);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1810,8 +1791,8 @@ mod merge_tests {
 
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
+            modified_group.times.last_modification,
+            Some(new_modification_timestamp),
         );
     }
 
@@ -1832,7 +1813,7 @@ mod merge_tests {
         // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
         let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
+        group.times.last_modification = Some(new_modification_timestamp);
 
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 0);
@@ -1849,8 +1830,8 @@ mod merge_tests {
             .unwrap();
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
+            modified_group.times.last_modification,
+            Some(new_modification_timestamp),
         );
     }
 
@@ -1871,7 +1852,7 @@ mod merge_tests {
         // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
         let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
+        group.times.last_modification = Some(new_modification_timestamp);
 
         source_db
             .relocate_group(SUBGROUP1_ID, GROUP1_ID, GROUP2_ID, new_modification_timestamp)
@@ -1892,8 +1873,8 @@ mod merge_tests {
             .unwrap();
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
+            modified_group.times.last_modification,
+            Some(new_modification_timestamp),
         );
     }
 
@@ -1914,7 +1895,7 @@ mod merge_tests {
         // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
         let new_modification_timestamp = Times::now();
-        group.times.set_last_modification(new_modification_timestamp);
+        group.times.last_modification = Some(new_modification_timestamp);
 
         thread::sleep(time::Duration::from_secs(1));
         let new_location_changed_timestamp = Times::now();
@@ -1937,12 +1918,12 @@ mod merge_tests {
             .unwrap();
         assert_eq!(modified_group.name, "subgroup1_updated_name");
         assert_eq!(
-            modified_group.times.get_last_modification(),
-            Some(new_modification_timestamp).as_ref(),
+            modified_group.times.last_modification,
+            Some(new_modification_timestamp),
         );
         assert_eq!(
-            modified_group.times.get_location_changed(),
-            Some(new_location_changed_timestamp).as_ref(),
+            modified_group.times.location_changed,
+            Some(new_location_changed_timestamp),
         );
     }
 }

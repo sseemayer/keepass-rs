@@ -25,7 +25,7 @@ pub enum DatabaseSaveError {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    Xml(#[from] xml::writer::Error),
+    Serialization(#[from] quick_xml::SeError),
 
     #[error(transparent)]
     Key(#[from] crate::key::DatabaseKeyError),

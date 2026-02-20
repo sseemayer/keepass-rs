@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use uuid::Uuid;
 
-use crate::db::{entry::Entry, CustomData, Times};
+use crate::db::{CustomDataItem, Entry, Times};
 
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -31,7 +33,7 @@ pub struct Group {
     pub times: Times,
 
     // Custom Data
-    pub custom_data: CustomData,
+    pub custom_data: HashMap<String, CustomDataItem>,
 
     /// Whether the group is expanded in the user interface
     pub is_expanded: bool,
@@ -40,12 +42,10 @@ pub struct Group {
     pub default_autotype_sequence: Option<String>,
 
     /// Whether autotype is enabled
-    // TODO: in example XML files, this is "null" - what should the type be?
-    pub enable_autotype: Option<String>,
+    pub enable_autotype: Option<bool>,
 
     /// Whether searching is enabled
-    // TODO: in example XML files, this is "null" - what should the type be?
-    pub enable_searching: Option<String>,
+    pub enable_searching: Option<bool>,
 
     /// UUID for the last top visible entry
     // TODO figure out what that is supposed to mean. According to the KeePass sourcecode, it has
@@ -191,27 +191,12 @@ impl Group {
     pub fn get_name(&self) -> &str {
         &self.name
     }
-
-    /// Get a timestamp field by name
-    ///
-    /// Returning the chrono::NaiveDateTime which does not include timezone
-    /// or UTC offset because KeePass clients typically store timestamps
-    /// relative to the local time on the machine writing the data without
-    /// including accurate UTC offset or timezone information.
-    pub fn get_time(&self, key: &str) -> Option<&chrono::NaiveDateTime> {
-        self.times.get(key)
-    }
-
-    /// Convenience method for getting the time that the group expires
-    pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
-        self.times.get_expiry()
-    }
 }
 
 #[cfg(test)]
 mod group_tests {
     use super::Group;
-    use crate::db::Entry;
+    use crate::db::{fields, Entry};
     use crate::Database;
 
     #[test]
@@ -220,10 +205,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_unprotected(fields::TITLE, "Sample Entry #2");
         general_group.entries.push(sample_entry);
         db.root.groups.push(general_group);
 
@@ -246,10 +228,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_unprotected(fields::TITLE, "Sample Entry #2");
         general_group.entries.push(sample_entry);
         db.root.groups.push(general_group);
 
@@ -270,10 +249,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_unprotected(fields::TITLE, "Sample Entry #2");
         general_group.entries.push(sample_entry.clone());
         db.root.groups.push(general_group.clone());
 
@@ -296,10 +272,7 @@ mod group_tests {
 
         let mut general_group = Group::new("General");
         let mut sample_entry = Entry::new();
-        sample_entry.fields.insert(
-            "Title".to_string(),
-            crate::db::Value::Unprotected("Sample Entry #2".to_string()),
-        );
+        sample_entry.set_unprotected(fields::TITLE, "Sample Entry #2");
         general_group.entries.push(sample_entry.clone());
         db.root.groups.push(general_group.clone());
 

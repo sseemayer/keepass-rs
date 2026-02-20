@@ -63,11 +63,12 @@ struct KDBX4InnerHeader {
 mod kdbx4_tests {
     use super::*;
 
+    use crate::db::fields;
     use crate::format::kdbx4::dump::dump_kdbx4;
     use crate::format::DatabaseVersion;
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-        db::{Database, Entry, Group, HeaderAttachment, Value},
+        db::{Attachment, Database, Entry, Group},
         format::KDBX4_CURRENT_MINOR_VERSION,
         key::DatabaseKey,
     };
@@ -111,13 +112,8 @@ mod kdbx4_tests {
         let mut root_group = Group::new("Root");
 
         let mut entry_with_password = Entry::new();
-        entry_with_password
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("Demo Entry".into()));
-
-        entry_with_password
-            .fields
-            .insert("Password".to_string(), Value::Protected("secret".into()));
+        entry_with_password.set_unprotected(fields::TITLE, "Demo Entry");
+        entry_with_password.set_protected(fields::PASSWORD, "secret");
 
         root_group.entries.push(entry_with_password);
         root_group.entries.push(Entry::new());
@@ -200,24 +196,27 @@ mod kdbx4_tests {
     }
 
     #[test]
-    pub fn header_attachments() {
+    pub fn attachments() {
         let mut db = Database::new(DatabaseConfig::default());
 
-        db.header_attachments = vec![
-            HeaderAttachment {
-                flags: 1,
-                content: vec![0x01, 0x02, 0x03, 0x04],
-            },
-            HeaderAttachment {
-                flags: 2,
-                content: vec![0x04, 0x03, 0x02, 0x01],
-            },
-        ];
-
         let mut entry = Entry::new();
-        entry
-            .fields
-            .insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
+        entry.set_unprotected(fields::TITLE, "Demo entry");
+
+        entry.attachments.insert(
+            "file1.txt".into(),
+            Attachment {
+                protected: true,
+                data: vec![0x01, 0x02, 0x03, 0x04],
+            },
+        );
+
+        entry.attachments.insert(
+            "file2.txt".into(),
+            Attachment {
+                protected: false,
+                data: vec![0x04, 0x03, 0x02, 0x01],
+            },
+        );
 
         db.root.entries.push(entry);
 
@@ -230,9 +229,13 @@ mod kdbx4_tests {
 
         assert_eq!(decrypted_db.root.entries.len(), 1);
 
-        let header_attachments = &decrypted_db.header_attachments;
-        assert_eq!(header_attachments.len(), 2);
-        assert_eq!(header_attachments[0].flags, 1);
-        assert_eq!(header_attachments[0].content, [0x01, 0x02, 0x03, 0x04]);
+        let attachments = &decrypted_db.root.entries[0].attachments;
+
+        assert_eq!(attachments.len(), 2);
+        assert_eq!(attachments["file1.txt"].protected, true);
+        assert_eq!(attachments["file1.txt"].data, [0x01, 0x02, 0x03, 0x04]);
+
+        assert_eq!(attachments["file2.txt"].protected, false);
+        assert_eq!(attachments["file2.txt"].data, [0x04, 0x03, 0x02, 0x01]);
     }
 }

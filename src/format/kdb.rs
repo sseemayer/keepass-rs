@@ -1,7 +1,7 @@
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::calculate_sha256,
-    db::{Database, DatabaseFormatError, DatabaseOpenError, Entry, Group, Value},
+    db::{Attachment, Database, DatabaseFormatError, DatabaseOpenError, Entry, Group},
     format::DatabaseVersion,
     key::{DatabaseKey, DatabaseKeyError},
 };
@@ -68,7 +68,6 @@ fn entry_name(field_type: u16) -> &'static str {
         0x0005 => "URL",
         0x0006 => "UserName",
         0x0008 => "Additional",
-        0x000d => "BinaryDesc",
         _ => {
             panic!("Unsupported field type!");
         }
@@ -188,6 +187,8 @@ fn parse_entries(
     // Loop over entry TLVs
     let mut entry: Entry = Default::default(); // the current entry
     let mut gid: Option<u32> = None; // the current entry's group id
+    let mut binary_desc = None;
+    let mut binary_data = None;
     let mut num_entries = 0;
     while num_entries < header_num_entries {
         // Read entry TLV
@@ -210,29 +211,45 @@ fn parse_entries(
                 // ImageId
                 ensure_length(field_type, field_size, 4)?;
             }
-            0x0004 | 0x0005 | 0x0006 | 0x0008 | 0x000d => {
-                // Title/URL/UserName/Additional/BinaryDesc
-                entry.fields.insert(
-                    String::from(entry_name(field_type)),
-                    Value::Unprotected(from_utf8(field_value)),
-                );
+            0x0004 | 0x0005 | 0x0006 | 0x0008 => {
+                // Title/URL/UserName/Additional
+                entry.set_unprotected(entry_name(field_type), from_utf8(field_value));
             }
             0x0007 => {
                 // Password
-                entry.fields.insert(
-                    String::from("Password"),
-                    Value::Protected(from_utf8(field_value).into()),
-                );
+                entry.set_protected("Password", from_utf8(field_value));
             }
             0x0009..=0x000c => {
                 // Creation/LastMod/LastAccess/Expire
                 ensure_length(field_type, field_size, 5)?;
             }
+            0x000d => {
+                // BinaryDesc
+                if let Some(bd) = binary_data.take() {
+                    entry.attachments.insert(
+                        from_utf8(field_value),
+                        Attachment {
+                            protected: false,
+                            data: bd,
+                        },
+                    );
+                } else {
+                    binary_desc = Some(from_utf8(field_value));
+                }
+            }
             0x000e => {
                 // BinaryData
-                entry
-                    .fields
-                    .insert(String::from("BinaryData"), Value::Bytes(field_value.to_vec()));
+                if let Some(bd) = binary_desc.take() {
+                    entry.attachments.insert(
+                        bd,
+                        Attachment {
+                            protected: false,
+                            data: field_value.to_vec(),
+                        },
+                    );
+                } else {
+                    binary_data = Some(field_value.to_vec());
+                }
             }
             0xffff => {
                 ensure_length(field_type, field_size, 0)?;
@@ -351,7 +368,6 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
 
     Ok(Database {
         config,
-        header_attachments: Default::default(),
         root: root_group,
         deleted_objects: Default::default(),
         meta: Default::default(),

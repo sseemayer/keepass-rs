@@ -1,7 +1,8 @@
 //! Types for representing data contained in a KeePass database
-mod types;
+pub mod fields;
 
 mod open;
+mod types;
 
 #[cfg(feature = "_merge")]
 mod merge;
