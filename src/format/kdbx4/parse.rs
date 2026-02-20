@@ -32,15 +32,13 @@ impl From<&[u8]> for Attachment {
 
         let protected = flags & 0x01 != 0;
 
-        if protected {
-            Attachment {
-                data: Value::protected(data),
-            }
+        let data = if protected {
+            Value::protected(data)
         } else {
-            Attachment {
-                data: Value::unprotected(data),
-            }
-        }
+            Value::unprotected(data)
+        };
+
+        Attachment { data }
     }
 }
 

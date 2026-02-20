@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
-    db::Color,
+    db::{Color, EntryId},
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         meta::CustomData,
@@ -63,7 +63,7 @@ pub struct Entry {
 impl Entry {
     pub(crate) fn xml_to_db_handle(
         self,
-        target: &mut crate::db::Entry,
+        mut target: crate::db::EntryMut,
         header_attachments: &[crate::db::Attachment],
         custom_icons: &HashMap<Uuid, Vec<u8>>,
         inner_decryptor: &mut dyn Cipher,
@@ -110,22 +110,20 @@ impl Entry {
         target.autotype = self.auto_type.map(|at| at.into());
 
         if let Some(h) = self.history {
-            target.history = Some(crate::db::History {
-                entries: h
-                    .entries
-                    .into_iter()
-                    .map(|e| {
-                        let mut he = crate::db::Entry {
-                            uuid: e.uuid.0,
-                            ..Default::default()
-                        };
+            target.history = Some(crate::db::History { entries: Vec::new() });
 
-                        e.xml_to_db_handle(&mut he, header_attachments, custom_icons, inner_decryptor)?;
-                        he.history = None; // history entries cannot have their own history
-                        Ok(he)
-                    })
-                    .collect::<Result<_, UnprotectError>>()?,
-            });
+            for (i, e) in h.entries.into_iter().enumerate() {
+                let mut he = crate::db::Entry::with_id(EntryId::from_uuid(e.uuid.0), target.parent);
+                he.history = None; // history entries cannot have their own history
+                target.history.as_mut().unwrap().entries.push(he);
+
+                e.xml_to_db_handle(
+                    target.historical(i).unwrap(),
+                    header_attachments,
+                    custom_icons,
+                    inner_decryptor,
+                )?;
+            }
         }
 
         if let Some(cd) = self.custom_data {
@@ -137,7 +135,7 @@ impl Entry {
 
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
-        db: &crate::db::Entry,
+        db: crate::db::EntryRef,
         inner_encryptor: &mut dyn Cipher,
         attachments: &mut Vec<crate::db::Attachment>,
         custom_icons: &mut HashMap<Uuid, Vec<u8>>,
@@ -184,13 +182,18 @@ impl Entry {
         }
 
         let history = if let Some(h) = db.history.as_ref() {
-            Some(History {
-                entries: h
-                    .entries
-                    .iter()
-                    .map(|e| Entry::db_to_xml(e, inner_encryptor, attachments, custom_icons))
-                    .collect::<Result<_, CryptographyError>>()?,
-            })
+            let entries = (0..h.entries.len())
+                .map(|i| {
+                    Entry::db_to_xml(
+                        db.historical(i).unwrap(),
+                        inner_encryptor,
+                        attachments,
+                        custom_icons,
+                    )
+                })
+                .collect::<Result<Vec<_>, CryptographyError>>()?;
+
+            Some(History { entries })
         } else {
             None
         };
@@ -202,7 +205,7 @@ impl Entry {
         };
 
         Ok(Entry {
-            uuid: UUID(db.uuid),
+            uuid: UUID(db.id().uuid()),
             icon_id: db.icon_id,
             custom_icon_uuid,
             foreground_color: db.foreground_color.clone(),

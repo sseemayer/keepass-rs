@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::crypt::CryptographyError;
 use crate::{
     crypt::ciphers::Cipher,
+    db::{EntryId, GroupId},
     format::xml_db::{
         custom_serde::{cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         entry::{Entry, UnprotectError},
@@ -66,7 +67,7 @@ pub enum GroupOrEntry {
 impl Group {
     pub(crate) fn xml_to_db_handle(
         self,
-        target: &mut crate::db::Group,
+        mut target: crate::db::GroupMut,
         header_attachments: &[crate::db::Attachment],
         custom_icons: &HashMap<Uuid, Vec<u8>>,
         inner_decryptor: &mut dyn Cipher,
@@ -76,8 +77,8 @@ impl Group {
         target.icon_id = self.icon_id;
 
         if let Some(uuid) = self.custom_icon_uuid {
-            if custom_icons.contains_key(&uuid.0) {
-                target.custom_icon_uuid = Some(uuid.0);
+            if let Some(icon_data) = custom_icons.get(&uuid.0) {
+                target.custom_icon = Some((uuid.0, icon_data.clone()));
             }
         }
 
@@ -86,7 +87,7 @@ impl Group {
         target.default_autotype_sequence = self.default_auto_type_sequence;
         target.enable_autotype = self.enable_auto_type;
         target.enable_searching = self.enable_searching;
-        target.last_top_visible_entry = self.last_top_visible_entry.map(|u| u.0);
+        target.last_top_visible_entry = self.last_top_visible_entry.map(|u| EntryId::from_uuid(u.0));
 
         if let Some(cd) = self.custom_data {
             target.custom_data = cd.into();
@@ -95,21 +96,12 @@ impl Group {
         for child in self.children {
             match child {
                 GroupOrEntry::Group(g) => {
-                    let mut new_group = crate::db::Group {
-                        uuid: g.uuid.0,
-                        ..Default::default()
-                    };
-
-                    g.xml_to_db_handle(&mut new_group, header_attachments, custom_icons, inner_decryptor)?;
-                    target.groups.push(new_group);
+                    let new_group = target.add_group_with_id(GroupId::from_uuid(g.uuid.0));
+                    g.xml_to_db_handle(new_group, header_attachments, custom_icons, inner_decryptor)?;
                 }
                 GroupOrEntry::Entry(e) => {
-                    let mut new_entry = crate::db::Entry {
-                        uuid: e.uuid.0,
-                        ..Default::default()
-                    };
-                    e.xml_to_db_handle(&mut new_entry, header_attachments, custom_icons, inner_decryptor)?;
-                    target.entries.push(new_entry);
+                    let new_entry = target.add_entry_with_id(EntryId::from_uuid(e.uuid.0));
+                    e.xml_to_db_handle(new_entry, header_attachments, custom_icons, inner_decryptor)?;
                 }
             }
         }
@@ -119,14 +111,14 @@ impl Group {
 
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
-        source: &crate::db::Group,
+        source: crate::db::GroupRef,
         inner_cipher: &mut dyn Cipher,
         attachments: &mut Vec<crate::db::Attachment>,
         custom_icons: &mut HashMap<Uuid, Vec<u8>>,
     ) -> Result<Self, CryptographyError> {
         let mut children = Vec::new();
 
-        for g in &source.groups {
+        for g in source.groups() {
             children.push(GroupOrEntry::Group(Group::db_to_xml(
                 g,
                 inner_cipher,
@@ -135,7 +127,7 @@ impl Group {
             )?));
         }
 
-        for e in &source.entries {
+        for e in source.entries() {
             children.push(GroupOrEntry::Entry(Entry::db_to_xml(
                 e,
                 inner_cipher,
@@ -151,17 +143,17 @@ impl Group {
         };
 
         Ok(Group {
-            uuid: UUID(source.uuid),
+            uuid: UUID(source.id().uuid()),
             name: source.name.clone(),
             notes: source.notes.clone(),
             icon_id: source.icon_id,
-            custom_icon_uuid: source.custom_icon_uuid.map(UUID),
+            custom_icon_uuid: source.custom_icon.as_ref().map(|(uuid, _)| UUID(*uuid)),
             times: Some(source.times.clone().into()),
             is_expanded: Some(source.is_expanded),
             default_auto_type_sequence: source.default_autotype_sequence.clone(),
             enable_auto_type: source.enable_autotype,
             enable_searching: source.enable_searching,
-            last_top_visible_entry: source.last_top_visible_entry.map(|eid| UUID(eid)),
+            last_top_visible_entry: source.last_top_visible_entry.map(|eid| UUID(eid.uuid())),
             custom_data,
             children,
         })

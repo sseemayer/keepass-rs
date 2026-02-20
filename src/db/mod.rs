@@ -60,17 +60,17 @@ mod database_tests {
     #[cfg(feature = "save_kdbx4")]
     #[test]
     fn test_save() {
-        use crate::{db::Entry, format::variant_dictionary::VariantDictionary};
-        let mut db = Database::new(Default::default());
+        use crate::format::variant_dictionary::VariantDictionary;
+        let mut db = Database::new();
 
         let mut public_custom_data = VariantDictionary::new();
         public_custom_data.set("example", 42);
 
         db.config.public_custom_data = Some(public_custom_data);
 
-        db.root.entries.push(Entry::new());
-        db.root.entries.push(Entry::new());
-        db.root.entries.push(Entry::new());
+        db.root_mut().add_entry();
+        db.root_mut().add_entry();
+        db.root_mut().add_entry();
 
         let mut buffer = Vec::new();
 

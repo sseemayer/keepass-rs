@@ -21,6 +21,7 @@ use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
+    db::GroupId,
     format::xml_db::{
         custom_serde::cs_opt_string, entry::UnprotectError, group::Group, meta::Meta, timestamp::Timestamp,
     },
@@ -75,8 +76,7 @@ impl KeePassFile {
         inner_decryptor: &mut dyn Cipher,
         header_attachments: &[crate::db::Attachment],
     ) -> Result<crate::db::Database, UnprotectError> {
-        let mut db = crate::db::Database::new(Default::default());
-        db.root.uuid = self.root.group.uuid.0;
+        let mut db = crate::db::Database::new_with_root_id(GroupId::from_uuid(self.root.group.uuid.0));
 
         let mut attachments = header_attachments.to_vec();
         if let Some(binaries) = self.meta.binaries.take() {
@@ -111,7 +111,7 @@ impl KeePassFile {
 
         self.root
             .group
-            .xml_to_db_handle(&mut db.root, &attachments, &custom_icons, inner_decryptor)?;
+            .xml_to_db_handle(db.root_mut(), &attachments, &custom_icons, inner_decryptor)?;
 
         Ok(db)
     }
@@ -127,7 +127,7 @@ impl KeePassFile {
 
         let mut custom_icons = HashMap::new();
 
-        let group = Group::db_to_xml(&db.root, inner_cipher, attachments, &mut custom_icons)?;
+        let group = Group::db_to_xml(db.root(), inner_cipher, attachments, &mut custom_icons)?;
 
         let mut meta: Meta = db.meta.clone().into();
         meta.custom_icons
