@@ -6,6 +6,7 @@ use std::{collections::HashMap, iter::Peekable};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
+use thiserror::Error;
 use uuid::Uuid;
 use xml::{name::OwnedName, reader::XmlEvent, EventReader};
 
@@ -15,7 +16,6 @@ use crate::{
         Color, CustomData, CustomDataItem, CustomDataItemDenormalized, DeletedObject, DeletedObjects, Group,
         Meta, Times, Value,
     },
-    error::XmlParseError,
     format::xml_db::get_epoch_baseline,
 };
 
@@ -535,6 +535,48 @@ impl FromXml for IgnoreSubfield {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Error)]
+pub enum XmlParseError {
+    #[error(transparent)]
+    Xml(#[from] xml::reader::Error),
+
+    #[error(transparent)]
+    Base64(#[from] base64::DecodeError),
+
+    #[error(transparent)]
+    TimestampFormat(#[from] chrono::ParseError),
+
+    #[error(transparent)]
+    IntFormat(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    BoolFormat(#[from] std::str::ParseBoolError),
+
+    #[error(transparent)]
+    Uuid(#[from] uuid::Error),
+
+    #[error(transparent)]
+    Color(#[from] crate::db::ParseColorError),
+
+    #[error(transparent)]
+    Cryptography(#[from] crate::crypt::CryptographyError),
+
+    #[error("Decompression error: {}", _0)]
+    Compression(#[source] std::io::Error),
+
+    /// An unexpected XML event occurred, such as opening an unexpected tag, or an error in the
+    /// underlying XML reader
+    #[error("Bad XML event: expected {}, got {:?}", expected, event)]
+    BadEvent {
+        expected: &'static str,
+        event: crate::format::xml_db::parse::SimpleXmlEvent,
+    },
+
+    /// The stream of XML events ended when more events were expected
+    #[error("Unexpected end of XML document")]
+    Eof,
 }
 
 #[cfg(test)]

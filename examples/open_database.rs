@@ -1,4 +1,7 @@
-use keepass::{db::Group, error::DatabaseOpenError, Database, DatabaseKey};
+use keepass::{
+    db::{DatabaseOpenError, Group},
+    Database, DatabaseKey,
+};
 use std::fs::File;
 
 fn main() -> Result<(), DatabaseOpenError> {

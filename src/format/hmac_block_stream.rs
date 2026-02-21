@@ -1,8 +1,7 @@
 use byteorder::{ByteOrder, LittleEndian};
 use cipher::generic_array::{typenum::U64, GenericArray};
 use hex_literal::hex;
-
-use crate::error::{BlockStreamError, CryptographyError};
+use thiserror::Error;
 
 pub const HMAC_KEY_END: [u8; 1] = hex!("01");
 
@@ -19,24 +18,22 @@ pub(crate) fn read_hmac_block_stream(
     let mut block_index: u64 = 0;
 
     while pos < data.len() {
-        let Some(hmac) = data.get(pos..(pos + 32)) else {
-            return Err(BlockStreamError::Eof);
-        };
-        let Some(size_bytes) = data.get((pos + 32)..(pos + 36)) else {
-            return Err(BlockStreamError::Eof);
-        };
+        let hmac = data.get(pos..(pos + 32)).ok_or(BlockStreamError::Eof)?;
+        let size_bytes = data.get((pos + 32)..(pos + 36)).ok_or(BlockStreamError::Eof)?;
         let size = LittleEndian::read_u32(size_bytes) as usize;
-        let Some(block) = data.get((pos + 36)..(pos + 36 + size)) else {
-            return Err(BlockStreamError::Eof);
-        };
+        let block = data
+            .get((pos + 36)..(pos + 36 + size))
+            .ok_or(BlockStreamError::Eof)?;
 
         // verify block hmac
-        let hmac_block_key = get_hmac_block_key(block_index, key)?;
+        let hmac_block_key = get_hmac_block_key(block_index, key);
         let mut block_index_buf = [0u8; 8];
         LittleEndian::write_u64(&mut block_index_buf, block_index);
 
         if hmac
-            != crate::crypt::calculate_hmac(&[&block_index_buf, size_bytes, block], &hmac_block_key)?.as_slice()
+            != crate::crypt::calculate_hmac(&[&block_index_buf, size_bytes, block], &hmac_block_key)
+                .expect("Block stream key always correctly sized")
+                .as_slice()
         {
             return Err(BlockStreamError::BlockHashMismatch { block_index });
         }
@@ -56,10 +53,7 @@ pub(crate) fn read_hmac_block_stream(
 
 #[cfg(feature = "save_kdbx4")]
 /// Write a raw buffer as a HMAC block stream
-pub(crate) fn write_hmac_block_stream(
-    data: &[u8],
-    key: &GenericArray<u8, U64>,
-) -> Result<Vec<u8>, CryptographyError> {
+pub(crate) fn write_hmac_block_stream(data: &[u8], key: &GenericArray<u8, U64>) -> Vec<u8> {
     let mut out = Vec::new();
 
     let mut pos = 0;
@@ -74,11 +68,12 @@ pub(crate) fn write_hmac_block_stream(
         LittleEndian::write_u32(&mut size_bytes, size as u32);
 
         // Generate block hmac
-        let hmac_block_key = get_hmac_block_key(block_index, key)?;
+        let hmac_block_key = get_hmac_block_key(block_index, key);
         let mut block_index_buf = [0u8; 8];
         LittleEndian::write_u64(&mut block_index_buf, block_index);
 
-        let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, block], &hmac_block_key)?;
+        let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, block], &hmac_block_key)
+            .expect("Block stream key always correctly sized");
 
         pos += 36 + size;
         block_index += 1;
@@ -89,24 +84,32 @@ pub(crate) fn write_hmac_block_stream(
     }
 
     // the end of the HMAC block stream should be an empty block, but with a valid HMAC
-    let hmac_block_key = get_hmac_block_key(block_index, key)?;
+    let hmac_block_key = get_hmac_block_key(block_index, key);
     let mut block_index_buf = [0u8; 8];
     LittleEndian::write_u64(&mut block_index_buf, block_index);
 
     let size_bytes = vec![0; 4];
-    let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, &[]], &hmac_block_key)?;
+    let hmac = crate::crypt::calculate_hmac(&[&block_index_buf, &size_bytes, &[]], &hmac_block_key)
+        .expect("Block stream key always correctly sized");
 
     out.extend_from_slice(&hmac);
     out.extend_from_slice(&size_bytes);
 
-    Ok(out)
+    out
 }
 
-pub(crate) fn get_hmac_block_key(
-    block_index: u64,
-    key: &GenericArray<u8, U64>,
-) -> Result<GenericArray<u8, U64>, CryptographyError> {
+pub(crate) fn get_hmac_block_key(block_index: u64, key: &GenericArray<u8, U64>) -> GenericArray<u8, U64> {
     let mut buf = [0u8; 8];
     LittleEndian::write_u64(&mut buf, block_index);
     crate::crypt::calculate_sha512(&[&buf, key])
+}
+
+/// Errors reading from the HMAC block stream
+#[derive(Debug, Error)]
+pub enum BlockStreamError {
+    #[error("Block hash mismatch for block {}", block_index)]
+    BlockHashMismatch { block_index: u64 },
+
+    #[error("unexpected end of file")]
+    Eof,
 }

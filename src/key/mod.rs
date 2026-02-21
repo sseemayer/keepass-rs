@@ -1,11 +1,12 @@
 use std::io::Read;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
+use thiserror::Error;
 use xml::name::OwnedName;
 use xml::reader::{EventReader, XmlEvent};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::{crypt::calculate_sha256, error::DatabaseKeyError};
+use crate::crypt::calculate_sha256;
 
 pub type KeyElement = Vec<u8>;
 pub type KeyElements = Vec<KeyElement>;
@@ -14,7 +15,7 @@ pub type KeyElements = Vec<KeyElement>;
 mod yubikey;
 
 #[cfg(feature = "challenge_response")]
-pub use yubikey::ChallengeResponseKey;
+pub use yubikey::{ChallengeResponseKey, ChallengeResponseKeyError};
 
 fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     let parser = EventReader::new(xml);
@@ -89,7 +90,7 @@ fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
         // legacy binary key format
         Ok(buffer.to_vec())
     } else {
-        Ok(calculate_sha256(&[buffer])?.as_slice().to_vec())
+        Ok(calculate_sha256(&[buffer]).as_slice().to_vec())
     }
 }
 
@@ -161,7 +162,7 @@ impl DatabaseKey {
         let mut out = Vec::new();
 
         if let Some(p) = &self.password {
-            out.push(calculate_sha256(&[p.as_bytes()])?.to_vec());
+            out.push(calculate_sha256(&[p.as_bytes()]).to_vec());
         }
 
         if let Some(ref f) = self.keyfile {
@@ -169,15 +170,15 @@ impl DatabaseKey {
         }
 
         if out.is_empty() {
-            return Err(DatabaseKeyError::IncorrectKey);
+            return Err(DatabaseKeyError::EmptyKey);
         }
 
         #[cfg(feature = "challenge_response")]
         if let Some(result) = &self.challenge_response_result {
-            out.push(calculate_sha256(&[result])?.as_slice().to_vec());
+            out.push(calculate_sha256(&[result]).as_slice().to_vec());
         } else if self.challenge_response_key.is_some() {
-            return Err(DatabaseKeyError::ChallengeResponseKeyError(
-                "Challenge-response was not performed".to_string(),
+            return Err(DatabaseKeyError::ChallengeResponse(
+                crate::key::yubikey::ChallengeResponseKeyError::NotPerformed,
             ));
         }
 
@@ -197,12 +198,32 @@ impl DatabaseKey {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum DatabaseKeyError {
+    #[error("The key contains no components")]
+    EmptyKey,
+
+    #[error("Incorrect key")]
+    IncorrectKey,
+
+    #[error("I/O error reading keyfile: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("XML error reading keyfile: {0}")]
+    Xml(#[from] xml::reader::Error),
+
+    #[error("Invalid keyfile format")]
+    InvalidKeyFile,
+
+    #[cfg(feature = "challenge_response")]
+    #[error("Challenge-response key error: {0}")]
+    ChallengeResponse(#[from] crate::key::yubikey::ChallengeResponseKeyError),
+}
+
 #[cfg(test)]
 mod key_tests {
 
-    use crate::error::DatabaseKeyError;
-
-    use super::DatabaseKey;
+    use super::{DatabaseKey, DatabaseKeyError};
 
     #[test]
     fn test_key() -> Result<(), DatabaseKeyError> {

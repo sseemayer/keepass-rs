@@ -1,9 +1,5 @@
 mod entry_tests {
-    use keepass::{
-        db::Database,
-        error::{DatabaseKeyError, DatabaseOpenError},
-        DatabaseKey,
-    };
+    use keepass::{db::DatabaseOpenError, Database, DatabaseKey};
     use std::{fs::File, path::Path};
     use uuid::uuid;
 
@@ -91,6 +87,7 @@ mod entry_tests {
 
         Ok(())
     }
+
     #[test]
     fn kdbx4_entry_bad_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
@@ -101,12 +98,6 @@ mod entry_tests {
 
         assert!(db.is_err());
 
-        Ok(())
-    }
-
-    #[test]
-    fn databasekeyerror_into_databaseopenerror() -> Result<(), DatabaseOpenError> {
-        let _: DatabaseOpenError = DatabaseKeyError::IncorrectKey.into();
         Ok(())
     }
 }

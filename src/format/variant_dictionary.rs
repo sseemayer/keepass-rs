@@ -4,8 +4,8 @@ use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
 #[cfg(feature = "save_kdbx4")]
 use std::io::Write;
+use thiserror::Error;
 
-use crate::error::VariantDictionaryError;
 #[cfg(feature = "save_kdbx4")]
 use crate::format::io::WriteLengthTaggedExt;
 
@@ -277,6 +277,25 @@ impl<'a> From<&'a VariantDictionaryValue> for Option<&'a Vec<u8>> {
             _ => None,
         }
     }
+}
+
+/// Errors while parsing a VariantDictionary
+#[derive(Debug, Error)]
+pub enum VariantDictionaryError {
+    #[error("Invalid variant dictionary version: {}", version)]
+    InvalidVersion { version: u16 },
+
+    #[error("Invalid value type: {}", value_type)]
+    InvalidValueType { value_type: u8 },
+
+    #[error("Missing key: {}", key)]
+    MissingKey { key: String },
+
+    #[error("Mistyped value: {}", key)]
+    Mistyped { key: String },
+
+    #[error("VariantDictionary did not end with null byte, when it should")]
+    NotTerminated,
 }
 
 #[cfg(test)]

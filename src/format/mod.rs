@@ -15,8 +15,7 @@ use std::io::Write;
 #[cfg(feature = "save_kdbx4")]
 use byteorder::WriteBytesExt;
 use byteorder::{ByteOrder, LittleEndian};
-
-use crate::error::DatabaseIntegrityError;
+use thiserror::Error;
 
 const KDBX_IDENTIFIER: [u8; 4] = [0x03, 0xd9, 0xa2, 0x9a];
 
@@ -44,14 +43,14 @@ pub enum DatabaseVersion {
 }
 
 impl DatabaseVersion {
-    pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseIntegrityError> {
+    pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseVersionParseError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
-            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
+            return Err(DatabaseVersionParseError::UnexpectedEof);
         }
 
         // check identifier
         if data[0..4] != KDBX_IDENTIFIER {
-            return Err(DatabaseIntegrityError::InvalidKDBXIdentifier);
+            return Err(DatabaseVersionParseError::InvalidKDBXIdentifier);
         }
 
         let version = LittleEndian::read_u32(&data[4..8]);
@@ -68,7 +67,7 @@ impl DatabaseVersion {
                 DatabaseVersion::KDB4(file_minor_version)
             }
             _ => {
-                return Err(DatabaseIntegrityError::InvalidKDBXVersion {
+                return Err(DatabaseVersionParseError::InvalidKDBXVersion {
                     version,
                     file_major_version: u32::from(file_major_version),
                     file_minor_version: u32::from(file_minor_version),
@@ -107,4 +106,25 @@ impl std::fmt::Display for DatabaseVersion {
             DatabaseVersion::KDB4(minor_version) => write!(f, "KDBX4.{}", minor_version),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum DatabaseVersionParseError {
+    #[error("Unexpected end of file while reading database version")]
+    UnexpectedEof,
+
+    #[error("Invalid KDBX identifier")]
+    InvalidKDBXIdentifier,
+
+    #[error(
+        "Invalid KDBX version: {}.{}.{}",
+        version,
+        file_major_version,
+        file_minor_version
+    )]
+    InvalidKDBXVersion {
+        version: u32,
+        file_major_version: u32,
+        file_minor_version: u32,
+    },
 }

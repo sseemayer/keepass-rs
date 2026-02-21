@@ -1,17 +1,14 @@
 //! Parse the kdbx4 format
 
-use std::{
-    convert::{TryFrom, TryInto},
-    io::ErrorKind,
-};
+use std::convert::{TryFrom, TryInto};
 
 use byteorder::{ByteOrder, LittleEndian};
+use thiserror::Error;
 
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{Database, HeaderAttachment},
-    error::{DatabaseIntegrityError, DatabaseKeyError, DatabaseOpenError},
+    db::{Database, DatabaseFormatError, DatabaseOpenError, HeaderAttachment},
     format::{
         hmac_block_stream,
         kdbx4::{
@@ -23,7 +20,7 @@ use crate::{
         variant_dictionary::VariantDictionary,
         DatabaseVersion,
     },
-    key::DatabaseKey,
+    key::{DatabaseKey, DatabaseKeyError},
 };
 
 use super::KDBX4InnerHeader;
@@ -41,7 +38,8 @@ impl From<&[u8]> for HeaderAttachment {
 pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database, DatabaseOpenError> {
     let (config, header_attachments, mut inner_decryptor, xml) = decrypt_kdbx4(data, db_key)?;
 
-    let database_content = crate::format::xml_db::parse::parse(&xml, &mut *inner_decryptor)?;
+    let database_content = crate::format::xml_db::parse::parse(&xml, &mut *inner_decryptor)
+        .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::Xml(e))))?;
 
     let db = Database {
         config,
@@ -60,8 +58,11 @@ pub(crate) fn decrypt_kdbx4(
     data: &[u8],
     db_key: &DatabaseKey,
 ) -> Result<(DatabaseConfig, Vec<HeaderAttachment>, Box<dyn Cipher>, Vec<u8>), DatabaseOpenError> {
+    let version = DatabaseVersion::parse(data)?;
+
     // parse header
-    let (outer_header, inner_header_start) = parse_outer_header(data)?;
+    let (outer_header, inner_header_start) = parse_outer_header(data)
+        .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::OuterHeader(e))))?;
 
     // split file into segments:
     //      header_data         - The outer header data
@@ -69,28 +70,24 @@ pub(crate) fn decrypt_kdbx4(
     //      header_hmac         - A HMAC of the header_data (for verification of the key_elements)
     //      hmac_block_stream   - A HMAC-verified block stream of encrypted and compressed blocks
     let header_data = &data[0..inner_header_start];
-    let Some(header_sha256) = data.get(inner_header_start..(inner_header_start + 32)) else {
-        return Err(DatabaseOpenError::Io(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "unexpected end of file",
-        )));
-    };
-    let Some(header_hmac) = data.get((inner_header_start + 32)..(inner_header_start + 64)) else {
-        return Err(DatabaseOpenError::Io(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "unexpected end of file",
-        )));
-    };
-    let Some(hmac_block_stream) = data.get((inner_header_start + 64)..) else {
-        return Err(DatabaseOpenError::Io(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "unexpected end of file",
-        )));
-    };
+
+    let header_sha256 = data
+        .get(inner_header_start..(inner_header_start + 32))
+        .ok_or(DatabaseOpenError::UnexpectedEof)?;
+
+    let header_hmac = data
+        .get((inner_header_start + 32)..(inner_header_start + 64))
+        .ok_or(DatabaseOpenError::UnexpectedEof)?;
+
+    let hmac_block_stream = data
+        .get((inner_header_start + 64)..)
+        .ok_or(DatabaseOpenError::UnexpectedEof)?;
 
     // verify header
-    if header_sha256 != crypt::calculate_sha256(&[header_data])?.as_slice() {
-        return Err(DatabaseIntegrityError::HeaderHashMismatch.into());
+    if header_sha256 != crypt::calculate_sha256(&[header_data]).as_slice() {
+        return Err(DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(
+            Kdbx4OpenError::HeaderHashMismatch,
+        )));
     }
 
     #[cfg(feature = "challenge_response")]
@@ -99,26 +96,31 @@ pub(crate) fn decrypt_kdbx4(
     // derive master key from composite key, transform_seed, transform_rounds and master_seed
     let key_elements = db_key.get_key_elements()?;
     let key_elements: Vec<&[u8]> = key_elements.iter().map(|v| &v[..]).collect();
-    let composite_key = crypt::calculate_sha256(&key_elements)?;
+    let composite_key = crypt::calculate_sha256(&key_elements);
     let transformed_key = outer_header
         .kdf_config
         .get_kdf_seeded(&outer_header.kdf_seed)
         .transform_key(&composite_key)?;
-    let master_key = crypt::calculate_sha256(&[outer_header.master_seed.as_ref(), &transformed_key])?;
+    let master_key = crypt::calculate_sha256(&[outer_header.master_seed.as_ref(), &transformed_key]);
 
     // verify credentials
     let hmac_key = crypt::calculate_sha512(&[
         &outer_header.master_seed,
         &transformed_key,
         &hmac_block_stream::HMAC_KEY_END,
-    ])?;
-    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key)?;
-    if header_hmac != crypt::calculate_hmac(&[header_data], &header_hmac_key)?.as_slice() {
+    ]);
+    let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+    if header_hmac
+        != crypt::calculate_hmac(&[header_data], &header_hmac_key)
+            .expect("HMAC block key always correctly sized")
+            .as_slice()
+    {
         return Err(DatabaseKeyError::IncorrectKey.into());
     }
 
     // read encrypted payload from hmac-verified block stream
-    let payload_encrypted = hmac_block_stream::read_hmac_block_stream(hmac_block_stream, &hmac_key)?;
+    let payload_encrypted = hmac_block_stream::read_hmac_block_stream(hmac_block_stream, &hmac_key)
+        .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::BlockStream(e))))?;
 
     // Decrypt and decompress encrypted payload
     let payload_compressed = outer_header
@@ -132,7 +134,8 @@ pub(crate) fn decrypt_kdbx4(
         .decompress(&payload_compressed)?;
 
     // KDBX4 has inner header, too - parse it
-    let (header_attachments, inner_header, body_start) = parse_inner_header(&payload)?;
+    let (header_attachments, inner_header, body_start) = parse_inner_header(&payload)
+        .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::InnerHeader(e))))?;
 
     // after inner header is one XML document
     let xml = &payload[body_start..];
@@ -143,7 +146,7 @@ pub(crate) fn decrypt_kdbx4(
         .get_cipher(&inner_header.inner_random_stream_key)?;
 
     let config = DatabaseConfig {
-        version: outer_header.version,
+        version,
         outer_cipher_config: outer_header.outer_cipher_config,
         compression_config: outer_header.compression_config,
         inner_cipher_config: inner_header.inner_random_stream,
@@ -154,9 +157,7 @@ pub(crate) fn decrypt_kdbx4(
     Ok((config, header_attachments, inner_decryptor, xml.to_vec()))
 }
 
-fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), DatabaseOpenError> {
-    let version = DatabaseVersion::parse(data)?;
-
+fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Kdbx4OuterHeaderError> {
     // skip over the version header
     let mut pos = DatabaseVersion::get_version_header_size();
 
@@ -180,25 +181,16 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
         //   entry_buffer: [u8; entry_length]       // the entry buffer
         // )
 
-        let Some(entry_type) = data.get(pos) else {
-            return Err(DatabaseOpenError::Io(std::io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "unexpected end of file",
-            )));
-        };
-        let Some(entry_length_u32) = data.get(pos + 1..(pos + 5)) else {
-            return Err(DatabaseOpenError::Io(std::io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "unexpected end of file",
-            )));
-        };
-        let entry_length: usize = LittleEndian::read_u32(entry_length_u32) as usize;
-        let Some(entry_buffer) = data.get((pos + 5)..(pos + 5 + entry_length)) else {
-            return Err(DatabaseOpenError::Io(std::io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "unexpected end of file",
-            )));
-        };
+        let entry_type = data.get(pos).ok_or(Kdbx4OuterHeaderError::UnexpectedEof)?;
+        let entry_length = data
+            .get(pos + 1..(pos + 5))
+            .ok_or(Kdbx4OuterHeaderError::UnexpectedEof)?;
+
+        let entry_length: usize = LittleEndian::read_u32(entry_length) as usize;
+
+        let entry_buffer = data
+            .get((pos + 5)..(pos + 5 + entry_length))
+            .ok_or(Kdbx4OuterHeaderError::UnexpectedEof)?;
 
         pos += 5 + entry_length;
 
@@ -222,33 +214,30 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
             HEADER_ENCRYPTION_IV => outer_iv = Some(entry_buffer.to_vec()),
 
             HEADER_KDF_PARAMS => {
-                let vd = VariantDictionary::parse(entry_buffer)?;
+                let vd =
+                    VariantDictionary::parse(entry_buffer).map_err(Kdbx4OuterHeaderError::ParseKdfConfig)?;
+
                 let (kconf, kseed) = vd.try_into()?;
                 kdf_config = Some(kconf);
                 kdf_seed = Some(kseed)
             }
 
             HEADER_PUBLIC_CUSTOM_DATA => {
-                let vd = VariantDictionary::parse(entry_buffer)?;
+                let vd =
+                    VariantDictionary::parse(entry_buffer).map_err(Kdbx4OuterHeaderError::ParseCustomData)?;
+
                 public_custom_data = Some(vd)
             }
 
-            _ => {
-                return Err(DatabaseIntegrityError::InvalidOuterHeaderEntry {
-                    entry_type: *entry_type,
-                }
-                .into());
-            }
+            _ => return Err(Kdbx4OuterHeaderError::InvalidEntry(*entry_type)),
         };
     }
 
     // at this point, the header needs to be fully defined - unwrap options and return errors if
     // something is missing
 
-    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T, DatabaseIntegrityError> {
-        v.ok_or_else(|| DatabaseIntegrityError::IncompleteOuterHeader {
-            missing_field: err.into(),
-        })
+    fn get_or_err<T>(v: Option<T>, err: &'static str) -> Result<T, Kdbx4OuterHeaderError> {
+        v.ok_or(Kdbx4OuterHeaderError::Incomplete(err))
     }
 
     let outer_cipher_config = get_or_err(outer_cipher, "Outer Cipher ID")?;
@@ -260,7 +249,6 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
 
     Ok((
         KDBX4OuterHeader {
-            version,
             outer_cipher_config,
             compression_config,
             master_seed,
@@ -273,9 +261,36 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Database
     ))
 }
 
+#[derive(Debug, Error)]
+pub enum Kdbx4OuterHeaderError {
+    #[error("Unexpected end of file while parsing outer header")]
+    UnexpectedEof,
+
+    #[error(transparent)]
+    OuterCipherConfig(#[from] crate::config::OuterCipherConfigError),
+
+    #[error(transparent)]
+    CompressionConfig(#[from] crate::config::CompressionConfigError),
+
+    #[error("error parsing KDF config: {0}")]
+    ParseKdfConfig(#[source] crate::format::variant_dictionary::VariantDictionaryError),
+
+    #[error("error parsing public custom data: {0}")]
+    ParseCustomData(#[source] crate::format::variant_dictionary::VariantDictionaryError),
+
+    #[error(transparent)]
+    KdfConfig(#[from] crate::config::KdfConfigError),
+
+    #[error("Invalid outer header entry: {0}")]
+    InvalidEntry(u8),
+
+    #[error("Outer header incomplete - missing {0}")]
+    Incomplete(&'static str),
+}
+
 fn parse_inner_header(
     data: &[u8],
-) -> Result<(Vec<HeaderAttachment>, KDBX4InnerHeader, usize), DatabaseOpenError> {
+) -> Result<(Vec<HeaderAttachment>, KDBX4InnerHeader, usize), Kdbx4InnerHeaderError> {
     let mut pos = 0;
 
     let mut inner_random_stream = None;
@@ -304,15 +319,13 @@ fn parse_inner_header(
             }
 
             _ => {
-                return Err(DatabaseIntegrityError::InvalidInnerHeaderEntry { entry_type }.into());
+                return Err(Kdbx4InnerHeaderError::InvalidEntry(entry_type));
             }
         }
     }
 
-    fn get_or_err<T>(v: Option<T>, err: &str) -> Result<T, DatabaseIntegrityError> {
-        v.ok_or_else(|| DatabaseIntegrityError::IncompleteInnerHeader {
-            missing_field: err.into(),
-        })
+    fn get_or_err<T>(v: Option<T>, err: &'static str) -> Result<T, Kdbx4InnerHeaderError> {
+        v.ok_or(Kdbx4InnerHeaderError::Incomplete(err))
     }
 
     let inner_random_stream = get_or_err(inner_random_stream, "Inner random stream")?;
@@ -324,4 +337,34 @@ fn parse_inner_header(
     };
 
     Ok((header_attachments, inner_header, pos))
+}
+
+#[derive(Debug, Error)]
+pub enum Kdbx4InnerHeaderError {
+    #[error(transparent)]
+    InnerCipherConfig(#[from] crate::config::InnerCipherConfigError),
+
+    #[error("Invalid inner header entry: {0}")]
+    InvalidEntry(u8),
+
+    #[error("Inner header incomplete - missing {0}")]
+    Incomplete(&'static str),
+}
+
+#[derive(Debug, Error)]
+pub enum Kdbx4OpenError {
+    #[error(transparent)]
+    Xml(#[from] crate::format::xml_db::parse::XmlParseError),
+
+    #[error(transparent)]
+    OuterHeader(#[from] Kdbx4OuterHeaderError),
+
+    #[error(transparent)]
+    InnerHeader(#[from] Kdbx4InnerHeaderError),
+
+    #[error("Header hash mismatch - the header may be corrupted")]
+    HeaderHashMismatch,
+
+    #[error(transparent)]
+    BlockStream(#[from] hmac_block_stream::BlockStreamError),
 }
