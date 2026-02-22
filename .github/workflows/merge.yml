@@ -64,9 +64,8 @@ jobs:
       - test
       - coverage
     permissions:
-      # This permission is required in order to push the new
-      # tag to the repository.
-      contents: write
+      contents: write # required to push the new git tag
+      id-token: write # required for trusted publishing
     runs-on: ubuntu-latest
     env:
       next-version: ${{ needs.get-next-version.outputs.version }}
@@ -87,11 +86,12 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
 
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+        id: auth
+
       - name: Publish new Cargo version
         env:
-          # This token needs to be created with the publish-update scope.
-          # The other scopes are not necessary.
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           nix develop --command cargo publish --allow-dirty
 
