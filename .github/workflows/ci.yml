@@ -136,16 +136,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
       - name: running rustfmt
-        run: |
-          files=$(find . -name '*.rs')
-          IFS=$'\n'; for file in $files; do
-            rustfmt --check "$file"
-          done
+        run: nix develop --command cargo fmt --check
 
   coverage:
     name: Code Coverage
