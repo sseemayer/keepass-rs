@@ -85,9 +85,7 @@ jobs:
           sed -i 's/0.0.0-placeholder-version/${{ env.next-version }}/' Cargo.toml
           git diff
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
 
       - name: Publish new Cargo version
         env:
@@ -95,7 +93,7 @@ jobs:
           # The other scopes are not necessary.
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cargo publish --allow-dirty
+          nix develop --command cargo publish --allow-dirty
 
       - name: Tag the next version
         run: |
