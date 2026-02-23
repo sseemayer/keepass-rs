@@ -213,7 +213,15 @@ impl Binary {
             data = crate::compression::GZipCompression.decompress(&data)?;
         }
 
-        Ok(crate::db::Attachment { protected, data })
+        if protected {
+            Ok(crate::db::Attachment {
+                data: crate::db::Value::protected(data),
+            })
+        } else {
+            Ok(crate::db::Attachment {
+                data: crate::db::Value::unprotected(data),
+            })
+        }
     }
 }
 

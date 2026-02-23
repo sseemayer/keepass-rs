@@ -9,7 +9,7 @@ use crate::db::{fields, Attachment, AutoType, Color, CustomDataItem, History, Ti
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Entry {
     pub uuid: Uuid,
-    pub fields: HashMap<String, Value>,
+    pub fields: HashMap<String, Value<String>>,
     pub autotype: Option<AutoType>,
     pub tags: Vec<String>,
 
@@ -123,16 +123,16 @@ impl<'a> Entry {
         true
     }
 
-    pub fn set(&mut self, key: impl Into<String>, value: Value) {
+    pub fn set(&mut self, key: impl Into<String>, value: Value<String>) {
         self.fields.insert(key.into(), value);
     }
 
     pub fn set_unprotected(&mut self, key: impl Into<String>, value: impl Into<String>) {
-        self.set(key, Value::string(value.into()));
+        self.set(key, Value::unprotected(value));
     }
 
     pub fn set_protected(&mut self, key: impl Into<String>, value: impl Into<String>) {
-        self.set(key, Value::protected_string(value.into()));
+        self.set(key, Value::protected(value));
     }
 }
 
@@ -183,7 +183,7 @@ mod entry_tests {
 
         entry
             .fields
-            .insert(fields::TITLE.to_string(), Value::string("second title"));
+            .insert(fields::TITLE.to_string(), Value::unprotected("second title"));
 
         assert!(entry.update_history());
         assert!(entry.history.is_some());
@@ -209,12 +209,12 @@ mod entry_tests {
     #[test]
     fn serialization() {
         assert_eq!(
-            serde_json::to_string(&Value::string("ABC")).unwrap(),
+            serde_json::to_string(&Value::<String>::unprotected("ABC")).unwrap(),
             "\"ABC\"".to_string()
         );
 
         assert_eq!(
-            serde_json::to_string(&Value::protected_string("ABC")).unwrap(),
+            serde_json::to_string(&Value::<String>::protected("ABC")).unwrap(),
             "\"ABC\"".to_string()
         );
     }

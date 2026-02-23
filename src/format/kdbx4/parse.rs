@@ -8,7 +8,7 @@ use thiserror::Error;
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{Attachment, Database, DatabaseFormatError, DatabaseOpenError},
+    db::{Attachment, Database, DatabaseFormatError, DatabaseOpenError, Value},
     format::{
         hmac_block_stream,
         kdbx4::{
@@ -32,7 +32,15 @@ impl From<&[u8]> for Attachment {
 
         let protected = flags & 0x01 != 0;
 
-        Attachment { protected, data }
+        if protected {
+            Attachment {
+                data: Value::protected(data),
+            }
+        } else {
+            Attachment {
+                data: Value::unprotected(data),
+            }
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::calculate_sha256,
-    db::{Attachment, Database, DatabaseFormatError, DatabaseOpenError, Entry, Group},
+    db::{Attachment, Database, DatabaseFormatError, DatabaseOpenError, Entry, Group, Value},
     format::DatabaseVersion,
     key::{DatabaseKey, DatabaseKeyError},
 };
@@ -229,8 +229,7 @@ fn parse_entries(
                     entry.attachments.insert(
                         from_utf8(field_value),
                         Attachment {
-                            protected: false,
-                            data: bd,
+                            data: Value::unprotected(bd),
                         },
                     );
                 } else {
@@ -243,8 +242,7 @@ fn parse_entries(
                     entry.attachments.insert(
                         bd,
                         Attachment {
-                            protected: false,
-                            data: field_value.to_vec(),
+                            data: Value::unprotected(field_value.to_vec()),
                         },
                     );
                 } else {

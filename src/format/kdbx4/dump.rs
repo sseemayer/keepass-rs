@@ -169,7 +169,7 @@ impl KDBX4InnerHeader {
         for attachment in header_attachments {
             writer.write_u8(INNER_HEADER_BINARY_ATTACHMENTS)?;
             writer.write_u32::<LittleEndian>((attachment.data.len() + 1) as u32)?;
-            writer.write_u8(if attachment.protected { 0x01 } else { 0x00 })?;
+            writer.write_u8(if attachment.is_protected() { 0x01 } else { 0x00 })?;
             writer.write_all(&attachment.data)?;
         }
 

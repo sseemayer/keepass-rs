@@ -63,7 +63,7 @@ struct KDBX4InnerHeader {
 mod kdbx4_tests {
     use super::*;
 
-    use crate::db::fields;
+    use crate::db::{fields, Value};
     use crate::format::kdbx4::dump::dump_kdbx4;
     use crate::format::DatabaseVersion;
     use crate::{
@@ -205,16 +205,14 @@ mod kdbx4_tests {
         entry.attachments.insert(
             "file1.txt".into(),
             Attachment {
-                protected: true,
-                data: vec![0x01, 0x02, 0x03, 0x04],
+                data: Value::protected(vec![0x01, 0x02, 0x03, 0x04]),
             },
         );
 
         entry.attachments.insert(
             "file2.txt".into(),
             Attachment {
-                protected: false,
-                data: vec![0x04, 0x03, 0x02, 0x01],
+                data: Value::unprotected(vec![0x04, 0x03, 0x02, 0x01]),
             },
         );
 
@@ -232,10 +230,10 @@ mod kdbx4_tests {
         let attachments = &decrypted_db.root.entries[0].attachments;
 
         assert_eq!(attachments.len(), 2);
-        assert_eq!(attachments["file1.txt"].protected, true);
-        assert_eq!(attachments["file1.txt"].data, [0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(attachments["file1.txt"].is_protected(), true);
+        assert_eq!(attachments["file1.txt"].get(), &[0x01, 0x02, 0x03, 0x04]);
 
-        assert_eq!(attachments["file2.txt"].protected, false);
-        assert_eq!(attachments["file2.txt"].data, [0x04, 0x03, 0x02, 0x01]);
+        assert_eq!(attachments["file2.txt"].is_protected(), false);
+        assert_eq!(attachments["file2.txt"].get(), &[0x04, 0x03, 0x02, 0x01]);
     }
 }

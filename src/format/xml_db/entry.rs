@@ -93,9 +93,9 @@ impl Entry {
                     let fval = inner_decryptor.decrypt(&fval)?;
                     let fval = String::from_utf8_lossy(&fval).to_string();
 
-                    crate::db::Value::protected_string(fval)
+                    crate::db::Value::protected(fval)
                 } else {
-                    crate::db::Value::string(fval)
+                    crate::db::Value::unprotected(fval)
                 };
                 target.fields.insert(field.key, value);
             }
@@ -152,7 +152,7 @@ impl Entry {
         let mut string_fields = Vec::with_capacity(db.fields.len());
         for (k, v) in &db.fields {
             let value = if v.is_protected() {
-                let encrypted = inner_encryptor.encrypt(v.as_str().as_bytes())?;
+                let encrypted = inner_encryptor.encrypt(v.get().as_bytes())?;
                 let encoded = base64_engine::STANDARD.encode(&encrypted);
 
                 StringValue {
