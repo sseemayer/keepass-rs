@@ -1,7 +1,7 @@
 //! XML (de)serialization for KeePass databases.
 //!
 //! This module provides types that mirror the ones in `crate::db`, but are tailored to closely fit
-//! the XMl structure of KeePass databases for easy `#[derive(Serialize, Deserialize)]`.
+//! the XML structure of KeePass databases for easy `#[derive(Serialize, Deserialize)]`.
 //!
 //! See <https://keepass.info/help/download/KDBX_XML.xsd> for an XML schema.
 
