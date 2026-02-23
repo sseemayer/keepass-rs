@@ -11,7 +11,7 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -22,13 +22,13 @@ jobs:
     name: Code Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v11
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
       - name: Generate code coverage
         run: |
           nix develop --command cargo tarpaulin --verbose --timeout 120
       - name: Upload code coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           fail_ci_if_error: true
           verbose: true
@@ -40,11 +40,11 @@ jobs:
     outputs:
       version : ${{ steps.semantic-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: paulhatch/semantic-version@c423ebb78413907bc5382d5a0e840be160a83981
+      - uses: paulhatch/semantic-version@f29500c9d60a99ed5168e39ee367e0976884c46e # v6.0.1
         id: semantic-version
         with:
           tag_prefix: "v"
@@ -64,15 +64,14 @@ jobs:
       - test
       - coverage
     permissions:
-      # This permission is required in order to push the new
-      # tag to the repository.
-      contents: write
+      contents: write # required to push the new git tag
+      id-token: write # required for trusted publishing
     runs-on: ubuntu-latest
     env:
       next-version: ${{ needs.get-next-version.outputs.version }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -85,17 +84,16 @@ jobs:
           sed -i 's/0.0.0-placeholder-version/${{ env.next-version }}/' Cargo.toml
           git diff
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+        id: auth
 
       - name: Publish new Cargo version
         env:
-          # This token needs to be created with the publish-update scope.
-          # The other scopes are not necessary.
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
-          cargo publish --allow-dirty
+          nix develop --command cargo publish --allow-dirty
 
       - name: Tag the next version
         run: |
