@@ -81,7 +81,7 @@ impl KeePassFile {
         let mut attachments = header_attachments.to_vec();
         if let Some(binaries) = self.meta.binaries.take() {
             for binary in binaries.binaries {
-                attachments.push(binary.xml_to_db(inner_decryptor));
+                attachments.push(binary.xml_to_db(inner_decryptor)?);
             }
         }
 

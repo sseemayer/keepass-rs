@@ -9,6 +9,7 @@ use crate::{
     db::Color,
     format::xml_db::{
         custom_serde::{cs_base64, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
+        entry::UnprotectError,
         timestamp::Timestamp,
         UUID,
     },
@@ -200,23 +201,19 @@ impl Binary {
     pub(crate) fn xml_to_db(
         self,
         inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-    ) -> crate::db::Attachment {
-        let mut data = base64_engine::STANDARD.decode(self.value).unwrap_or_default();
+    ) -> Result<crate::db::Attachment, UnprotectError> {
+        let mut data = base64_engine::STANDARD.decode(self.value)?;
+        let protected = self.protected.unwrap_or(false);
 
-        if self.protected.unwrap_or(false) {
-            data = inner_decryptor.decrypt(&data).unwrap_or_default();
+        if protected {
+            data = inner_decryptor.decrypt(&data)?;
         }
 
         if self.compressed.unwrap_or(false) {
-            data = crate::compression::GZipCompression
-                .decompress(&data)
-                .unwrap_or_default();
+            data = crate::compression::GZipCompression.decompress(&data)?;
         }
 
-        crate::db::Attachment {
-            protected: self.protected.unwrap_or_default(),
-            data,
-        }
+        Ok(crate::db::Attachment { protected, data })
     }
 }
 
