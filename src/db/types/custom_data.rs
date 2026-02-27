@@ -1,28 +1,24 @@
-use std::collections::HashMap;
-
 use chrono::NaiveDateTime;
 
-use crate::db::Value;
-
-/// Collection of custom data fields for an entry or metadata
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct CustomData {
-    pub items: HashMap<String, CustomDataItem>,
-}
-
-/// Custom data field for an entry or metadata for internal use
+/// Custom data field for an [Entry][crate::db::Entry] or [Meta][crate::db::Meta] for database-wide
+/// custom data
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomDataItem {
-    pub value: Option<Value>,
+    /// Value of the custom data item.
+    pub value: Option<CustomDataValue>,
+
+    /// Time the custom data item was last modified
     pub last_modification_time: Option<NaiveDateTime>,
 }
 
-/// Custom data field for an entry or metadata from XML data
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+/// Value of a [CustomDataItem]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct CustomDataItemDenormalized {
-    pub key: String,
-    pub custom_data_item: CustomDataItem,
+pub enum CustomDataValue {
+    /// String custom data value
+    String(String),
+
+    /// Binary custom data value
+    Binary(Vec<u8>),
 }

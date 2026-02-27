@@ -2,29 +2,31 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::db::{AutoType, Color, CustomData, History, Times, Value};
+use crate::db::{fields, Attachment, AutoType, Color, CustomDataItem, History, Times, Value};
 
 /// A database entry containing several key-value fields.
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Entry {
     pub uuid: Uuid,
-    pub fields: HashMap<String, Value>,
+    pub fields: HashMap<String, Value<String>>,
     pub autotype: Option<AutoType>,
     pub tags: Vec<String>,
 
     pub times: Times,
 
-    pub custom_data: CustomData,
+    pub custom_data: HashMap<String, CustomDataItem>,
 
     pub icon_id: Option<usize>,
-    pub custom_icon_uuid: Option<Uuid>,
+    pub custom_icon: Option<(Uuid, Vec<u8>)>,
 
     pub foreground_color: Option<Color>,
     pub background_color: Option<Color>,
 
     pub override_url: Option<String>,
     pub quality_check: Option<bool>,
+
+    pub attachments: HashMap<String, Attachment>,
 
     pub history: Option<History>,
 }
@@ -41,65 +43,32 @@ impl Entry {
 impl<'a> Entry {
     /// Get a field by name, taking care of unprotecting Protected values automatically
     pub fn get(&'a self, key: &str) -> Option<&'a str> {
-        match self.fields.get(key) {
-            Some(&Value::Bytes(_)) => None,
-            Some(Value::Protected(pv)) => std::str::from_utf8(pv.unsecure()).ok(),
-            Some(Value::Unprotected(uv)) => Some(uv),
-            None => None,
-        }
-    }
-
-    /// Get a bytes field by name
-    pub fn get_bytes(&'a self, key: &str) -> Option<&'a [u8]> {
-        match self.fields.get(key) {
-            Some(Value::Bytes(b)) => Some(b),
-            _ => None,
-        }
-    }
-
-    pub fn get_uuid(&'a self) -> &'a Uuid {
-        &self.uuid
-    }
-
-    /// Get a timestamp field by name
-    ///
-    /// Returning the chrono::NaiveDateTime which does not include timezone
-    /// or UTC offset because KeePass clients typically store timestamps
-    /// relative to the local time on the machine writing the data without
-    /// including accurate UTC offset or timezone information.
-    pub fn get_time(&self, key: &str) -> Option<&chrono::NaiveDateTime> {
-        self.times.get(key)
-    }
-
-    /// Convenience method for getting the time that the entry expires.
-    /// This value is usually only meaningful/useful when expires == true
-    pub fn get_expiry_time(&self) -> Option<&chrono::NaiveDateTime> {
-        self.times.get_expiry()
+        self.fields.get(key).map(|v| v.as_str())
     }
 
     /// Convenience method for getting the raw value of the 'otp' field
     pub fn get_raw_otp_value(&'a self) -> Option<&'a str> {
-        self.get("otp")
+        self.get(fields::OTP)
     }
 
     /// Convenience method for getting the value of the 'Title' field
     pub fn get_title(&'a self) -> Option<&'a str> {
-        self.get("Title")
+        self.get(fields::TITLE)
     }
 
     /// Convenience method for getting the value of the 'UserName' field
     pub fn get_username(&'a self) -> Option<&'a str> {
-        self.get("UserName")
+        self.get(fields::USERNAME)
     }
 
     /// Convenience method for getting the value of the 'Password' field
     pub fn get_password(&'a self) -> Option<&'a str> {
-        self.get("Password")
+        self.get(fields::PASSWORD)
     }
 
     /// Convenience method for getting the value of the 'URL' field
     pub fn get_url(&'a self) -> Option<&'a str> {
-        self.get("URL")
+        self.get(fields::URL)
     }
 
     /// Adds the current version of the entry to the entry's history
@@ -117,7 +86,7 @@ impl<'a> Entry {
             return false;
         }
 
-        self.times.set_last_modification(Times::now());
+        self.times.last_modification = Some(Times::now());
 
         let mut new_history_entry = self.clone();
         new_history_entry.history.take().unwrap();
@@ -153,50 +122,33 @@ impl<'a> Entry {
         }
         true
     }
+
+    pub fn set(&mut self, key: impl Into<String>, value: Value<String>) {
+        self.fields.insert(key.into(), value);
+    }
+
+    pub fn set_unprotected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.set(key, Value::unprotected(value));
+    }
+
+    pub fn set_protected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.set(key, Value::protected(value));
+    }
 }
 
 #[cfg(test)]
 mod entry_tests {
     use std::{thread, time};
 
-    use secstr::SecStr;
-
-    use crate::db::{Entry, Value};
-
-    #[test]
-    fn byte_values() {
-        let mut entry = Entry::new();
-        entry
-            .fields
-            .insert("a-bytes".to_string(), Value::Bytes(vec![1, 2, 3]));
-
-        entry.fields.insert(
-            "a-unprotected".to_string(),
-            Value::Unprotected("asdf".to_string()),
-        );
-
-        entry.fields.insert(
-            "a-protected".to_string(),
-            Value::Protected(SecStr::new("asdf".as_bytes().to_vec())),
-        );
-
-        assert_eq!(entry.get_bytes("a-bytes"), Some(&[1, 2, 3][..]));
-        assert_eq!(entry.get_bytes("a-unprotected"), None);
-        assert_eq!(entry.get_bytes("a-protected"), None);
-
-        assert_eq!(entry.get("a-bytes"), None);
-
-        assert!(!entry.fields["a-bytes"].is_empty());
-    }
+    use crate::db::{fields, Entry, Value};
 
     #[test]
     fn update_history() {
         let mut entry = Entry::new();
-        let mut last_modification_time = *entry.times.get_last_modification().unwrap();
+        let mut last_modification_time = entry.times.last_modification.unwrap();
 
-        entry
-            .fields
-            .insert("Username".to_string(), Value::Unprotected("user".to_string()));
+        entry.set_unprotected(fields::USERNAME, "user");
+
         // Making sure to wait 1 sec before update the history, to make
         // sure that we get a different modification timestamp.
         thread::sleep(time::Duration::from_secs(1));
@@ -204,11 +156,8 @@ mod entry_tests {
         assert!(entry.update_history());
         assert!(entry.history.is_some());
         assert_eq!(entry.history.as_ref().unwrap().entries.len(), 1);
-        assert_ne!(
-            entry.times.get_last_modification().unwrap(),
-            &last_modification_time
-        );
-        last_modification_time = *entry.times.get_last_modification().unwrap();
+        assert_ne!(entry.times.last_modification.unwrap(), last_modification_time);
+        last_modification_time = entry.times.last_modification.unwrap();
         thread::sleep(time::Duration::from_secs(1));
 
         // Updating the history without making any changes
@@ -216,55 +165,37 @@ mod entry_tests {
         assert!(!entry.update_history());
         assert!(entry.history.is_some());
         assert_eq!(entry.history.as_ref().unwrap().entries.len(), 1);
-        assert_eq!(
-            entry.times.get_last_modification().unwrap(),
-            &last_modification_time
-        );
+        assert_eq!(entry.times.last_modification.unwrap(), last_modification_time);
+
+        entry.set_unprotected(fields::TITLE, "first title");
+
+        assert!(entry.update_history());
+        assert!(entry.history.is_some());
+        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 2);
+        assert_ne!(entry.times.last_modification.unwrap(), last_modification_time);
+        last_modification_time = entry.times.last_modification.unwrap();
+        thread::sleep(time::Duration::from_secs(1));
+
+        assert!(!entry.update_history());
+        assert!(entry.history.is_some());
+        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 2);
+        assert_eq!(entry.times.last_modification.unwrap(), last_modification_time);
 
         entry
             .fields
-            .insert("Title".to_string(), Value::Unprotected("first title".to_string()));
-
-        assert!(entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 2);
-        assert_ne!(
-            entry.times.get_last_modification().unwrap(),
-            &last_modification_time
-        );
-        last_modification_time = *entry.times.get_last_modification().unwrap();
-        thread::sleep(time::Duration::from_secs(1));
-
-        assert!(!entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 2);
-        assert_eq!(
-            entry.times.get_last_modification().unwrap(),
-            &last_modification_time
-        );
-
-        entry.fields.insert(
-            "Title".to_string(),
-            Value::Unprotected("second title".to_string()),
-        );
+            .insert(fields::TITLE.to_string(), Value::unprotected("second title"));
 
         assert!(entry.update_history());
         assert!(entry.history.is_some());
         assert_eq!(entry.history.as_ref().unwrap().entries.len(), 3);
-        assert_ne!(
-            entry.times.get_last_modification().unwrap(),
-            &last_modification_time
-        );
-        last_modification_time = *entry.times.get_last_modification().unwrap();
+        assert_ne!(entry.times.last_modification.unwrap(), last_modification_time);
+        last_modification_time = entry.times.last_modification.unwrap();
         thread::sleep(time::Duration::from_secs(1));
 
         assert!(!entry.update_history());
         assert!(entry.history.is_some());
         assert_eq!(entry.history.as_ref().unwrap().entries.len(), 3);
-        assert_eq!(
-            entry.times.get_last_modification().unwrap(),
-            &last_modification_time
-        );
+        assert_eq!(entry.times.last_modification.unwrap(), last_modification_time);
 
         let last_history_entry = entry.history.as_ref().unwrap().entries.first().unwrap();
         assert_eq!(last_history_entry.get_title().unwrap(), "second title");
@@ -278,17 +209,12 @@ mod entry_tests {
     #[test]
     fn serialization() {
         assert_eq!(
-            serde_json::to_string(&Value::Bytes(vec![65, 66, 67])).unwrap(),
-            "[65,66,67]".to_string()
-        );
-
-        assert_eq!(
-            serde_json::to_string(&Value::Unprotected("ABC".to_string())).unwrap(),
+            serde_json::to_string(&Value::<String>::unprotected("ABC")).unwrap(),
             "\"ABC\"".to_string()
         );
 
         assert_eq!(
-            serde_json::to_string(&Value::Protected(SecStr::new("ABC".as_bytes().to_vec()))).unwrap(),
+            serde_json::to_string(&Value::<String>::protected("ABC")).unwrap(),
             "\"ABC\"".to_string()
         );
     }

@@ -10,13 +10,14 @@ pub use crate::{
         kdbx3::{Kdbx3OpenError, Kdbx3OuterHeaderError},
         kdbx4::{Kdbx4InnerHeaderError, Kdbx4OpenError, Kdbx4OuterHeaderError},
         variant_dictionary::VariantDictionaryError,
-        xml_db::parse::XmlParseError,
+        xml_db::ParseXmlError,
         DatabaseVersionParseError,
     },
+    key::{DatabaseKeyError, ParseXmlKeyFileError},
 };
 
 #[cfg(feature = "challenge_response")]
-pub use crate::key::{ChallengeResponseKeyError, DatabaseKeyError};
+pub use crate::key::ChallengeResponseKeyError;
 
 #[cfg(feature = "save_kdbx4")]
 pub use crate::db::DatabaseSaveError;

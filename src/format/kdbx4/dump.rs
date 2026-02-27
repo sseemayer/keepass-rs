@@ -4,7 +4,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 
 use crate::{
     crypt,
-    db::{Database, DatabaseSaveError, HeaderAttachment},
+    db::{Attachment, Database, DatabaseSaveError},
     format::{
         hmac_block_stream,
         io::WriteLengthTaggedExt,
@@ -90,16 +90,18 @@ pub fn dump_kdbx4(
         .inner_cipher_config
         .get_cipher(&inner_random_stream_key)?;
 
+    // convert database to XML and header attachments
+    let (xml, attachments) = crate::format::xml_db::to_xml(db, &mut *inner_cipher)?;
+
     // dump inner header into buffer
     let mut payload = Vec::new();
     KDBX4InnerHeader {
         inner_random_stream: db.config.inner_cipher_config.clone(),
         inner_random_stream_key,
     }
-    .dump(&db.header_attachments, &mut payload)?;
+    .dump(&attachments, &mut payload)?;
 
-    // after inner header is one XML document
-    crate::format::xml_db::dump::dump(db, &mut *inner_cipher, &mut payload)?;
+    payload.extend(xml);
 
     let payload_compressed = db
         .config
@@ -117,14 +119,6 @@ pub fn dump_kdbx4(
     writer.write_all(&payload_hmac)?;
 
     Ok(())
-}
-
-impl HeaderAttachment {
-    fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
-        writer.write_u8(self.flags)?;
-        writer.write_all(&self.content)?;
-        Ok(())
-    }
 }
 
 impl KDBX4OuterHeader {
@@ -164,11 +158,7 @@ impl KDBX4OuterHeader {
 }
 
 impl KDBX4InnerHeader {
-    fn dump(
-        &self,
-        header_attachments: &[HeaderAttachment],
-        writer: &mut dyn Write,
-    ) -> Result<(), DatabaseSaveError> {
+    fn dump(&self, header_attachments: &[Attachment], writer: &mut dyn Write) -> Result<(), DatabaseSaveError> {
         writer.write_all(&[INNER_HEADER_RANDOM_STREAM_ID])?;
         writer.write_u32::<LittleEndian>(4)?;
         writer.write_u32::<LittleEndian>(self.inner_random_stream.dump())?;
@@ -178,8 +168,9 @@ impl KDBX4InnerHeader {
 
         for attachment in header_attachments {
             writer.write_u8(INNER_HEADER_BINARY_ATTACHMENTS)?;
-            writer.write_u32::<LittleEndian>((attachment.content.len() + 1) as u32)?;
-            attachment.dump(writer)?;
+            writer.write_u32::<LittleEndian>((attachment.data.len() + 1) as u32)?;
+            writer.write_u8(if attachment.is_protected() { 0x01 } else { 0x00 })?;
+            writer.write_all(&attachment.data)?;
         }
 
         writer.write_u8(INNER_HEADER_END)?;

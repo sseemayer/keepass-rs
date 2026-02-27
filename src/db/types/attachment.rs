@@ -1,23 +1,28 @@
-/// Binary attachments stored in a database inner header
+use std::ops::{Deref, DerefMut};
+
+use crate::db::Value;
+
+/// Attachment for an entry.
+///
+/// Both header attachments (KDBX4-style) and XML attachments (KDBX3-style) will be converted to
+/// this format when parsing.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct HeaderAttachment {
-    pub flags: u8,
-    pub content: Vec<u8>,
+pub struct Attachment {
+    /// The binary data of the attachment.
+    pub data: Value<Vec<u8>>,
 }
 
-/// Collection of binary attachments in the metadata of an XML database
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachments {
-    pub binaries: Vec<BinaryAttachment>,
+impl Deref for Attachment {
+    type Target = Value<Vec<u8>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
 }
 
-/// Binary attachment in the metadata of a XML database
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct BinaryAttachment {
-    pub identifier: Option<String>,
-    pub compressed: bool,
-    pub content: Vec<u8>,
+impl DerefMut for Attachment {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
 }

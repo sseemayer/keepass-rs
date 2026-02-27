@@ -1,5 +1,5 @@
 use keepass::{
-    db::{Database, Entry, Group, Value},
+    db::{fields, Database, Entry, Group},
     DatabaseKey,
 };
 use std::fs::File;
@@ -12,16 +12,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut group = Group::new("Demo group");
 
     let mut entry = Entry::new();
-    entry
-        .fields
-        .insert("Title".to_string(), Value::Unprotected("Demo entry".to_string()));
-    entry
-        .fields
-        .insert("UserName".to_string(), Value::Unprotected("jdoe".to_string()));
-    entry.fields.insert(
-        "Password".to_string(),
-        Value::Protected("hunter2".as_bytes().into()),
-    );
+    entry.set_unprotected(fields::TITLE, "Demo entry");
+    entry.set_unprotected(fields::USERNAME, "jdoe");
+    entry.set_protected(fields::PASSWORD, "hunter2");
 
     group.entries.push(entry);
 

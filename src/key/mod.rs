@@ -1,9 +1,8 @@
 use std::io::Read;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
+use quick_xml::{encoding::EncodingError, events::Event, reader::Reader};
 use thiserror::Error;
-use xml::name::OwnedName;
-use xml::reader::{EventReader, XmlEvent};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypt::calculate_sha256;
@@ -17,26 +16,30 @@ mod yubikey;
 #[cfg(feature = "challenge_response")]
 pub use yubikey::{ChallengeResponseKey, ChallengeResponseKeyError};
 
-fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
-    let parser = EventReader::new(xml);
-
+fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyFileError> {
     let mut tag_stack = Vec::new();
 
     let mut key_version: Option<String> = None;
     let mut key_value: Option<String> = None;
 
-    for ev in parser {
-        match ev? {
-            XmlEvent::StartElement {
-                name: OwnedName { ref local_name, .. },
-                ..
-            } => {
-                tag_stack.push(local_name.clone());
+    let mut reader = Reader::from_reader(xml);
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+
+            Event::Start(e) => {
+                tag_stack.push(String::from_utf8_lossy(e.name().as_ref()).to_string());
             }
-            XmlEvent::EndElement { .. } => {
+
+            Event::End(_) => {
                 tag_stack.pop();
             }
-            XmlEvent::Characters(s) => {
+
+            Event::Text(e) => {
+                let s = e.decode()?.into_owned();
+
                 if tag_stack == ["KeyFile", "Meta", "Version"] {
                     key_version = Some(s);
                     continue;
@@ -47,14 +50,13 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
                     continue;
                 }
             }
-            _ => {}
+
+            _ => (),
         }
     }
 
-    let key_value = match key_value {
-        Some(k) => k,
-        None => return Err(DatabaseKeyError::InvalidKeyFile),
-    };
+    let key_value = key_value.ok_or(ParseXmlKeyFileError::EmptyKey)?;
+
     let key_bytes = key_value.as_bytes().to_vec();
 
     if key_version == Some("2.0".to_string()) {
@@ -80,6 +82,18 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     } else {
         Ok(key_bytes)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum ParseXmlKeyFileError {
+    #[error("The XML keyfile is missing a key data element")]
+    EmptyKey,
+
+    #[error(transparent)]
+    Encoding(#[from] EncodingError),
+
+    #[error(transparent)]
+    Xml(#[from] quick_xml::Error),
 }
 
 fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
@@ -210,7 +224,7 @@ pub enum DatabaseKeyError {
     Io(#[from] std::io::Error),
 
     #[error("XML error reading keyfile: {0}")]
-    Xml(#[from] xml::reader::Error),
+    Xml(#[from] quick_xml::Error),
 
     #[error("Invalid keyfile format")]
     InvalidKeyFile,

@@ -169,16 +169,10 @@ pub(crate) fn parse_kdbx3(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
     let (config, mut inner_decryptor, xml) = decrypt_kdbx3(data, db_key)?;
 
     // Parse XML data blocks
-    let database_content = crate::format::xml_db::parse::parse(&xml, &mut *inner_decryptor)
+    let mut db = crate::format::xml_db::parse_xml(&xml, &[], &mut *inner_decryptor)
         .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx3(Kdbx3OpenError::Xml(e))))?;
 
-    let db = Database {
-        config,
-        header_attachments: Vec::new(),
-        root: database_content.root.group,
-        deleted_objects: database_content.root.deleted_objects,
-        meta: database_content.meta,
-    };
+    db.config = config;
 
     Ok(db)
 }
@@ -295,5 +289,5 @@ pub enum Kdbx3OpenError {
     BlockHashMismatch(usize),
 
     #[error(transparent)]
-    Xml(#[from] crate::format::xml_db::parse::XmlParseError),
+    Xml(#[from] crate::format::xml_db::ParseXmlError),
 }
