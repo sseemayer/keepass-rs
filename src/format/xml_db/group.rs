@@ -29,6 +29,9 @@ pub struct Group {
     #[serde(default, rename = "IconID", with = "cs_opt_fromstr")]
     pub icon_id: Option<usize>,
 
+    #[serde(default, rename = "CustomIconUUID", skip_serializing_if = "Option::is_none")]
+    pub custom_icon_uuid: Option<UUID>,
+
     #[serde(default)]
     pub times: Option<Times>,
 
@@ -46,6 +49,9 @@ pub struct Group {
 
     #[serde(default, with = "cs_opt_string")]
     pub last_top_visible_entry: Option<UUID>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_data: Option<crate::format::xml_db::meta::CustomData>,
 
     #[serde(default, rename = "$value")]
     pub children: Vec<GroupOrEntry>,
@@ -68,12 +74,23 @@ impl Group {
         target.name = self.name;
         target.notes = self.notes;
         target.icon_id = self.icon_id;
+
+        if let Some(uuid) = self.custom_icon_uuid {
+            if custom_icons.contains_key(&uuid.0) {
+                target.custom_icon_uuid = Some(uuid.0);
+            }
+        }
+
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
         target.is_expanded = self.is_expanded.unwrap_or_default();
         target.default_autotype_sequence = self.default_auto_type_sequence;
         target.enable_autotype = self.enable_auto_type;
         target.enable_searching = self.enable_searching;
         target.last_top_visible_entry = self.last_top_visible_entry.map(|u| u.0);
+
+        if let Some(cd) = self.custom_data {
+            target.custom_data = cd.into();
+        }
 
         for child in self.children {
             match child {
@@ -127,17 +144,25 @@ impl Group {
             )?));
         }
 
+        let custom_data: Option<crate::format::xml_db::meta::CustomData> = if source.custom_data.is_empty() {
+            None
+        } else {
+            Some(source.custom_data.clone().into())
+        };
+
         Ok(Group {
             uuid: UUID(source.uuid),
             name: source.name.clone(),
             notes: source.notes.clone(),
             icon_id: source.icon_id,
+            custom_icon_uuid: source.custom_icon_uuid.map(UUID),
             times: Some(source.times.clone().into()),
             is_expanded: Some(source.is_expanded),
             default_auto_type_sequence: source.default_autotype_sequence.clone(),
             enable_auto_type: source.enable_autotype,
             enable_searching: source.enable_searching,
             last_top_visible_entry: source.last_top_visible_entry.map(|eid| UUID(eid)),
+            custom_data,
             children,
         })
     }
@@ -157,6 +182,7 @@ mod tests {
             <Name>Example Group</Name>
             <Notes>This is a test group.</Notes>
             <IconID>48</IconID>
+            <CustomIconUUID>oaKjpLGywcLR0tPU1dbX2A==</CustomIconUUID>
             <Times>
                 <CreationTime>2023-10-05T12:34:56Z</CreationTime>
                 <LastModificationTime>2023-10-06T12:34:56Z</LastModificationTime>
@@ -171,6 +197,12 @@ mod tests {
             <EnableAutoType>True</EnableAutoType>
             <EnableSearching>False</EnableSearching>
             <LastTopVisibleEntry>AAECAwQFBgcICQoLDA0ODw==</LastTopVisibleEntry>
+            <CustomData>
+                <Item>
+                    <Key>example_key</Key>
+                    <Value>example_value</Value>
+                </Item>
+            </CustomData>
             <Group>
                 <UUID>AAECAwQFBgcICQoLDA0ODw==</UUID>
                 <Name>Sub Group</Name>
@@ -193,6 +225,10 @@ mod tests {
         assert_eq!(group.0.name, "Example Group");
         assert_eq!(group.0.notes.unwrap(), "This is a test group.");
         assert_eq!(group.0.icon_id.unwrap(), 48);
+        assert_eq!(
+            group.0.custom_icon_uuid.unwrap().0.to_string(),
+            "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+        );
         assert_eq!(group.0.is_expanded, Some(true));
         assert_eq!(
             group.0.default_auto_type_sequence.unwrap(),
@@ -200,6 +236,7 @@ mod tests {
         );
         assert_eq!(group.0.enable_auto_type.unwrap(), true);
         assert_eq!(group.0.enable_searching.unwrap(), false);
+        assert_eq!(group.0.custom_data.is_some(), true);
         assert_eq!(group.0.children.len(), 4);
     }
 }
