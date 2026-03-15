@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
-    db::{Color, EntryId},
+    db::{AttachmentId, Color, EntryId},
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         meta::CustomData,
@@ -64,7 +64,7 @@ impl Entry {
     pub(crate) fn xml_to_db_handle(
         self,
         mut target: crate::db::EntryMut,
-        header_attachments: &[crate::db::Attachment],
+        attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
         custom_icons: &HashMap<Uuid, Vec<u8>>,
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
@@ -102,8 +102,9 @@ impl Entry {
         }
 
         for field in self.binary_fields {
-            if let Some(attachment) = header_attachments.get(field.value.value_ref) {
-                target.attachments.insert(field.key.clone(), attachment.clone());
+            let id = AttachmentId::new(field.value.value_ref);
+            if attachments.contains_key(&id) {
+                target.attachments.insert(field.key.clone(), id);
             }
         }
 
@@ -119,7 +120,7 @@ impl Entry {
 
                 e.xml_to_db_handle(
                     target.historical(i).unwrap(),
-                    header_attachments,
+                    attachments,
                     custom_icons,
                     inner_decryptor,
                 )?;
@@ -137,7 +138,6 @@ impl Entry {
     pub(crate) fn db_to_xml(
         db: crate::db::EntryRef,
         inner_encryptor: &mut dyn Cipher,
-        attachments: &mut Vec<crate::db::Attachment>,
         custom_icons: &mut HashMap<Uuid, Vec<u8>>,
     ) -> Result<Self, CryptographyError> {
         let custom_icon_uuid = if let Some((uuid, icon)) = db.custom_icon.as_ref() {
@@ -175,22 +175,14 @@ impl Entry {
             binary_fields.push(BinaryField {
                 key: key.clone(),
                 value: BinaryValue {
-                    value_ref: attachments.len(),
+                    value_ref: attachment.id(),
                 },
             });
-            attachments.push(attachment.clone());
         }
 
         let history = if let Some(h) = db.history.as_ref() {
             let entries = (0..h.entries.len())
-                .map(|i| {
-                    Entry::db_to_xml(
-                        db.historical(i).unwrap(),
-                        inner_encryptor,
-                        attachments,
-                        custom_icons,
-                    )
-                })
+                .map(|i| Entry::db_to_xml(db.historical(i).unwrap(), inner_encryptor, custom_icons))
                 .collect::<Result<Vec<_>, CryptographyError>>()?;
 
             Some(History { entries })

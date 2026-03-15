@@ -1,7 +1,7 @@
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::calculate_sha256,
-    db::{fields, Attachment, Database, DatabaseFormatError, DatabaseOpenError, GroupId, Value},
+    db::{fields, Database, DatabaseFormatError, DatabaseOpenError, GroupId, Value},
     format::DatabaseVersion,
     key::{DatabaseKey, DatabaseKeyError},
 };
@@ -359,12 +359,7 @@ fn parse_entries(
                 entry.fields = parsing_fields.clone();
 
                 for (desc, data) in entry_attachments.drain() {
-                    entry.attachments.insert(
-                        desc,
-                        Attachment {
-                            data: Value::protected(data),
-                        },
-                    );
+                    entry.add_attachment(desc, Value::protected(data));
                 }
 
                 parsing_fields.clear();

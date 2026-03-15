@@ -201,7 +201,7 @@ impl Binary {
     pub(crate) fn xml_to_db(
         self,
         inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-    ) -> Result<crate::db::Attachment, UnprotectError> {
+    ) -> Result<crate::db::Value<Vec<u8>>, UnprotectError> {
         let mut data = base64_engine::STANDARD.decode(self.value)?;
         let protected = self.protected.unwrap_or(false);
 
@@ -219,7 +219,7 @@ impl Binary {
             crate::db::Value::unprotected(data)
         };
 
-        Ok(crate::db::Attachment { data })
+        Ok(data)
     }
 }
 

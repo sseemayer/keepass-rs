@@ -68,7 +68,7 @@ mod kdbx4_tests {
     use crate::format::DatabaseVersion;
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-        db::{Attachment, Database},
+        db::Database,
         format::KDBX4_CURRENT_MINOR_VERSION,
         key::DatabaseKey,
     };
@@ -197,19 +197,9 @@ mod kdbx4_tests {
 
         db.root_mut().add_entry().edit(|e| {
             e.set_unprotected(fields::TITLE, "Demo entry");
-            e.attachments.insert(
-                "file1.txt".into(),
-                Attachment {
-                    data: Value::protected(vec![0x01, 0x02, 0x03, 0x04]),
-                },
-            );
 
-            e.attachments.insert(
-                "file2.txt".into(),
-                Attachment {
-                    data: Value::unprotected(vec![0x04, 0x03, 0x02, 0x01]),
-                },
-            );
+            e.add_attachment("file1.txt", Value::protected(vec![0x01, 0x02, 0x03, 0x04]));
+            e.add_attachment("file2.txt", Value::unprotected(vec![0x04, 0x03, 0x02, 0x01]));
         });
 
         let db_key = DatabaseKey::new().with_password("test");
@@ -222,13 +212,23 @@ mod kdbx4_tests {
         assert_eq!(decrypted_db.num_entries(), 1);
 
         let root = decrypted_db.root();
-        let attachments = &root.entries().next().unwrap().attachments;
 
-        assert_eq!(attachments.len(), 2);
-        assert_eq!(attachments["file1.txt"].is_protected(), true);
-        assert_eq!(attachments["file1.txt"].get(), &[0x01, 0x02, 0x03, 0x04]);
+        let entry = root.entry_by_name("Demo entry").unwrap();
 
-        assert_eq!(attachments["file2.txt"].is_protected(), false);
-        assert_eq!(attachments["file2.txt"].get(), &[0x04, 0x03, 0x02, 0x01]);
+        assert_eq!(entry.attachments().count(), 2);
+
+        assert!(entry.attachment_by_name("file1.txt").is_some());
+        assert!(entry.attachment_by_name("file1.txt").unwrap().is_protected());
+        assert_eq!(
+            entry.attachment_by_name("file1.txt").unwrap().get(),
+            &[0x01, 0x02, 0x03, 0x04]
+        );
+
+        assert!(entry.attachment_by_name("file2.txt").is_some());
+        assert!(!entry.attachment_by_name("file2.txt").unwrap().is_protected());
+        assert_eq!(
+            entry.attachment_by_name("file2.txt").unwrap().get(),
+            &[0x04, 0x03, 0x02, 0x01]
+        );
     }
 }

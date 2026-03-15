@@ -68,7 +68,7 @@ impl Group {
     pub(crate) fn xml_to_db_handle(
         self,
         mut target: crate::db::GroupMut,
-        header_attachments: &[crate::db::Attachment],
+        attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
         custom_icons: &HashMap<Uuid, Vec<u8>>,
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
@@ -97,11 +97,11 @@ impl Group {
             match child {
                 GroupOrEntry::Group(g) => {
                     let new_group = target.add_group_with_id(GroupId::from_uuid(g.uuid.0));
-                    g.xml_to_db_handle(new_group, header_attachments, custom_icons, inner_decryptor)?;
+                    g.xml_to_db_handle(new_group, attachments, custom_icons, inner_decryptor)?;
                 }
                 GroupOrEntry::Entry(e) => {
                     let new_entry = target.add_entry_with_id(EntryId::from_uuid(e.uuid.0));
-                    e.xml_to_db_handle(new_entry, header_attachments, custom_icons, inner_decryptor)?;
+                    e.xml_to_db_handle(new_entry, attachments, custom_icons, inner_decryptor)?;
                 }
             }
         }
@@ -113,7 +113,6 @@ impl Group {
     pub(crate) fn db_to_xml(
         source: crate::db::GroupRef,
         inner_cipher: &mut dyn Cipher,
-        attachments: &mut Vec<crate::db::Attachment>,
         custom_icons: &mut HashMap<Uuid, Vec<u8>>,
     ) -> Result<Self, CryptographyError> {
         let mut children = Vec::new();
@@ -122,7 +121,6 @@ impl Group {
             children.push(GroupOrEntry::Group(Group::db_to_xml(
                 g,
                 inner_cipher,
-                attachments,
                 custom_icons,
             )?));
         }
@@ -131,7 +129,6 @@ impl Group {
             children.push(GroupOrEntry::Entry(Entry::db_to_xml(
                 e,
                 inner_cipher,
-                attachments,
                 custom_icons,
             )?));
         }

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::{Deref, DerefMut},
 };
 
@@ -8,7 +8,9 @@ use uuid::Uuid;
 
 use crate::{
     db::{
-        fields, Attachment, AutoType, Color, CustomDataItem, GroupId, GroupMut, GroupRef, History, Times, Value,
+        attachment::{AttachmentMut, AttachmentRef},
+        fields, Attachment, AttachmentId, AutoType, Color, CustomDataItem, GroupId, GroupMut, GroupRef,
+        History, Times, Value,
     },
     Database,
 };
@@ -57,7 +59,7 @@ pub struct Entry {
     pub override_url: Option<String>,
     pub quality_check: Option<bool>,
 
-    pub attachments: HashMap<String, Attachment>,
+    pub attachments: HashMap<String, AttachmentId>,
 
     pub history: Option<History>,
 }
@@ -159,6 +161,18 @@ impl EntryRef<'_> {
         }
     }
 
+    pub(crate) fn new_historical(
+        database: &Database,
+        id: EntryId,
+        history_index: Option<usize>,
+    ) -> EntryRef<'_> {
+        EntryRef {
+            database,
+            id,
+            history_index,
+        }
+    }
+
     /// Get a reference to the parent group of this entry.
     pub fn parent(&self) -> GroupRef<'_> {
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
@@ -185,6 +199,31 @@ impl EntryRef<'_> {
     /// Get a reference to the underlying database
     pub fn database(&self) -> &Database {
         self.database
+    }
+
+    /// Get a reference to an attachment by id, if it exists.
+    pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
+        self.attachments
+            .values()
+            .find(|&attachment_id| *attachment_id == id)
+            .cloned()
+            .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
+    }
+
+    /// Get a reference to an attachment by name, if it exists.
+    pub fn attachment_by_name(&self, name: &str) -> Option<AttachmentRef<'_>> {
+        self.attachments
+            .get(name)
+            .cloned()
+            .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
+    }
+
+    /// Get an iterator over the attachments of this entry.
+    pub fn attachments(&self) -> impl Iterator<Item = AttachmentRef<'_>> {
+        self.attachments
+            .values()
+            .cloned()
+            .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
     }
 }
 
@@ -218,6 +257,18 @@ impl EntryMut<'_> {
             database,
             id,
             history_index: None,
+        }
+    }
+
+    pub(crate) fn new_historical(
+        database: &mut Database,
+        id: EntryId,
+        history_index: Option<usize>,
+    ) -> EntryMut<'_> {
+        EntryMut {
+            database,
+            id,
+            history_index,
         }
     }
 
@@ -285,6 +336,99 @@ impl EntryMut<'_> {
         self.database.group_mut(self.parent).unwrap()
     }
 
+    /// Get a mutable reference to an attachment by id, if it exists.
+    pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
+        self.attachments
+            .values()
+            .find(|&attachment_id| *attachment_id == id)
+            .cloned()
+            .map(move |attachment_id| AttachmentMut::new(self.database, attachment_id))
+    }
+
+    /// Get a mutable reference to an attachment by name, if it exists.
+    pub fn attachment_by_name_mut(&mut self, name: &str) -> Option<AttachmentMut<'_>> {
+        self.attachments
+            .get(name)
+            .cloned()
+            .map(move |attachment_id| AttachmentMut::new(self.database, attachment_id))
+    }
+
+    /// Apply a closure to each attachment of this entry, with mutable access.
+    pub fn foreach_attachment_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(AttachmentMut<'_>),
+    {
+        let attachments: Vec<AttachmentId> = self.attachments.values().copied().collect();
+        for attachment_id in attachments {
+            f(AttachmentMut::new(self.database, attachment_id));
+        }
+    }
+
+    /// Add an attachment to this entry with the given name and data.
+    pub fn add_attachment(&mut self, name: impl Into<String>, data: Value<Vec<u8>>) -> AttachmentMut<'_> {
+        let id = AttachmentId::next_free(&self.database);
+
+        let entries: HashSet<(EntryId, Option<usize>)> = vec![(self.id, None)].into_iter().collect();
+
+        self.database
+            .attachments
+            .insert(id, Attachment { id, entries, data });
+
+        if let Some(old_id) = self.attachments.insert(name.into(), id) {
+            // if there was an old attachment with this name, remove it
+            self.remove_attachment_by_id(old_id);
+        }
+
+        AttachmentMut::new(self.database, id)
+    }
+
+    /// Remove an attachment by name from this entry.
+    ///
+    /// If it was the last reference to the attachment, remove it from the database.
+    pub fn remove_attachment_by_name(&mut self, name: &str) {
+        let id = self.id;
+
+        // remove the attachment reference from this entry
+        if let Some(attachment_id) = self.attachments.remove(name) {
+            if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
+                attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+                // if this was the last entry referencing the attachment, remove it from the database
+                if attachment.entries.is_empty() {
+                    attachment.remove();
+                }
+            }
+        }
+    }
+
+    /// Remove an attachment by id from this entry.
+    ///
+    /// If it was the last reference to the attachment, remove it from the database.
+    pub fn remove_attachment_by_id(&mut self, attachment_id: AttachmentId) {
+        let id = self.id;
+
+        // remove the attachment reference from this entry
+        let mut names_to_remove = Vec::new();
+        for (name, &att_id) in &self.attachments {
+            if att_id == attachment_id {
+                names_to_remove.push(name.clone());
+            }
+        }
+
+        for name in names_to_remove {
+            self.attachments.remove(&name);
+        }
+
+        if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
+            attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+            // if this was the last entry referencing the attachment, remove it from the database
+            if attachment.entries.is_empty() {
+                attachment.remove();
+            }
+        }
+    }
+
     /// Move this entry to another group.
     ///
     /// NOTE: will always operate on the main Entry, not a historical version of it.
@@ -313,7 +457,19 @@ impl EntryMut<'_> {
 
     /// Remove this entry from the database, including all its attachments.
     #[allow(clippy::expect_used, clippy::missing_panics_doc)] // the entry and parent should always be found
-    pub fn remove(self) {
+    pub fn remove(mut self) {
+        let id = self.id;
+
+        // remove references to this entry from attachments
+        self.foreach_attachment_mut(|mut attachment| {
+            attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+            // if this was the last entry referencing the attachment, remove it from the database
+            if attachment.entries.is_empty() {
+                attachment.remove();
+            }
+        });
+
         let entry = self.database.entries.remove(&self.id).expect("Entry not found");
 
         // Remove from parent group
@@ -339,7 +495,7 @@ impl Deref for EntryMut<'_> {
         let entry = self.database.entries.get(&self.id).expect("Entry not found");
 
         if let Some(n) = self.history_index {
-            // UNWRAP safety: history existance checked on EntryMut creation
+            // UNWRAP safety: history existence checked on EntryMut creation
             &entry.history.as_ref().unwrap().entries[n]
         } else {
             entry
@@ -354,7 +510,7 @@ impl DerefMut for EntryMut<'_> {
         let entry = self.database.entries.get_mut(&self.id).expect("Entry not found");
 
         if let Some(n) = self.history_index {
-            // UNWRAP safety: history existance checked on EntryMut creation
+            // UNWRAP safety: history existence checked on EntryMut creation
             &mut entry.history.as_mut().unwrap().entries[n]
         } else {
             entry
@@ -425,6 +581,15 @@ impl EntryTrack<'_> {
         this.set_unprotected(key, value);
         this.times.last_modification = Some(Times::now());
     }
+
+    /// Add an attachment, tracking changes.
+    pub fn add_attachment(&mut self, name: impl Into<String>, data: Value<Vec<u8>>) -> AttachmentMut<'_> {
+        self.times.last_modification = Some(Times::now());
+        let mut this = self.as_mut();
+        let id = this.add_attachment(name, data).id;
+
+        AttachmentMut::new(self.database, id)
+    }
 }
 
 impl Deref for EntryTrack<'_> {
@@ -459,7 +624,7 @@ impl Drop for EntryTrack<'_> {
 mod tests {
 
     use crate::{
-        db::{fields, Attachment, Value},
+        db::{fields, Value},
         Database,
     };
 
@@ -497,12 +662,7 @@ mod tests {
                 crate::db::Value::unprotected(format!("modified_{}", e.get(fields::USERNAME).unwrap())),
             );
 
-            e.attachments.insert(
-                "Attachment 1".to_string(),
-                Attachment {
-                    data: Value::protected(b"Attachment data".to_vec()),
-                },
-            );
+            e.add_attachment("Attachment 1", Value::protected(b"Attachment data".to_vec()));
         });
 
         assert_eq!(db.num_attachments(), 1);
@@ -532,9 +692,9 @@ mod tests {
             .is_err());
 
         db.entry_mut(entry_id).unwrap().edit(|e| {
-            let val = e.attachments["Attachment 1"].to_vec();
+            let mut att = e.attachment_by_name_mut("Attachment 1").unwrap();
 
-            e.attachments.get_mut("Attachment 1").unwrap().data = Value::unprotected(val);
+            att.data = Value::unprotected(b"Modified attachment data".to_vec());
         });
 
         db.entry_mut(entry_id).unwrap().remove();

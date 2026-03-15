@@ -11,7 +11,7 @@ pub(crate) mod value;
 
 use std::collections::HashMap;
 
-pub use attachment::Attachment;
+pub use attachment::{Attachment, AttachmentId};
 pub use autotype::{AutoType, AutoTypeAssociation};
 pub use color::{Color, ParseColorError};
 pub use custom_data::{CustomDataItem, CustomDataValue};
@@ -22,7 +22,10 @@ pub use meta::{MemoryProtection, Meta};
 pub use times::Times;
 pub use value::Value;
 
-use crate::config::DatabaseConfig;
+use crate::{
+    config::DatabaseConfig,
+    db::attachment::{AttachmentMut, AttachmentRef},
+};
 
 use chrono::NaiveDateTime;
 use uuid::Uuid;
@@ -39,6 +42,9 @@ pub struct Database {
 
     /// Root node of the KeePass database
     pub(crate) root: GroupId,
+
+    /// All attachments in the database, stored in a flat HashMap
+    pub(crate) attachments: HashMap<AttachmentId, Attachment>,
 
     /// All entries in the database, stored in a flat HashMap
     pub(crate) entries: HashMap<EntryId, Entry>,
@@ -76,6 +82,7 @@ impl Database {
             config: DatabaseConfig::default(),
             meta: Meta::default(),
             root: root_id,
+            attachments: HashMap::new(),
             entries: HashMap::new(),
             groups,
             deleted_objects: HashMap::new(),
@@ -92,6 +99,7 @@ impl Database {
             config,
             meta: Meta::default(),
             root: root_id,
+            attachments: HashMap::new(),
             entries: HashMap::new(),
             groups,
             deleted_objects: HashMap::new(),
@@ -122,7 +130,7 @@ impl Database {
 
     /// Get the number of attachments in the database
     pub fn num_attachments(&self) -> usize {
-        self.entries.values().map(|e| e.attachments.len()).sum()
+        self.attachments.len()
     }
 
     /// Get the number of entries in the database
@@ -168,6 +176,20 @@ impl Database {
         for id in ids {
             f(GroupMut::new(self, id));
         }
+    }
+
+    /// Get an immutable reference to the attachment with the given ID, if it exists
+    pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
+        self.attachments
+            .contains_key(&id)
+            .then(move || AttachmentRef::new(self, id))
+    }
+
+    /// Get a mutable reference to the attachment with the given ID, if it exists
+    pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
+        self.attachments
+            .contains_key(&id)
+            .then(move || AttachmentMut::new(self, id))
     }
 
     /// Get an immutable reference to the entry with the given ID, if it exists

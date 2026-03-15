@@ -8,7 +8,7 @@ use thiserror::Error;
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{Attachment, Database, DatabaseFormatError, DatabaseOpenError, Value},
+    db::{Database, DatabaseFormatError, DatabaseOpenError, Value},
     format::{
         hmac_block_stream,
         kdbx4::{
@@ -24,23 +24,6 @@ use crate::{
 };
 
 use super::KDBX4InnerHeader;
-
-impl From<&[u8]> for Attachment {
-    fn from(data: &[u8]) -> Self {
-        let flags = data[0];
-        let data = data[1..].to_vec();
-
-        let protected = flags & 0x01 != 0;
-
-        let data = if protected {
-            Value::protected(data)
-        } else {
-            Value::unprotected(data)
-        };
-
-        Attachment { data }
-    }
-}
 
 /// Open, decrypt and parse a KeePass database from a source and key elements
 pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database, DatabaseOpenError> {
@@ -59,7 +42,7 @@ pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
 pub(crate) fn decrypt_kdbx4(
     data: &[u8],
     db_key: &DatabaseKey,
-) -> Result<(DatabaseConfig, Vec<Attachment>, Box<dyn Cipher>, Vec<u8>), DatabaseOpenError> {
+) -> Result<(DatabaseConfig, Vec<Value<Vec<u8>>>, Box<dyn Cipher>, Vec<u8>), DatabaseOpenError> {
     let version = DatabaseVersion::parse(data)?;
 
     // parse header
@@ -292,7 +275,7 @@ pub enum Kdbx4OuterHeaderError {
 
 fn parse_inner_header(
     data: &[u8],
-) -> Result<(Vec<Attachment>, KDBX4InnerHeader, usize), Kdbx4InnerHeaderError> {
+) -> Result<(Vec<Value<Vec<u8>>>, KDBX4InnerHeader, usize), Kdbx4InnerHeaderError> {
     let mut pos = 0;
 
     let mut inner_random_stream = None;
@@ -316,8 +299,18 @@ fn parse_inner_header(
             INNER_HEADER_RANDOM_STREAM_KEY => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
             INNER_HEADER_BINARY_ATTACHMENTS => {
-                let header_attachment = Attachment::from(entry_buffer);
-                header_attachments.push(header_attachment);
+                let flags = entry_buffer[0];
+                let data = entry_buffer[1..].to_vec();
+
+                let protected = flags & 0x01 != 0;
+
+                let data = if protected {
+                    Value::protected(data)
+                } else {
+                    Value::unprotected(data)
+                };
+
+                header_attachments.push(data);
             }
 
             _ => {
