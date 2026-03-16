@@ -210,6 +210,7 @@ pub struct DeletedObjects {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct DeletedObject {
     #[serde(rename = "UUID")]
     uuid: UUID,
