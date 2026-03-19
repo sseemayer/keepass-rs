@@ -68,10 +68,10 @@ pub struct Meta {
     pub last_top_visible_group: Option<Uuid>,
 
     /// Maximum number of items of history to keep
-    pub history_max_items: Option<usize>,
+    pub history_max_items: Option<isize>,
 
     /// Maximum size of the history to keep
-    pub history_max_size: Option<usize>,
+    pub history_max_size: Option<isize>,
 
     /// Last time the settings were changed
     pub settings_changed: Option<NaiveDateTime>,
