@@ -187,8 +187,8 @@ mod kdbx4_otp_tests {
         let otp_str =
             "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
-        let entry = db
-            .root
+        let root = db.root();
+        let entry = root
             .entry_by_name("this entry has totp")
             .ok_or("Entry not found")?;
         assert_eq!(entry.get_title(), Some("this entry has totp"));

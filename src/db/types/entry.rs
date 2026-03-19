@@ -1,14 +1,47 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::{Deref, DerefMut},
+};
 
+use thiserror::Error;
 use uuid::Uuid;
 
-use crate::db::{fields, Attachment, AutoType, Color, CustomDataItem, History, Times, Value};
+use crate::{
+    db::{
+        attachment::{AttachmentMut, AttachmentRef},
+        fields, Attachment, AttachmentId, AutoType, Color, CustomDataItem, GroupId, GroupMut, GroupRef,
+        History, Times, Value,
+    },
+    Database,
+};
+
+/// Unique identifier for an [Entry]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+pub struct EntryId(Uuid);
+
+impl EntryId {
+    pub(crate) fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+
+    /// Get the Uuid contained inside
+    pub fn uuid(&self) -> Uuid {
+        self.0
+    }
+}
 
 /// A database entry containing several key-value fields.
-#[derive(Debug, Default, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct Entry {
-    pub uuid: Uuid,
+    pub(crate) id: EntryId,
+    pub(crate) parent: GroupId,
+
     pub fields: HashMap<String, Value<String>>,
     pub autotype: Option<AutoType>,
     pub tags: Vec<String>,
@@ -26,196 +59,647 @@ pub struct Entry {
     pub override_url: Option<String>,
     pub quality_check: Option<bool>,
 
-    pub attachments: HashMap<String, Attachment>,
+    pub attachments: HashMap<String, AttachmentId>,
 
     pub history: Option<History>,
 }
+
 impl Entry {
-    pub fn new() -> Entry {
+    pub(crate) fn new(parent: GroupId) -> Self {
+        Entry::with_id(EntryId::new(), parent)
+    }
+
+    pub(crate) fn with_id(id: EntryId, parent: GroupId) -> Self {
         Entry {
-            uuid: Uuid::new_v4(),
+            id,
+            parent,
+            fields: HashMap::new(),
+            autotype: None,
+            tags: Vec::new(),
             times: Times::new(),
-            ..Default::default()
+            custom_data: HashMap::new(),
+            icon_id: None,
+            custom_icon: None,
+            foreground_color: None,
+            background_color: None,
+            override_url: None,
+            quality_check: None,
+            attachments: HashMap::new(),
+            history: Some(History::default()),
         }
     }
-}
 
-impl<'a> Entry {
+    /// Get the unique identifier for the [Entry]
+    pub fn id(&self) -> EntryId {
+        self.id
+    }
+
     /// Get a field by name, taking care of unprotecting Protected values automatically
-    pub fn get(&'a self, key: &str) -> Option<&'a str> {
+    pub fn get(&self, key: &str) -> Option<&str> {
         self.fields.get(key).map(|v| v.as_str())
-    }
-
-    /// Convenience method for getting the raw value of the 'otp' field
-    pub fn get_raw_otp_value(&'a self) -> Option<&'a str> {
-        self.get(fields::OTP)
-    }
-
-    /// Convenience method for getting the value of the 'Title' field
-    pub fn get_title(&'a self) -> Option<&'a str> {
-        self.get(fields::TITLE)
-    }
-
-    /// Convenience method for getting the value of the 'UserName' field
-    pub fn get_username(&'a self) -> Option<&'a str> {
-        self.get(fields::USERNAME)
-    }
-
-    /// Convenience method for getting the value of the 'Password' field
-    pub fn get_password(&'a self) -> Option<&'a str> {
-        self.get(fields::PASSWORD)
-    }
-
-    /// Convenience method for getting the value of the 'URL' field
-    pub fn get_url(&'a self) -> Option<&'a str> {
-        self.get(fields::URL)
-    }
-
-    /// Adds the current version of the entry to the entry's history
-    /// and updates the last modification timestamp.
-    /// The history will only be updated if the entry has
-    /// uncommitted changes.
-    ///
-    /// Returns whether or not a new history entry was added.
-    pub fn update_history(&mut self) -> bool {
-        if self.history.is_none() {
-            self.history = Some(History::default());
-        }
-
-        if !self.has_uncommitted_changes() {
-            return false;
-        }
-
-        self.times.last_modification = Some(Times::now());
-
-        let mut new_history_entry = self.clone();
-        new_history_entry.history.take().unwrap();
-
-        // TODO should we validate that the history is enabled?
-        // TODO should we validate the maximum size of the history?
-        self.history.as_mut().unwrap().add_entry(new_history_entry);
-
-        true
-    }
-
-    /// Determines if the entry was modified since the last
-    /// history update.
-    pub(crate) fn has_uncommitted_changes(&self) -> bool {
-        if let Some(history) = self.history.as_ref() {
-            if history.entries.is_empty() {
-                return true;
-            }
-
-            let new_times = Times::default();
-
-            let mut sanitized_entry = self.clone();
-            sanitized_entry.times = new_times.clone();
-            sanitized_entry.history.take();
-
-            let mut last_history_entry = history.entries.first().unwrap().clone();
-            last_history_entry.times = new_times.clone();
-            last_history_entry.history.take();
-
-            if sanitized_entry.eq(&last_history_entry) {
-                return false;
-            }
-        }
-        true
     }
 
     pub fn set(&mut self, key: impl Into<String>, value: Value<String>) {
         self.fields.insert(key.into(), value);
     }
 
+    /// Set a field's unprotected value by name
     pub fn set_unprotected(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.set(key, Value::unprotected(value));
     }
 
+    /// Set a field's protected value by name
     pub fn set_protected(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.set(key, Value::protected(value));
+    }
+
+    /// Convenience method for getting the raw value of the 'otp' field
+    pub fn get_raw_otp_value(&self) -> Option<&str> {
+        self.get(fields::OTP)
+    }
+
+    /// Convenience method for getting the value of the 'Title' field
+    pub fn get_title(&self) -> Option<&str> {
+        self.get(fields::TITLE)
+    }
+
+    /// Convenience method for getting the value of the 'UserName' field
+    pub fn get_username(&self) -> Option<&str> {
+        self.get(fields::USERNAME)
+    }
+
+    /// Convenience method for getting the value of the 'Password' field
+    pub fn get_password(&self) -> Option<&str> {
+        self.get(fields::PASSWORD)
+    }
+
+    /// Convenience method for getting the value of the 'URL' field
+    pub fn get_url(&self) -> Option<&str> {
+        self.get(fields::URL)
+    }
+}
+
+impl std::fmt::Display for EntryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// An immutable reference to an [Entry]. Implements [Deref] to [&Entry][Entry].
+pub struct EntryRef<'a> {
+    database: &'a Database,
+    id: EntryId,
+    history_index: Option<usize>,
+}
+
+impl EntryRef<'_> {
+    pub(crate) fn new(database: &Database, id: EntryId) -> EntryRef<'_> {
+        EntryRef {
+            database,
+            id,
+            history_index: None,
+        }
+    }
+
+    pub(crate) fn new_historical(
+        database: &Database,
+        id: EntryId,
+        history_index: Option<usize>,
+    ) -> EntryRef<'_> {
+        EntryRef {
+            database,
+            id,
+            history_index,
+        }
+    }
+
+    /// Get a reference to the parent group of this entry.
+    pub fn parent(&self) -> GroupRef<'_> {
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
+        self.database.group(self.parent).unwrap()
+    }
+
+    /// Gets an [EntryRef] to a historical version of the [Entry], if it exists
+    pub fn historical(&self, index: usize) -> Option<EntryRef<'_>> {
+        if let Some(h) = &self.history {
+            if index < h.entries.len() {
+                Some(EntryRef {
+                    database: self.database,
+                    id: self.id,
+                    history_index: Some(index),
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Get a reference to the underlying database
+    pub fn database(&self) -> &Database {
+        self.database
+    }
+
+    /// Get a reference to an attachment by id, if it exists.
+    pub fn attachment(&self, id: AttachmentId) -> Option<AttachmentRef<'_>> {
+        self.attachments
+            .values()
+            .find(|&attachment_id| *attachment_id == id)
+            .cloned()
+            .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
+    }
+
+    /// Get a reference to an attachment by name, if it exists.
+    pub fn attachment_by_name(&self, name: &str) -> Option<AttachmentRef<'_>> {
+        self.attachments
+            .get(name)
+            .cloned()
+            .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
+    }
+
+    /// Get an iterator over the attachments of this entry.
+    pub fn attachments(&self) -> impl Iterator<Item = AttachmentRef<'_>> {
+        self.attachments
+            .values()
+            .cloned()
+            .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
+    }
+}
+
+impl Deref for EntryRef<'_> {
+    type Target = Entry;
+
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
+    fn deref(&self) -> &Self::Target {
+        // UNWRAP safety: EntryRef can only be constructed with a valid EntryId
+        let entry = self.database.entries.get(&self.id).expect("Entry not found");
+
+        if let Some(n) = self.history_index {
+            // UNWRAP safety: history existance checked on EntryRef creation
+            &entry.history.as_ref().unwrap().entries[n]
+        } else {
+            entry
+        }
+    }
+}
+
+/// A mutable reference to an [Entry]. Implements [DerefMut] to [&mut Entry][Entry].
+pub struct EntryMut<'a> {
+    database: &'a mut Database,
+    id: EntryId,
+    history_index: Option<usize>,
+}
+
+impl EntryMut<'_> {
+    pub(crate) fn new(database: &mut Database, id: EntryId) -> EntryMut<'_> {
+        EntryMut {
+            database,
+            id,
+            history_index: None,
+        }
+    }
+
+    pub(crate) fn new_historical(
+        database: &mut Database,
+        id: EntryId,
+        history_index: Option<usize>,
+    ) -> EntryMut<'_> {
+        EntryMut {
+            database,
+            id,
+            history_index,
+        }
+    }
+
+    /// Gets an [EntryMut] to a historical version of the [Entry], if it exists
+    pub(crate) fn historical(&mut self, index: usize) -> Option<EntryMut<'_>> {
+        if let Some(h) = &self.history {
+            if index < h.entries.len() {
+                Some(EntryMut {
+                    database: self.database,
+                    id: self.id,
+                    history_index: Some(index),
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Get an immutable reference to the entry.
+    pub fn as_ref(&self) -> EntryRef<'_> {
+        EntryRef {
+            database: self.database,
+            id: self.id,
+            history_index: self.history_index,
+        }
+    }
+
+    /// Convenience method to edit the entry in a closure.
+    pub fn edit(&mut self, f: impl FnOnce(&mut EntryMut<'_>)) -> &mut Self {
+        f(self);
+        self
+    }
+
+    /// Convenience method to edit the entry in a closure, tracking changes.
+    pub fn edit_tracking(&mut self, f: impl FnOnce(&mut EntryTrack<'_>)) -> &mut Self {
+        {
+            let mut tracked = self.track_changes();
+            f(&mut tracked);
+        }
+        self
+    }
+
+    /// Convert this mutable reference into a history-tracking variant that will persist the
+    /// current state of the entry into its history when dropped.
+    ///
+    /// NOTE: will always operate on the main Entry, not a historical version of it.
+    pub fn track_changes(&mut self) -> EntryTrack<'_> {
+        let mut historical: Entry = self.deref().deref().clone();
+
+        // Remove history from the historical entry to avoid exponential growth
+        historical.history = None;
+
+        EntryTrack {
+            database: self.database,
+            id: self.id,
+            historical,
+        }
+    }
+
+    /// Get a mutable reference to the parent group of this entry.
+    pub fn parent_mut(&mut self) -> GroupMut<'_> {
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
+        self.database.group_mut(self.parent).unwrap()
+    }
+
+    /// Get a mutable reference to an attachment by id, if it exists.
+    pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
+        self.attachments
+            .values()
+            .find(|&attachment_id| *attachment_id == id)
+            .cloned()
+            .map(move |attachment_id| AttachmentMut::new(self.database, attachment_id))
+    }
+
+    /// Get a mutable reference to an attachment by name, if it exists.
+    pub fn attachment_by_name_mut(&mut self, name: &str) -> Option<AttachmentMut<'_>> {
+        self.attachments
+            .get(name)
+            .cloned()
+            .map(move |attachment_id| AttachmentMut::new(self.database, attachment_id))
+    }
+
+    /// Apply a closure to each attachment of this entry, with mutable access.
+    pub fn foreach_attachment_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(AttachmentMut<'_>),
+    {
+        let attachments: Vec<AttachmentId> = self.attachments.values().copied().collect();
+        for attachment_id in attachments {
+            f(AttachmentMut::new(self.database, attachment_id));
+        }
+    }
+
+    /// Add an attachment to this entry with the given name and data.
+    pub fn add_attachment(&mut self, name: impl Into<String>, data: Value<Vec<u8>>) -> AttachmentMut<'_> {
+        let id = AttachmentId::next_free(&self.database);
+
+        let entries: HashSet<(EntryId, Option<usize>)> = vec![(self.id, None)].into_iter().collect();
+
+        self.database
+            .attachments
+            .insert(id, Attachment { id, entries, data });
+
+        if let Some(old_id) = self.attachments.insert(name.into(), id) {
+            // if there was an old attachment with this name, remove it
+            self.remove_attachment_by_id(old_id);
+        }
+
+        AttachmentMut::new(self.database, id)
+    }
+
+    /// Remove an attachment by name from this entry.
+    ///
+    /// If it was the last reference to the attachment, remove it from the database.
+    pub fn remove_attachment_by_name(&mut self, name: &str) {
+        let id = self.id;
+
+        // remove the attachment reference from this entry
+        if let Some(attachment_id) = self.attachments.remove(name) {
+            if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
+                attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+                // if this was the last entry referencing the attachment, remove it from the database
+                if attachment.entries.is_empty() {
+                    attachment.remove();
+                }
+            }
+        }
+    }
+
+    /// Remove an attachment by id from this entry.
+    ///
+    /// If it was the last reference to the attachment, remove it from the database.
+    pub fn remove_attachment_by_id(&mut self, attachment_id: AttachmentId) {
+        let id = self.id;
+
+        // remove the attachment reference from this entry
+        let mut names_to_remove = Vec::new();
+        for (name, &att_id) in &self.attachments {
+            if att_id == attachment_id {
+                names_to_remove.push(name.clone());
+            }
+        }
+
+        for name in names_to_remove {
+            self.attachments.remove(&name);
+        }
+
+        if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
+            attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+            // if this was the last entry referencing the attachment, remove it from the database
+            if attachment.entries.is_empty() {
+                attachment.remove();
+            }
+        }
+    }
+
+    /// Move this entry to another group.
+    ///
+    /// NOTE: will always operate on the main Entry, not a historical version of it.
+    pub fn move_to(&mut self, group_id: GroupId) -> Result<(), DestinationGroupNotFoundError> {
+        if !self.database.groups.contains_key(&group_id) {
+            return Err(DestinationGroupNotFoundError(group_id));
+        }
+
+        let my_id = self.id;
+
+        let mut parent = self.parent_mut();
+        parent.entries.remove(&my_id);
+
+        #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // group existence is checked
+        let mut new_parent = self.database.group_mut(group_id).unwrap();
+        new_parent.entries.insert(my_id);
+        self.parent = group_id;
+
+        Ok(())
+    }
+
+    /// Get a mutable reference to the underlying database
+    pub fn database_mut(&mut self) -> &mut Database {
+        self.database
+    }
+
+    /// Remove this entry from the database, including all its attachments.
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // the entry and parent should always be found
+    pub fn remove(mut self) {
+        let id = self.id;
+
+        // remove references to this entry from attachments
+        self.foreach_attachment_mut(|mut attachment| {
+            attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+            // if this was the last entry referencing the attachment, remove it from the database
+            if attachment.entries.is_empty() {
+                attachment.remove();
+            }
+        });
+
+        let entry = self.database.entries.remove(&self.id).expect("Entry not found");
+
+        // Remove from parent group
+        let mut parent = self
+            .database
+            .group_mut(entry.parent)
+            .expect("Parent group not found");
+        parent.entries.remove(&self.id);
+    }
+}
+
+/// Error type for when a destination [GroupId] is provided that does not exist in the database
+#[derive(Error, Debug)]
+#[error("Destination group {0} not found")]
+pub struct DestinationGroupNotFoundError(pub(crate) GroupId);
+
+impl Deref for EntryMut<'_> {
+    type Target = Entry;
+
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
+    fn deref(&self) -> &Self::Target {
+        // UNWRAP safety: EntryMut can only be constructed with a valid EntryId
+        let entry = self.database.entries.get(&self.id).expect("Entry not found");
+
+        if let Some(n) = self.history_index {
+            // UNWRAP safety: history existence checked on EntryMut creation
+            &entry.history.as_ref().unwrap().entries[n]
+        } else {
+            entry
+        }
+    }
+}
+
+impl DerefMut for EntryMut<'_> {
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // UNWRAP safety: EntryMut can only be constructed with a valid EntryId
+        let entry = self.database.entries.get_mut(&self.id).expect("Entry not found");
+
+        if let Some(n) = self.history_index {
+            // UNWRAP safety: history existence checked on EntryMut creation
+            &mut entry.history.as_mut().unwrap().entries[n]
+        } else {
+            entry
+        }
+    }
+}
+
+/// A variant of [EntryMut] that will persist the history of the entry when dropped.
+#[clippy::has_significant_drop]
+pub struct EntryTrack<'a> {
+    database: &'a mut Database,
+    id: EntryId,
+
+    historical: Entry,
+}
+
+impl EntryTrack<'_> {
+    pub fn as_mut(&mut self) -> EntryMut<'_> {
+        EntryMut {
+            database: self.database,
+            id: self.id,
+            history_index: None,
+        }
+    }
+
+    /// Move this entry to another group, tracking the change in history.
+    pub fn move_to(&mut self, group_id: GroupId) -> Result<(), DestinationGroupNotFoundError> {
+        self.as_mut().move_to(group_id)?;
+        self.times.location_changed = Some(Times::now());
+        Ok(())
+    }
+
+    /// Remove this entry from the database, tracking the change in history.
+    pub fn remove(mut self) {
+        let this = self.as_mut();
+        this.database
+            .deleted_objects
+            .insert(this.id.uuid(), Some(Times::now()));
+
+        // use EntryMut::remove to handle actual removal
+        this.remove();
+    }
+
+    /// Convenience method to edit the entry in a closure, tracking changes.
+    pub fn edit(&mut self, f: impl FnOnce(&mut EntryTrack<'_>)) -> &mut Self {
+        f(self);
+        self.times.last_modification = Some(Times::now());
+        self
+    }
+
+    /// Set a field value, tracking changes. See [crate::db::fields] for common field names.
+    pub fn set(&mut self, key: impl Into<String>, value: Value<String>) {
+        let mut this = self.as_mut();
+        this.set(key, value);
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set a protected field value, tracking changes. See [crate::db::fields] for common field names.
+    pub fn set_protected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        let mut this = self.as_mut();
+        this.set_protected(key, value);
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set an unprotected field value, tracking changes. See [crate::db::fields] for common field names.
+    pub fn set_unprotected(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        let mut this = self.as_mut();
+        this.set_unprotected(key, value);
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Add an attachment, tracking changes.
+    pub fn add_attachment(&mut self, name: impl Into<String>, data: Value<Vec<u8>>) -> AttachmentMut<'_> {
+        self.times.last_modification = Some(Times::now());
+        let mut this = self.as_mut();
+        let id = this.add_attachment(name, data).id;
+
+        AttachmentMut::new(self.database, id)
+    }
+}
+
+impl Deref for EntryTrack<'_> {
+    type Target = Entry;
+
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
+    fn deref(&self) -> &Self::Target {
+        self.database.entries.get(&self.id).expect("Entry not found")
+    }
+}
+
+impl DerefMut for EntryTrack<'_> {
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.database.entries.get_mut(&self.id).expect("Entry not found")
+    }
+}
+
+impl Drop for EntryTrack<'_> {
+    fn drop(&mut self) {
+        // see if the entry is still there (it might have been removed)
+        if let Some(entry) = self.database.entries.get_mut(&self.id) {
+            let parent_id = entry.parent;
+            let historical = std::mem::replace(&mut self.historical, Entry::new(parent_id));
+
+            entry.history.get_or_insert_default().add_entry(historical);
+        }
     }
 }
 
 #[cfg(test)]
-mod entry_tests {
-    use std::{thread, time};
+mod tests {
 
-    use crate::db::{fields, Entry, Value};
+    use crate::{
+        db::{fields, Value},
+        Database,
+    };
 
     #[test]
-    fn update_history() {
-        let mut entry = Entry::new();
-        let mut last_modification_time = entry.times.last_modification.unwrap();
+    fn test_entry() {
+        let mut db = Database::new();
 
-        entry.set_unprotected(fields::USERNAME, "user");
+        let entry_id = db
+            .root_mut()
+            .add_entry()
+            .edit(|e| {
+                e.set_unprotected(fields::TITLE, "Entry 1");
+                e.set(
+                    fields::USERNAME,
+                    crate::db::Value::unprotected("user".to_string()),
+                );
+                e.set_protected(fields::PASSWORD, "asdf");
+            })
+            .id();
 
-        // Making sure to wait 1 sec before update the history, to make
-        // sure that we get a different modification timestamp.
-        thread::sleep(time::Duration::from_secs(1));
-
-        assert!(entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 1);
-        assert_ne!(entry.times.last_modification.unwrap(), last_modification_time);
-        last_modification_time = entry.times.last_modification.unwrap();
-        thread::sleep(time::Duration::from_secs(1));
-
-        // Updating the history without making any changes
-        // should not do anything.
-        assert!(!entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 1);
-        assert_eq!(entry.times.last_modification.unwrap(), last_modification_time);
-
-        entry.set_unprotected(fields::TITLE, "first title");
-
-        assert!(entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 2);
-        assert_ne!(entry.times.last_modification.unwrap(), last_modification_time);
-        last_modification_time = entry.times.last_modification.unwrap();
-        thread::sleep(time::Duration::from_secs(1));
-
-        assert!(!entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 2);
-        assert_eq!(entry.times.last_modification.unwrap(), last_modification_time);
-
-        entry
-            .fields
-            .insert(fields::TITLE.to_string(), Value::unprotected("second title"));
-
-        assert!(entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 3);
-        assert_ne!(entry.times.last_modification.unwrap(), last_modification_time);
-        last_modification_time = entry.times.last_modification.unwrap();
-        thread::sleep(time::Duration::from_secs(1));
-
-        assert!(!entry.update_history());
-        assert!(entry.history.is_some());
-        assert_eq!(entry.history.as_ref().unwrap().entries.len(), 3);
-        assert_eq!(entry.times.last_modification.unwrap(), last_modification_time);
-
-        let last_history_entry = entry.history.as_ref().unwrap().entries.first().unwrap();
-        assert_eq!(last_history_entry.get_title().unwrap(), "second title");
-
-        for history_entry in &entry.history.unwrap().entries {
-            assert!(history_entry.history.is_none());
-        }
-    }
-
-    #[cfg(feature = "serialization")]
-    #[test]
-    fn serialization() {
-        assert_eq!(
-            serde_json::to_string(&Value::<String>::unprotected("ABC")).unwrap(),
-            "\"ABC\"".to_string()
-        );
+        assert_eq!(db.num_attachments(), 0);
+        assert_eq!(db.num_entries(), 1);
 
         assert_eq!(
-            serde_json::to_string(&Value::<String>::protected("ABC")).unwrap(),
-            "\"ABC\"".to_string()
+            db.entry(entry_id).unwrap().history.clone().unwrap().entries.len(),
+            0
         );
+
+        assert_eq!(db.entry(entry_id).unwrap().get(fields::TITLE).unwrap(), "Entry 1");
+
+        db.entry_mut(entry_id).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "Modified Entry 1");
+            e.set(
+                fields::USERNAME,
+                crate::db::Value::unprotected(format!("modified_{}", e.get(fields::USERNAME).unwrap())),
+            );
+
+            e.add_attachment("Attachment 1", Value::protected(b"Attachment data".to_vec()));
+        });
+
+        assert_eq!(db.num_attachments(), 1);
+        assert_eq!(db.num_entries(), 1);
+        assert_eq!(
+            db.entry(entry_id).unwrap().history.clone().unwrap().entries.len(),
+            1
+        );
+
+        assert!(db
+            .entry(entry_id)
+            .unwrap()
+            .attachments
+            .get("Attachment 1")
+            .is_some());
+
+        assert_eq!(
+            db.entry(entry_id).unwrap().get(fields::TITLE).unwrap(),
+            "Modified Entry 1"
+        );
+
+        // test moving to a non-existent group returns an error and does not modify the entry
+        assert!(db
+            .entry_mut(entry_id)
+            .unwrap()
+            .move_to(crate::db::GroupId::new())
+            .is_err());
+
+        db.entry_mut(entry_id).unwrap().edit(|e| {
+            let mut att = e.attachment_by_name_mut("Attachment 1").unwrap();
+
+            att.data = Value::unprotected(b"Modified attachment data".to_vec());
+        });
+
+        db.entry_mut(entry_id).unwrap().remove();
+
+        assert_eq!(db.num_entries(), 0);
+        assert_eq!(db.num_attachments(), 0);
     }
 }
