@@ -53,9 +53,9 @@ jobs:
         id: semantic-version
         with:
           tag_prefix: "v"
-          major_pattern: "/breaking change:/"
+          major_pattern: "/!:|breaking change:/"
           major_regexp_flags: "ig"
-          minor_pattern: "/^feat:/"
+          minor_pattern: "/^feat(\\(.*\\))?:/"
           minor_regexp_flags: "ig"
           version_format: "${major}.${minor}.${patch}"
           bump_each_commit: false
