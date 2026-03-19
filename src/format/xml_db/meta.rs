@@ -82,10 +82,10 @@ pub struct Meta {
     last_top_visible_group: Option<UUID>,
 
     #[serde(default, with = "cs_opt_fromstr")]
-    history_max_items: Option<usize>,
+    history_max_items: Option<isize>,
 
     #[serde(default, with = "cs_opt_fromstr")]
-    history_max_size: Option<usize>,
+    history_max_size: Option<isize>,
 
     #[serde(default, with = "cs_opt_string")]
     settings_changed: Option<Timestamp>,
