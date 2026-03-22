@@ -12,7 +12,7 @@ pub(crate) mod value;
 
 use std::collections::HashMap;
 
-pub use attachment::{Attachment, AttachmentId};
+pub use attachment::{Attachment, AttachmentId, AttachmentMut, AttachmentRef};
 pub use autotype::{AutoType, AutoTypeAssociation};
 pub use color::{Color, ParseColorError};
 pub use custom_data::{CustomDataItem, CustomDataValue};
@@ -24,10 +24,7 @@ pub use meta::{MemoryProtection, Meta};
 pub use times::Times;
 pub use value::Value;
 
-use crate::{
-    config::DatabaseConfig,
-    db::attachment::{AttachmentMut, AttachmentRef},
-};
+use crate::config::DatabaseConfig;
 
 use chrono::NaiveDateTime;
 use uuid::Uuid;
