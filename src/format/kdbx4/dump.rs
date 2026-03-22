@@ -174,7 +174,7 @@ impl KDBX4InnerHeader {
             writer.write_u8(INNER_HEADER_BINARY_ATTACHMENTS)?;
             writer.write_u32::<LittleEndian>((attachment.len() + 1) as u32)?;
             writer.write_u8(if attachment.is_protected() { 0x01 } else { 0x00 })?;
-            writer.write_all(&attachment.get())?;
+            writer.write_all(attachment.get())?;
         }
 
         writer.write_u8(INNER_HEADER_END)?;

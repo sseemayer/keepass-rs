@@ -72,10 +72,8 @@ impl Entry {
             custom_icons.contains_key(&icon_id).then_some(icon_id)
         }) {
             Some(crate::db::Icon::Custom(ci))
-        } else if let Some(i) = self.icon_id {
-            Some(crate::db::Icon::BuiltIn(i))
         } else {
-            None
+            self.icon_id.map(crate::db::Icon::BuiltIn)
         };
 
         target.foreground_color = self.foreground_color;

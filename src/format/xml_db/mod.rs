@@ -48,6 +48,7 @@ pub enum ParseXmlError {
 }
 
 #[cfg(feature = "save_kdbx4")]
+#[allow(clippy::type_complexity)]
 pub fn to_xml(
     db: &crate::db::Database,
     inner_encryptor: &mut dyn Cipher,

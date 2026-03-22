@@ -273,6 +273,7 @@ pub enum Kdbx4OuterHeaderError {
     Incomplete(&'static str),
 }
 
+#[allow(clippy::type_complexity)]
 fn parse_inner_header(
     data: &[u8],
 ) -> Result<(Vec<Value<Vec<u8>>>, KDBX4InnerHeader, usize), Kdbx4InnerHeaderError> {

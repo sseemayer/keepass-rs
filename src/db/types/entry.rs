@@ -379,7 +379,7 @@ impl EntryMut<'_> {
 
     /// Add an attachment to this entry with the given name and data.
     pub fn add_attachment(&mut self, name: impl Into<String>, data: Value<Vec<u8>>) -> AttachmentMut<'_> {
-        let id = AttachmentId::next_free(&self.database);
+        let id = AttachmentId::next_free(self.database);
 
         let entries: HashSet<(EntryId, Option<usize>)> = vec![(self.id, None)].into_iter().collect();
 
