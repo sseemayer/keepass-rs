@@ -7,7 +7,10 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    db::{CustomDataItem, Entry, EntryId, EntryMut, EntryRef, Times},
+    db::{
+        CustomDataItem, CustomIcon, CustomIconId, CustomIconMut, CustomIconNotFoundError, CustomIconRef, Entry,
+        EntryId, EntryMut, EntryRef, Icon, Times,
+    },
     Database,
 };
 
@@ -53,11 +56,8 @@ pub struct Group {
     /// Notes for the group
     pub notes: Option<String>,
 
-    /// ID of the group's icon
-    pub icon_id: Option<usize>,
-
-    /// Custom icon data for the group
-    pub custom_icon: Option<(Uuid, Vec<u8>)>,
+    /// Icon for the group
+    pub(crate) icon: Option<Icon>,
 
     /// The list of child group identifiers
     pub(crate) groups: HashSet<GroupId>,
@@ -99,8 +99,7 @@ impl Group {
             parent,
             name: String::new(),
             notes: None,
-            icon_id: None,
-            custom_icon: None,
+            icon: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
             times: Times::new(),
@@ -119,8 +118,7 @@ impl Group {
             parent,
             name: String::new(),
             notes: None,
-            icon_id: None,
-            custom_icon: None,
+            icon: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
             times: Times::new(),
@@ -141,6 +139,11 @@ impl Group {
     /// Get an iterator over the IDs of all contained entries
     pub fn entry_ids(&self) -> impl Iterator<Item = EntryId> + '_ {
         self.entries.iter().cloned()
+    }
+
+    /// Get a reference to the icon of this group, if any
+    pub fn icon(&self) -> Option<&Icon> {
+        self.icon.as_ref()
     }
 }
 
@@ -224,6 +227,15 @@ impl GroupRef<'_> {
     /// Get a reference to the parent group, if any
     pub fn parent(&self) -> Option<GroupRef<'_>> {
         self.parent.map(|id| GroupRef::new(self.database, id))
+    }
+
+    /// Get a reference to the custom icon of this group, if it has one and it is a custom icon
+    pub fn custom_icon(&self) -> Option<CustomIconRef<'_>> {
+        if let Some(Icon::Custom(cid)) = self.icon {
+            Some(CustomIconRef::new(self.database, cid))
+        } else {
+            None
+        }
     }
 }
 
@@ -381,6 +393,78 @@ impl GroupMut<'_> {
         }
 
         Some(GroupMut::new(self.database, current))
+    }
+
+    /// Remove the icon from this group, if it exists.
+    pub fn set_icon_none(&mut self) {
+        let id = self.id;
+
+        if let Some(Icon::Custom(custom_icon_id)) = self.icon {
+            // if this group had a custom icon, remove this group from the icon's reference list
+            if let Some(mut custom_icon) = self.database.custom_icon_mut(custom_icon_id) {
+                custom_icon.groups.retain(|&group_id| group_id != id);
+            }
+        }
+
+        self.icon = None;
+    }
+
+    /// Set a built-in icon for this group by its ID, removing any existing icon.
+    pub fn set_icon_builtin(&mut self, icon_id: usize) {
+        self.set_icon_none();
+        self.icon = Some(Icon::BuiltIn(icon_id));
+    }
+
+    /// Set a custom icon for this group by its ID, removing any existing icon.
+    pub fn set_icon_custom(&mut self, custom_icon_id: CustomIconId) -> Result<(), CustomIconNotFoundError> {
+        self.set_icon_none();
+
+        let id = self.id;
+
+        let mut custom_icon = self
+            .database
+            .custom_icon_mut(custom_icon_id)
+            .ok_or(CustomIconNotFoundError(custom_icon_id))?;
+
+        custom_icon.groups.insert(id);
+
+        self.icon = Some(Icon::Custom(custom_icon_id));
+
+        Ok(())
+    }
+
+    /// Set a custom icon for this group by providing the raw data, removing any existing icon.
+    /// Returns a mutable reference to the newly created custom icon.
+    pub fn set_icon_custom_new(&mut self, data: Vec<u8>) -> CustomIconMut<'_> {
+        self.set_icon_none();
+
+        let custom_icon_id = CustomIconId::new();
+
+        let id = self.id;
+
+        self.database.custom_icons.insert(
+            custom_icon_id,
+            CustomIcon {
+                id: custom_icon_id,
+                entries: HashSet::new(),
+                groups: vec![id].into_iter().collect(),
+                data,
+            },
+        );
+
+        self.icon = Some(Icon::Custom(custom_icon_id));
+
+        CustomIconMut::new(self.database, custom_icon_id)
+    }
+
+    /// Get a mutable reference to the custom icon of this group, if it exists and is a custom
+    /// icon.
+    pub fn custom_icon_mut(&mut self) -> Option<CustomIconMut<'_>> {
+        if let Some(Icon::Custom(custom_icon_id)) = self.icon {
+            Some(CustomIconMut::new(self.database, custom_icon_id))
+        } else {
+            None
+        }
     }
 
     /// Move this group to a new parent group.

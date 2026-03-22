@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -443,6 +443,26 @@ pub struct Icon {
 
     #[serde(with = "cs_base64")]
     pub data: Vec<u8>,
+}
+
+impl From<crate::db::CustomIcon> for Icon {
+    fn from(db: crate::db::CustomIcon) -> Self {
+        Self {
+            uuid: UUID(db.id().uuid()),
+            data: db.data.clone(),
+        }
+    }
+}
+
+impl From<Icon> for crate::db::CustomIcon {
+    fn from(icon: Icon) -> Self {
+        crate::db::CustomIcon {
+            id: crate::db::CustomIconId::from_uuid(icon.uuid.0),
+            entries: HashSet::new(),
+            groups: HashSet::new(),
+            data: icon.data,
+        }
+    }
 }
 
 #[cfg(test)]

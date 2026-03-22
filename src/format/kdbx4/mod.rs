@@ -192,7 +192,7 @@ mod kdbx4_tests {
     }
 
     #[test]
-    pub fn attachments() {
+    pub fn test_attachments() {
         let mut db = Database::new();
 
         db.root_mut().add_entry().edit(|e| {
@@ -230,5 +230,46 @@ mod kdbx4_tests {
             entry.attachment_by_name("file2.txt").unwrap().get(),
             &[0x04, 0x03, 0x02, 0x01]
         );
+    }
+
+    #[test]
+    pub fn test_icons() {
+        let mut db = Database::new();
+
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Entry without icon");
+        });
+
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Entry with built-in icon");
+            e.set_icon_builtin(42);
+        });
+
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Entry with custom icon");
+            e.set_icon_custom_new(vec![0x01, 0x02, 0x03, 0x04]);
+        });
+
+        let db_key = DatabaseKey::new().with_password("test");
+
+        let mut encrypted_db = Vec::new();
+        dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
+
+        let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
+
+        dbg!(&db, &decrypted_db);
+
+        assert_eq!(decrypted_db.num_entries(), 3);
+
+        let root = decrypted_db.root();
+
+        let entry1 = root.entry_by_name("Entry without icon").unwrap();
+        assert_eq!(entry1.icon(), None);
+
+        let entry2 = root.entry_by_name("Entry with built-in icon").unwrap();
+        assert_eq!(entry2.icon(), Some(&crate::db::Icon::BuiltIn(42)));
+
+        let entry3 = root.entry_by_name("Entry with custom icon").unwrap();
+        assert_eq!(entry3.custom_icon().unwrap().data, &[0x01, 0x02, 0x03, 0x04]);
     }
 }

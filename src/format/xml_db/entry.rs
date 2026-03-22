@@ -4,7 +4,6 @@ use base64::{engine::general_purpose as base64_engine, Engine as _};
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
@@ -65,16 +64,19 @@ impl Entry {
         self,
         mut target: crate::db::EntryMut,
         attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
-        custom_icons: &HashMap<Uuid, Vec<u8>>,
+        custom_icons: &HashMap<crate::db::CustomIconId, crate::db::CustomIcon>,
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
-        target.icon_id = self.icon_id;
-
-        if let Some(uuid) = self.custom_icon_uuid {
-            if let Some(data) = custom_icons.get(&uuid.0) {
-                target.custom_icon = Some((uuid.0, data.clone()));
-            }
-        }
+        target.icon = if let Some(ci) = self.custom_icon_uuid.and_then(|ci| {
+            let icon_id = crate::db::CustomIconId::from_uuid(ci.0);
+            custom_icons.contains_key(&icon_id).then_some(icon_id)
+        }) {
+            Some(crate::db::Icon::Custom(ci))
+        } else if let Some(i) = self.icon_id {
+            Some(crate::db::Icon::BuiltIn(i))
+        } else {
+            None
+        };
 
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
@@ -138,13 +140,11 @@ impl Entry {
     pub(crate) fn db_to_xml(
         db: crate::db::EntryRef,
         inner_encryptor: &mut dyn Cipher,
-        custom_icons: &mut HashMap<Uuid, Vec<u8>>,
     ) -> Result<Self, CryptographyError> {
-        let custom_icon_uuid = if let Some((uuid, icon)) = db.custom_icon.as_ref() {
-            custom_icons.insert(*uuid, icon.to_vec());
-            Some(UUID(*uuid))
-        } else {
-            None
+        let (icon_id, custom_icon_uuid) = match db.icon {
+            Some(crate::db::Icon::Custom(cid)) => (None, Some(UUID(cid.uuid()))),
+            Some(crate::db::Icon::BuiltIn(i)) => (Some(i), None),
+            _ => (None, None),
         };
 
         let mut string_fields = Vec::with_capacity(db.fields.len());
@@ -182,7 +182,7 @@ impl Entry {
 
         let history = if let Some(h) = db.history.as_ref() {
             let entries = (0..h.entries.len())
-                .map(|i| Entry::db_to_xml(db.historical(i).unwrap(), inner_encryptor, custom_icons))
+                .map(|i| Entry::db_to_xml(db.historical(i).unwrap(), inner_encryptor))
                 .collect::<Result<Vec<_>, CryptographyError>>()?;
 
             Some(History { entries })
@@ -198,7 +198,7 @@ impl Entry {
 
         Ok(Entry {
             uuid: UUID(db.id().uuid()),
-            icon_id: db.icon_id,
+            icon_id,
             custom_icon_uuid,
             foreground_color: db.foreground_color.clone(),
             background_color: db.background_color.clone(),

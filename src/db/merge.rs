@@ -157,7 +157,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
             dest_group.times = source.times.clone();
             dest_group.name = source.name.clone();
             dest_group.notes = source.notes.clone();
-            dest_group.icon_id = source.icon_id;
+            dest_group.icon = source.icon.clone();
             dest_group.custom_data = source.custom_data.clone();
             dest_group.is_expanded = source.is_expanded;
             dest_group.default_autotype_sequence = source.default_autotype_sequence.clone();
@@ -313,7 +313,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
         // The source group is more recent than the destination group. Update dest with source.
         dest.name = source.name.clone();
         dest.notes = source.notes.clone();
-        dest.icon_id = source.icon_id;
+        dest.icon = source.icon.clone();
         dest.custom_data = source.custom_data.clone();
         dest.times.last_modification = source.times.last_modification.or(dest.times.last_modification);
         dest.is_expanded = source.is_expanded;
@@ -531,7 +531,7 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
             dest_entry.autotype = source_entry.autotype.clone();
             dest_entry.tags = source_entry.tags.clone();
             dest_entry.custom_data = source_entry.custom_data.clone();
-            dest_entry.icon_id = source_entry.icon_id;
+            dest_entry.icon = source_entry.icon.clone();
             dest_entry.foreground_color = source_entry.foreground_color.clone();
             dest_entry.background_color = source_entry.background_color.clone();
             dest_entry.override_url = source_entry.override_url.clone();

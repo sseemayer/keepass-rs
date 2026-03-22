@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[cfg(feature = "save_kdbx4")]
 use crate::crypt::CryptographyError;
@@ -69,18 +68,22 @@ impl Group {
         self,
         mut target: crate::db::GroupMut,
         attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
-        custom_icons: &HashMap<Uuid, Vec<u8>>,
+        custom_icons: &HashMap<crate::db::CustomIconId, crate::db::CustomIcon>,
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
         target.name = self.name;
         target.notes = self.notes;
-        target.icon_id = self.icon_id;
 
-        if let Some(uuid) = self.custom_icon_uuid {
-            if let Some(icon_data) = custom_icons.get(&uuid.0) {
-                target.custom_icon = Some((uuid.0, icon_data.clone()));
-            }
-        }
+        target.icon = if let Some(ci) = self.custom_icon_uuid.and_then(|ci| {
+            let icon_id = crate::db::CustomIconId::from_uuid(ci.0);
+            custom_icons.contains_key(&icon_id).then_some(icon_id)
+        }) {
+            Some(crate::db::Icon::Custom(ci))
+        } else if let Some(i) = self.icon_id {
+            Some(crate::db::Icon::BuiltIn(i))
+        } else {
+            None
+        };
 
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
         target.is_expanded = self.is_expanded.unwrap_or_default();
@@ -113,24 +116,15 @@ impl Group {
     pub(crate) fn db_to_xml(
         source: crate::db::GroupRef,
         inner_cipher: &mut dyn Cipher,
-        custom_icons: &mut HashMap<Uuid, Vec<u8>>,
     ) -> Result<Self, CryptographyError> {
         let mut children = Vec::new();
 
         for g in source.groups() {
-            children.push(GroupOrEntry::Group(Group::db_to_xml(
-                g,
-                inner_cipher,
-                custom_icons,
-            )?));
+            children.push(GroupOrEntry::Group(Group::db_to_xml(g, inner_cipher)?));
         }
 
         for e in source.entries() {
-            children.push(GroupOrEntry::Entry(Entry::db_to_xml(
-                e,
-                inner_cipher,
-                custom_icons,
-            )?));
+            children.push(GroupOrEntry::Entry(Entry::db_to_xml(e, inner_cipher)?));
         }
 
         let custom_data: Option<crate::format::xml_db::meta::CustomData> = if source.custom_data.is_empty() {
@@ -139,12 +133,18 @@ impl Group {
             Some(source.custom_data.clone().into())
         };
 
+        let (icon_id, custom_icon_uuid) = match source.icon {
+            Some(crate::db::Icon::Custom(cid)) => (None, Some(UUID(cid.uuid()))),
+            Some(crate::db::Icon::BuiltIn(i)) => (Some(i), None),
+            _ => (None, None),
+        };
+
         Ok(Group {
             uuid: UUID(source.id().uuid()),
             name: source.name.clone(),
             notes: source.notes.clone(),
-            icon_id: source.icon_id,
-            custom_icon_uuid: source.custom_icon.as_ref().map(|(uuid, _)| UUID(*uuid)),
+            icon_id,
+            custom_icon_uuid,
             times: Some(source.times.clone().into()),
             is_expanded: Some(source.is_expanded),
             default_auto_type_sequence: source.default_autotype_sequence.clone(),

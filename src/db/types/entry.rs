@@ -9,8 +9,9 @@ use uuid::Uuid;
 use crate::{
     db::{
         attachment::{AttachmentMut, AttachmentRef},
-        fields, Attachment, AttachmentId, AutoType, Color, CustomDataItem, GroupId, GroupMut, GroupRef,
-        History, Times, Value,
+        fields, Attachment, AttachmentId, AutoType, Color, CustomDataItem, CustomIcon, CustomIconId,
+        CustomIconMut, CustomIconNotFoundError, CustomIconRef, GroupId, GroupMut, GroupRef, History, Icon,
+        Times, Value,
     },
     Database,
 };
@@ -50,8 +51,7 @@ pub struct Entry {
 
     pub custom_data: HashMap<String, CustomDataItem>,
 
-    pub icon_id: Option<usize>,
-    pub custom_icon: Option<(Uuid, Vec<u8>)>,
+    pub(crate) icon: Option<Icon>,
 
     pub foreground_color: Option<Color>,
     pub background_color: Option<Color>,
@@ -78,8 +78,7 @@ impl Entry {
             tags: Vec::new(),
             times: Times::new(),
             custom_data: HashMap::new(),
-            icon_id: None,
-            custom_icon: None,
+            icon: None,
             foreground_color: None,
             background_color: None,
             override_url: None,
@@ -92,6 +91,11 @@ impl Entry {
     /// Get the unique identifier for the [Entry]
     pub fn id(&self) -> EntryId {
         self.id
+    }
+
+    /// Get the icon of this entry, if it exists
+    pub fn icon(&self) -> Option<&Icon> {
+        self.icon.as_ref()
     }
 
     /// Get a field by name, taking care of unprotecting Protected values automatically
@@ -224,6 +228,15 @@ impl EntryRef<'_> {
             .values()
             .cloned()
             .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
+    }
+
+    /// Get the custom icon of this entry, if it exists and is a custom icon.
+    pub fn custom_icon(&self) -> Option<CustomIconRef<'_>> {
+        if let Some(Icon::Custom(custom_icon_id)) = self.icon {
+            Some(CustomIconRef::new(self.database, custom_icon_id))
+        } else {
+            None
+        }
     }
 }
 
@@ -426,6 +439,83 @@ impl EntryMut<'_> {
             if attachment.entries.is_empty() {
                 attachment.remove();
             }
+        }
+    }
+
+    /// Remove the icon from this entry, if it exists.
+    pub fn set_icon_none(&mut self) {
+        let id = self.id;
+        let history_index = self.history_index;
+
+        if let Some(Icon::Custom(custom_icon_id)) = self.icon {
+            // if this entry had a custom icon, remove this entry from the icon's reference list
+            if let Some(mut custom_icon) = self.database.custom_icon_mut(custom_icon_id) {
+                custom_icon.entries.retain(|&(entry_id, entry_history_index)| {
+                    !(entry_id == id && entry_history_index == history_index)
+                });
+            }
+        }
+
+        self.icon = None;
+    }
+
+    /// Set a built-in icon for this entry by its ID, removing any existing icon.
+    pub fn set_icon_builtin(&mut self, icon_id: usize) {
+        self.set_icon_none();
+        self.icon = Some(Icon::BuiltIn(icon_id));
+    }
+
+    /// Set a custom icon for this entry by its ID, removing any existing icon.
+    pub fn set_icon_custom(&mut self, custom_icon_id: CustomIconId) -> Result<(), CustomIconNotFoundError> {
+        self.set_icon_none();
+
+        let id = self.id;
+        let history_index = self.history_index;
+
+        let mut custom_icon = self
+            .database
+            .custom_icon_mut(custom_icon_id)
+            .ok_or(CustomIconNotFoundError(custom_icon_id))?;
+
+        custom_icon.entries.insert((id, history_index));
+
+        self.icon = Some(Icon::Custom(custom_icon_id));
+
+        Ok(())
+    }
+
+    /// Set a custom icon for this entry by providing the raw data, removing any existing icon.
+    /// Returns a mutable reference to the newly created custom icon.
+    pub fn set_icon_custom_new(&mut self, data: Vec<u8>) -> CustomIconMut<'_> {
+        self.set_icon_none();
+
+        let custom_icon_id = CustomIconId::new();
+
+        let id = self.id;
+        let history_index = self.history_index;
+
+        self.database.custom_icons.insert(
+            custom_icon_id,
+            CustomIcon {
+                id: custom_icon_id,
+                entries: vec![(id, history_index)].into_iter().collect(),
+                groups: HashSet::new(),
+                data,
+            },
+        );
+
+        self.icon = Some(Icon::Custom(custom_icon_id));
+
+        CustomIconMut::new(self.database, custom_icon_id)
+    }
+
+    /// Get a mutable reference to the custom icon of this entry, if it exists and is a custom
+    /// icon.
+    pub fn custom_icon_mut(&mut self) -> Option<CustomIconMut<'_>> {
+        if let Some(Icon::Custom(custom_icon_id)) = self.icon {
+            Some(CustomIconMut::new(self.database, custom_icon_id))
+        } else {
+            None
         }
     }
 
@@ -642,6 +732,8 @@ mod tests {
                     crate::db::Value::unprotected("user".to_string()),
                 );
                 e.set_protected(fields::PASSWORD, "asdf");
+
+                e.set_icon_custom_new(vec![1, 2, 3]);
             })
             .id();
 

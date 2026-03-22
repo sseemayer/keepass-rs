@@ -148,12 +148,20 @@ impl AttachmentMut<'_> {
     }
 
     /// Get an iterator over the entries that reference this attachment, with mutable access.
-    pub fn foreach_entry_mut<F>(&mut self, mut f: F)
+    ///
+    /// If `include_historical` is false, only returns entries that currently reference this
+    /// attachment. If `include_historical` is true, also returns old versions of entries that
+    /// reference this attachment, even if they have been modified to no longer reference it.
+    pub fn foreach_entry_mut<F>(&mut self, mut f: F, include_historical: bool)
     where
         F: FnMut(EntryMut<'_>),
     {
         let entries: Vec<(EntryId, Option<usize>)> = self.entries.iter().copied().collect();
         for (id, history_index) in entries {
+            if !include_historical && history_index.is_some() {
+                continue;
+            }
+
             f(EntryMut::new_historical(self.database, id, history_index));
         }
     }
@@ -162,18 +170,21 @@ impl AttachmentMut<'_> {
     pub fn remove(mut self) {
         let id = self.id;
 
-        self.foreach_entry_mut(|mut entry| {
-            let mut attachments_to_remove = Vec::new();
-            for (name, attachment_id) in &entry.attachments {
-                if *attachment_id == id {
-                    attachments_to_remove.push(name.clone());
+        self.foreach_entry_mut(
+            |mut entry| {
+                let mut attachments_to_remove = Vec::new();
+                for (name, attachment_id) in &entry.attachments {
+                    if *attachment_id == id {
+                        attachments_to_remove.push(name.clone());
+                    }
                 }
-            }
 
-            for name in attachments_to_remove {
-                entry.attachments.remove(&name);
-            }
-        });
+                for name in attachments_to_remove {
+                    entry.attachments.remove(&name);
+                }
+            },
+            true,
+        );
 
         self.database.attachments.remove(&self.id);
     }

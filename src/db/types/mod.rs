@@ -5,6 +5,7 @@ pub(crate) mod custom_data;
 pub(crate) mod entry;
 pub(crate) mod group;
 pub(crate) mod history;
+pub(crate) mod icon;
 pub(crate) mod meta;
 pub(crate) mod times;
 pub(crate) mod value;
@@ -18,6 +19,7 @@ pub use custom_data::{CustomDataItem, CustomDataValue};
 pub use entry::{DestinationGroupNotFoundError, Entry, EntryId, EntryMut, EntryRef, EntryTrack};
 pub use group::{Group, GroupId, GroupMut, GroupRef, GroupTrack, MoveGroupError};
 pub use history::History;
+pub use icon::{CustomIcon, CustomIconId, CustomIconMut, CustomIconNotFoundError, CustomIconRef, Icon};
 pub use meta::{MemoryProtection, Meta};
 pub use times::Times;
 pub use value::Value;
@@ -45,6 +47,9 @@ pub struct Database {
 
     /// All attachments in the database, stored in a flat HashMap
     pub(crate) attachments: HashMap<AttachmentId, Attachment>,
+
+    /// All custom icons in the database, stored in a flat HashMap
+    pub(crate) custom_icons: HashMap<CustomIconId, CustomIcon>,
 
     /// All entries in the database, stored in a flat HashMap
     pub(crate) entries: HashMap<EntryId, Entry>,
@@ -83,6 +88,7 @@ impl Database {
             meta: Meta::default(),
             root: root_id,
             attachments: HashMap::new(),
+            custom_icons: HashMap::new(),
             entries: HashMap::new(),
             groups,
             deleted_objects: HashMap::new(),
@@ -100,6 +106,7 @@ impl Database {
             meta: Meta::default(),
             root: root_id,
             attachments: HashMap::new(),
+            custom_icons: HashMap::new(),
             entries: HashMap::new(),
             groups,
             deleted_objects: HashMap::new(),
@@ -133,6 +140,11 @@ impl Database {
         self.attachments.len()
     }
 
+    /// Get the number of custom icons in the database
+    pub fn num_custom_icons(&self) -> usize {
+        self.custom_icons.len()
+    }
+
     /// Get the number of entries in the database
     pub fn num_entries(&self) -> usize {
         self.entries.len()
@@ -141,6 +153,25 @@ impl Database {
     /// Get the number of groups in the database, including the root group and the recycle bin (if it exists)
     pub fn num_groups(&self) -> usize {
         self.groups.len()
+    }
+
+    /// Iterate over all attachments with immutable access.
+    pub fn iter_all_attachments(&self) -> impl Iterator<Item = AttachmentRef<'_>> + '_ {
+        self.attachments
+            .keys()
+            .map(move |id| AttachmentRef::new(self, *id))
+    }
+
+    /// Iterate over all attachments with mutable access. The provided closure is
+    /// called for each `AttachmentMut` and borrows are limited to the closure body.
+    pub fn foreach_attachment_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(AttachmentMut<'_>),
+    {
+        let ids: Vec<AttachmentId> = self.attachments.keys().copied().collect();
+        for id in ids {
+            f(AttachmentMut::new(self, id));
+        }
     }
 
     /// Iterate over all entries with immutable access.
@@ -157,6 +188,25 @@ impl Database {
         let ids: Vec<EntryId> = self.entries.keys().copied().collect();
         for id in ids {
             f(EntryMut::new(self, id));
+        }
+    }
+
+    /// Iterate over all custom icons with immutable access.
+    pub fn iter_all_custom_icons(&self) -> impl Iterator<Item = CustomIconRef<'_>> + '_ {
+        self.custom_icons
+            .keys()
+            .map(move |id| CustomIconRef::new(self, *id))
+    }
+
+    /// Iterate over all custom icons with mutable access. The provided closure is
+    /// called for each `CustomIconMut` and borrows are limited to the closure body.
+    pub fn foreach_custom_icon_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(CustomIconMut<'_>),
+    {
+        let ids: Vec<CustomIconId> = self.custom_icons.keys().copied().collect();
+        for id in ids {
+            f(CustomIconMut::new(self, id));
         }
     }
 
@@ -190,6 +240,20 @@ impl Database {
         self.attachments
             .contains_key(&id)
             .then(move || AttachmentMut::new(self, id))
+    }
+
+    /// Get an immutable reference to the custom icon with the given ID, if it exists
+    pub fn custom_icon(&self, id: CustomIconId) -> Option<CustomIconRef<'_>> {
+        self.custom_icons
+            .contains_key(&id)
+            .then(move || CustomIconRef::new(self, id))
+    }
+
+    /// Get a mutable reference to the custom icon with the given ID, if it exists
+    pub fn custom_icon_mut(&mut self, id: CustomIconId) -> Option<CustomIconMut<'_>> {
+        self.custom_icons
+            .contains_key(&id)
+            .then(move || CustomIconMut::new(self, id))
     }
 
     /// Get an immutable reference to the entry with the given ID, if it exists
