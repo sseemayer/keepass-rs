@@ -250,6 +250,11 @@ mod kdbx4_tests {
             e.set_icon_custom_new(vec![0x01, 0x02, 0x03, 0x04]);
         });
 
+        db.root_mut().add_group().edit(|g| {
+            g.name = "Group with custom icon".into();
+            g.set_icon_custom_new(vec![0x04, 0x03, 0x02, 0x01]);
+        });
+
         let db_key = DatabaseKey::new().with_password("test");
 
         let mut encrypted_db = Vec::new();
@@ -271,5 +276,8 @@ mod kdbx4_tests {
 
         let entry3 = root.entry_by_name("Entry with custom icon").unwrap();
         assert_eq!(entry3.custom_icon().unwrap().data, &[0x01, 0x02, 0x03, 0x04]);
+
+        let group = root.group_by_name("Group with custom icon").unwrap();
+        assert_eq!(group.custom_icon().unwrap().data, &[0x04, 0x03, 0x02, 0x01]);
     }
 }
