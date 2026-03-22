@@ -42,7 +42,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+      - name: Get Nix version
+        id: nix-version
+        run: echo "version=$(cat .nix-version)" >> $GITHUB_OUTPUT
+      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
+        with:
+          install_url: https://releases.nixos.org/nix/nix-${{ steps.nix-version.outputs.version }}/install
       - name: typecheck the tests
         run: nix develop --command cargo check --tests
       - name: run cargo check on all feature combinations
@@ -126,7 +131,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+      - name: Get Nix version
+        id: nix-version
+        run: echo "version=$(cat .nix-version)" >> $GITHUB_OUTPUT
+      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
+        with:
+          install_url: https://releases.nixos.org/nix/nix-${{ steps.nix-version.outputs.version }}/install
       - name: check msrv
         run: |
           nix develop --command cargo msrv verify
@@ -136,7 +146,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+      - name: Get Nix version
+        id: nix-version
+        run: echo "version=$(cat .nix-version)" >> $GITHUB_OUTPUT
+      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
+        with:
+          install_url: https://releases.nixos.org/nix/nix-${{ steps.nix-version.outputs.version }}/install
       - name: running rustfmt
         run: nix develop --command cargo fmt --check
 
@@ -145,7 +160,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+      - name: Get Nix version
+        id: nix-version
+        run: echo "version=$(cat .nix-version)" >> $GITHUB_OUTPUT
+      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
+        with:
+          install_url: https://releases.nixos.org/nix/nix-${{ steps.nix-version.outputs.version }}/install
       - name: Generate code coverage
         run: |
           nix develop --command cargo tarpaulin --verbose --timeout 120
