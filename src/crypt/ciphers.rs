@@ -7,7 +7,7 @@ use salsa20::{
     Salsa20,
 };
 
-use crate::crypt::CryptographyError;
+use crate::crypt::{calculate_sha256, CryptographyError};
 
 pub(crate) trait Cipher {
     #[cfg(feature = "save_kdbx4")]
@@ -130,7 +130,9 @@ pub(crate) struct Salsa20Cipher {
 
 impl Salsa20Cipher {
     pub(crate) fn new(key: &[u8]) -> Result<Self, CryptographyError> {
-        let key = GenericArray::from_slice(key);
+        let h = calculate_sha256(&[key]);
+
+        let key = GenericArray::from_slice(&h);
         let iv = GenericArray::from([0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A]);
 
         Ok(Salsa20Cipher {

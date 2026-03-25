@@ -89,6 +89,21 @@ mod entry_tests {
     }
 
     #[test]
+    fn kdbx3_with_chacha20_protected_fields() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx3_with_chacha20_protected_fields.kdbx");
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("password"),
+        )?;
+        for g in db.root.groups {
+            for e in g.entries {
+                assert_eq!(Some("admin"), e.get_password());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn kdbx4_entry_bad_password() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_kdbx4_with_password_aes.kdbx");
         let db = Database::open(
