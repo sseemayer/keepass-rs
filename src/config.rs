@@ -148,11 +148,14 @@ pub enum InnerCipherConfig {
 }
 
 impl InnerCipherConfig {
-    pub(crate) fn get_cipher(&self, key: &[u8]) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
+    pub(crate) fn get_cipher(
+        &self,
+        protected_stream_key: &[u8],
+    ) -> Result<Box<dyn ciphers::Cipher>, CryptographyError> {
         match self {
-            InnerCipherConfig::Plain => Ok(Box::new(ciphers::PlainCipher::new(key)?)),
-            InnerCipherConfig::Salsa20 => Ok(Box::new(ciphers::Salsa20Cipher::new(key)?)),
-            InnerCipherConfig::ChaCha20 => Ok(Box::new(ciphers::ChaCha20Cipher::new(key)?)),
+            InnerCipherConfig::Plain => Ok(Box::new(ciphers::PlainCipher::new(protected_stream_key)?)),
+            InnerCipherConfig::Salsa20 => Ok(Box::new(ciphers::Salsa20Cipher::new(protected_stream_key)?)),
+            InnerCipherConfig::ChaCha20 => Ok(Box::new(ciphers::ChaCha20Cipher::new(protected_stream_key)?)),
         }
     }
 

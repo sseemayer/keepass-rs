@@ -187,10 +187,7 @@ pub(crate) fn decrypt_kdbx3(
     let header = parse_outer_header(data)
         .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx3(Kdbx3OpenError::OuterHeader(e))))?;
 
-    // Derive stream key for decrypting inner protected values and set up decryption context
-    let stream_key = calculate_sha256(&[header.protected_stream_key.as_ref()]);
-
-    let inner_decryptor = header.inner_cipher.get_cipher(&stream_key)?;
+    let inner_decryptor = header.inner_cipher.get_cipher(&header.protected_stream_key)?;
 
     let config = DatabaseConfig {
         version,
