@@ -98,11 +98,11 @@ mod entry_tests {
             &mut File::open(path)?,
             DatabaseKey::new().with_password("password"),
         )?;
-        for g in db.root.groups {
-            for e in g.entries {
-                assert_eq!(Some("admin"), e.get_password());
-            }
+
+        for e in db.iter_all_entries() {
+            assert_eq!(Some("admin"), e.get_password());
         }
+
         Ok(())
     }
 
