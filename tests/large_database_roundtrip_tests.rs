@@ -1,4 +1,8 @@
+//! Tests for writing and reading back large databases. This guards against issues that might
+//! affect large databases, such as memory management problems or performance bottlenecks.
+
 #[cfg(feature = "save_kdbx4")]
+#[allow(missing_docs)]
 mod large_file_roundtrip_tests {
     use std::fs::File;
 
