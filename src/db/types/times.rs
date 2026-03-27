@@ -45,17 +45,19 @@ fn now_timestamp() -> i64 {
 }
 
 impl Times {
-    // Returns the current time, without the nanoseconds since
-    // the last leap second.
+    /// Returns the current time, without the nanoseconds since the last leap second.
     pub fn now() -> NaiveDateTime {
         let now = now_timestamp();
         chrono::DateTime::from_timestamp(now, 0).unwrap().naive_utc()
     }
 
+    /// Returns the epoch time (January 1, 1970, 00:00:00 UTC) as a `NaiveDateTime`.
     pub fn epoch() -> NaiveDateTime {
         chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
     }
 
+    /// Creates a new `Times` instance with all timestamps set to the current time, `expires` set
+    /// to `false`, and `usage_count` set to `0`.
     pub fn new() -> Self {
         let now = Times::now();
         Times {

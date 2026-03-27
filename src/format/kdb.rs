@@ -474,34 +474,61 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
 /// Errors that can occur when opening a KeePass 1 database
 #[derive(Debug, Error)]
 pub enum KdbOpenError {
+    /// A field has an invalid length (either too short or too long) compared to the expected
+    /// length for its type
     #[error("Field of type {field_type} has invalid length {field_size}, expected {expected_field_size}")]
     InvalidFieldLength {
+        /// The type of the field that has an invalid length
         field_type: u16,
+
+        /// The actual length of the field as read from the database
         field_size: u32,
+
+        /// The expected length of the field based on its type, if it is a known fixed-length type
         expected_field_size: u32,
     },
 
+    /// A group has an invalid level that does not match the expected level based on the current
+    /// depth of the group tree being parsed
     #[error("Invalid group level: got {current:?}, expected {expected}")]
-    InvalidGroupLevel { current: Option<u16>, expected: u16 },
+    InvalidGroupLevel {
+        /// The actual level of the group as read from the database, or `None` if the level field
+        /// was missing
+        current: Option<u16>,
 
+        /// The expected level of the group based on the current depth of the group tree being
+        /// parsed
+        expected: u16,
+    },
+
+    /// Encountered the end of a group definition without finding a valid group ID field, or found
+    /// a group ID that does not match any previously defined group
     #[error("Invalid group ID: {0:?}")]
     InvalidGroupId(Option<u32>),
 
+    /// Encountered a field type in a group definition that is not recognized as a valid group
+    /// field type
     #[error("Invalid group field type: {0}")]
     InvalidGroupFieldType(u16),
 
+    /// Encountered the end of the file before the current group definition was properly terminated
+    /// with an end-of-group field
     #[error("Group was not terminated before end of file")]
     IncompleteGroup,
 
+    /// Encountered an entry definition that is missing a valid group ID field
     #[error("Entry is missing group ID")]
     EntryMissingGroupId,
 
+    /// Encountered an invalid entry field type
     #[error("Invalid entry field type: {0}")]
     InvalidEntryFieldType(u16),
 
+    /// Encountered the end of the file before the current entry definition was properly terminated
     #[error("Entry was not terminated before end of file")]
     IncompleteEntry,
 
+    /// The database is encrypted with a cipher that is not recognized or supported
     #[error("Invalid fixed cipher ID: {0}")]
     InvalidFixedCipherID(u32),
 }

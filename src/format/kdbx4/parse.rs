@@ -246,29 +246,38 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Kdbx4Out
     ))
 }
 
+/// Errors that can occur while parsing the KDBX4 outer header
 #[derive(Debug, Error)]
 pub enum Kdbx4OuterHeaderError {
+    /// The file ended unexpectedly while parsing the outer header
     #[error("Unexpected end of file while parsing outer header")]
     UnexpectedEof,
 
+    /// Errors related to the outer cipher configuration
     #[error(transparent)]
     OuterCipherConfig(#[from] crate::config::OuterCipherConfigError),
 
+    /// Errors related to the compression configuration
     #[error(transparent)]
     CompressionConfig(#[from] crate::config::CompressionConfigError),
 
+    /// Errors related to parsing the key derivation function configuration
     #[error("error parsing KDF config: {0}")]
     ParseKdfConfig(#[source] crate::format::variant_dictionary::VariantDictionaryError),
 
+    /// Errors related to parsing the public custom data
     #[error("error parsing public custom data: {0}")]
     ParseCustomData(#[source] crate::format::variant_dictionary::VariantDictionaryError),
 
+    /// Errors related to the key derivation function configuration
     #[error(transparent)]
     KdfConfig(#[from] crate::config::KdfConfigError),
 
+    /// The outer header contains an entry with an unrecognized or invalid entry type identifier
     #[error("Invalid outer header entry: {0}")]
     InvalidEntry(u8),
 
+    /// The outer header is missing a required field
     #[error("Outer header incomplete - missing {0}")]
     Incomplete(&'static str),
 }
@@ -335,32 +344,43 @@ fn parse_inner_header(
     Ok((header_attachments, inner_header, pos))
 }
 
+/// Errors that can occur while parsing the KDBX4 inner header
 #[derive(Debug, Error)]
 pub enum Kdbx4InnerHeaderError {
+    /// Errors related to the inner cipher configuration
     #[error(transparent)]
     InnerCipherConfig(#[from] crate::config::InnerCipherConfigError),
 
+    /// Encountered an invalid header entry
     #[error("Invalid inner header entry: {0}")]
     InvalidEntry(u8),
 
+    /// The inner header is missing a required field
     #[error("Inner header incomplete - missing {0}")]
     Incomplete(&'static str),
 }
 
+/// Errors that can occur while parsing a KDBX4 database
 #[derive(Debug, Error)]
 pub enum Kdbx4OpenError {
+    /// Errors related to XML parsing of the inner database
     #[error(transparent)]
     Xml(#[from] crate::format::xml_db::ParseXmlError),
 
+    /// Errors related to parsing the outer header of the KDBX4 file
     #[error(transparent)]
     OuterHeader(#[from] Kdbx4OuterHeaderError),
 
+    /// Errors related to parsing the inner header of the KDBX4 file
     #[error(transparent)]
     InnerHeader(#[from] Kdbx4InnerHeaderError),
 
+    /// The SHA256 hash of the outer header did not match the expected value, indicating that the
+    /// header may be corrupted or tampered with.
     #[error("Header hash mismatch - the header may be corrupted")]
     HeaderHashMismatch,
 
+    /// Errors related to the HMAC-verified block stream of the KDBX4 file
     #[error(transparent)]
     BlockStream(#[from] hmac_block_stream::BlockStreamError),
 }

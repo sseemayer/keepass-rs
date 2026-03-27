@@ -39,8 +39,10 @@ pub struct Meta {
     /// time the master key was last changed
     pub master_key_changed: Option<NaiveDateTime>,
 
+    /// Number of days until a change of the master key is recommended. -1 means never.
     pub master_key_change_rec: Option<isize>,
 
+    /// Number of days until a change of the master key is forced. -1 means never.
     pub master_key_change_force: Option<isize>,
 
     /// memory protection settings

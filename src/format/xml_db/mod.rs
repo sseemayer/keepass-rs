@@ -38,11 +38,15 @@ pub fn parse_xml(
     Ok(kdbx.xml_to_db(inner_decryptor, header_attachments)?)
 }
 
+/// Errors that can occur during parsing of the inner XML database of a KDBX file
 #[derive(Debug, Error)]
 pub enum ParseXmlError {
+    /// Errors related to XML deserialization or serialization.
     #[error("Error parsing XML inside KDBX: {0}")]
     Xml(#[from] quick_xml::DeError),
 
+    /// Errors related to unprotecting entries, such as decryption failures or unsupported
+    /// encryption methods.
     #[error("Error unprotecting entry: {0}")]
     Unprotect(#[from] UnprotectError),
 }

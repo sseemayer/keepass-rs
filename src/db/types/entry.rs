@@ -43,24 +43,41 @@ pub struct Entry {
     pub(crate) id: EntryId,
     pub(crate) parent: GroupId,
 
+    /// the key-value fields of this entry, such as username and password.
+    ///
+    /// Common field names are available in [crate::db::fields].
     pub fields: HashMap<String, Value<String>>,
+
+    /// AutoType settings for this entry
     pub autotype: Option<AutoType>,
+
+    /// tags associated with this entry
     pub tags: Vec<String>,
 
+    /// timestamps for this entry
     pub times: Times,
 
+    /// custom data items associated with this entry
     pub custom_data: HashMap<String, CustomDataItem>,
 
     pub(crate) icon: Option<Icon>,
 
+    /// foreground color for this entry
     pub foreground_color: Option<Color>,
+
+    /// background color for this entry
     pub background_color: Option<Color>,
 
+    /// URL override for this entry
     pub override_url: Option<String>,
+
+    /// whether to enable password quality check for this entry
     pub quality_check: Option<bool>,
 
+    /// attachments associated with this entry, mapped by attachment name to attachment ID
     pub(crate) attachments: HashMap<String, AttachmentId>,
 
+    /// history of this entry
     pub history: Option<History>,
 }
 
@@ -103,6 +120,7 @@ impl Entry {
         self.fields.get(key).map(|v| v.as_str())
     }
 
+    /// Set a field's value by name
     pub fn set(&mut self, key: impl Into<String>, value: Value<String>) {
         self.fields.insert(key.into(), value);
     }
@@ -618,6 +636,7 @@ pub struct EntryTrack<'a> {
 }
 
 impl EntryTrack<'_> {
+    /// Turn this tracked entry into a normal mutable reference to the entry
     pub fn as_mut(&mut self) -> EntryMut<'_> {
         EntryMut {
             database: self.database,
