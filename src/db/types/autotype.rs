@@ -24,7 +24,7 @@ pub struct AutoTypeAssociation {
     /// The title of the window to match with this entry. The string MUST support * as a wildcard character.
     pub window: String,
 
-    /// A custom Auto-Type sequence. If the value is left empty, the sequence from <DefaultSequence> is
+    /// A custom Auto-Type sequence. If the value is left empty, the sequence from default_sequence is
     /// used or, if that is empty as well, the group or global default.
     pub sequence: String,
 }

@@ -18,6 +18,7 @@ impl AttachmentId {
         AttachmentId(id)
     }
 
+    /// Get the underlying usize ID of this attachment.
     pub fn id(&self) -> usize {
         self.0
     }
@@ -55,6 +56,7 @@ pub struct Attachment {
 }
 
 impl Attachment {
+    /// Get the ID of this attachment.
     pub fn id(&self) -> AttachmentId {
         self.id
     }
@@ -85,6 +87,7 @@ impl AttachmentRef<'_> {
         AttachmentRef { database, id }
     }
 
+    /// Get an immutable reference to the database that owns this attachment.
     pub fn database(&self) -> &Database {
         self.database
     }

@@ -146,21 +146,27 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, Kdbx3OuterHeaderError>
     })
 }
 
+/// Errors related to parsing the outer header of a KDBX3 database
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Kdbx3OuterHeaderError {
+    /// Errors related to parsing the inner cipher configuration
     #[error(transparent)]
     InnerCipher(#[from] crate::config::InnerCipherConfigError),
 
+    /// Errors related to parsing the outer cipher configuration
     #[error(transparent)]
     OuterCipher(#[from] crate::config::OuterCipherConfigError),
 
+    /// Errors related to parsing the compression configuration
     #[error(transparent)]
     Compression(#[from] crate::config::CompressionConfigError),
 
+    /// An outer header entry has an invalid type identifier
     #[error("Encountered invalid outer header entry with type {0}")]
     InvalidOuterHeaderEntry(u8),
 
+    /// The outer header is missing a required entry
     #[error("Outer header is missing {0}")]
     IncompleteOuterHeader(&'static str),
 }
@@ -278,15 +284,19 @@ pub(crate) fn decrypt_kdbx3(
     Ok((config, inner_decryptor, xml))
 }
 
+/// Errors related to opening a KDBX3 database
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Kdbx3OpenError {
+    /// Errors related to parsing the outer header of the KDBX3 database
     #[error(transparent)]
     OuterHeader(#[from] Kdbx3OuterHeaderError),
 
+    /// A data block has a hash that does not match the expected hash, indicating possible corruption
     #[error("block hash mismatch at block index {0}")]
     BlockHashMismatch(usize),
 
+    /// Errors related to parsing the inner XML database of the KDBX3 file
     #[error(transparent)]
     Xml(#[from] crate::format::xml_db::ParseXmlError),
 }

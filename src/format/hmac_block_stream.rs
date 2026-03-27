@@ -108,9 +108,16 @@ pub(crate) fn get_hmac_block_key(block_index: u64, key: &GenericArray<u8, U64>) 
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum BlockStreamError {
+    /// The HMAC of a block did not match the expected value, indicating that the data may be
+    /// corrupted or tampered with.
     #[error("Block hash mismatch for block {}", block_index)]
-    BlockHashMismatch { block_index: u64 },
+    BlockHashMismatch {
+        /// The index of the block that failed the HMAC verification
+        block_index: u64,
+    },
 
+    /// The end of the file was reached unexpectedly while reading a block, indicating that the
+    /// data may be incomplete or corrupted.
     #[error("unexpected end of file")]
     Eof,
 }
