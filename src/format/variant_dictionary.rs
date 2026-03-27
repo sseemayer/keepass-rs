@@ -33,7 +33,8 @@ impl VariantDictionary {
     }
 
     pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryError> {
-        let version = LittleEndian::read_u16(&buffer[0..2]);
+        let version = buffer.get(0..2).ok_or(VariantDictionaryError::UnexpectedEof)?;
+        let version = LittleEndian::read_u16(version);
 
         if version != VARIANT_DICTIONARY_VERSION {
             return Err(VariantDictionaryError::InvalidVersion { version });
@@ -43,19 +44,30 @@ impl VariantDictionary {
         let mut data = HashMap::new();
 
         while pos + 9 < buffer.len() {
-            let value_type = buffer[pos];
+            let value_type = *buffer.get(pos).ok_or(VariantDictionaryError::UnexpectedEof)?;
             pos += 1;
 
-            let key_length = LittleEndian::read_u32(&buffer[pos..(pos + 4)]) as usize;
+            let key_length = buffer
+                .get(pos..(pos + 4))
+                .ok_or(VariantDictionaryError::UnexpectedEof)?;
+            let key_length = LittleEndian::read_u32(key_length) as usize;
             pos += 4;
 
-            let key = String::from_utf8_lossy(&buffer[pos..(pos + key_length)]).to_string();
+            let key = buffer
+                .get(pos..(pos + key_length))
+                .ok_or(VariantDictionaryError::UnexpectedEof)?;
+            let key = String::from_utf8_lossy(key).to_string();
             pos += key_length;
 
-            let value_length = LittleEndian::read_u32(&buffer[pos..(pos + 4)]) as usize;
+            let value_length = buffer
+                .get(pos..(pos + 4))
+                .ok_or(VariantDictionaryError::UnexpectedEof)?;
+            let value_length = LittleEndian::read_u32(value_length) as usize;
             pos += 4;
 
-            let value_buffer = &buffer[pos..(pos + value_length)];
+            let value_buffer = buffer
+                .get(pos..(pos + value_length))
+                .ok_or(VariantDictionaryError::UnexpectedEof)?;
             pos += value_length;
 
             let value = match value_type {
@@ -76,7 +88,9 @@ impl VariantDictionary {
             data.insert(key, value);
         }
 
-        if pos == buffer.len() || buffer[pos] != VARIANT_DICTIONARY_END {
+        if pos == buffer.len()
+            || *buffer.get(pos).ok_or(VariantDictionaryError::UnexpectedEof)? != VARIANT_DICTIONARY_END
+        {
             // even though we can determine when to stop parsing a VariantDictionary by where we
             // are in the buffer, there should always be a value_type = 0 entry to denote that a
             // VariantDictionary is finished
@@ -315,6 +329,10 @@ pub enum VariantDictionaryError {
     /// The VariantDictionary did not end with a null byte (0x00) as expected.
     #[error("VariantDictionary did not end with null byte, when it should")]
     NotTerminated,
+
+    /// An unexpected end of file was encountered while parsing the VariantDictionary
+    #[error("Unexpected end of file while parsing VariantDictionary")]
+    UnexpectedEof,
 }
 
 #[cfg(test)]

@@ -12,11 +12,11 @@ impl History {
     pub fn add_entry(&mut self, mut entry: Entry) {
         // DISCUSS: should we make sure that the last modification time is not the same
         // or older than the entry at the top of the history?
-        if entry.history.is_some() {
-            // Remove the history from the new history entry to avoid having
-            // an exponential number of history entries.
-            entry.history.take().unwrap();
-        }
+
+        // Remove the history from the new history entry to avoid having
+        // an exponential number of history entries.
+        entry.history.take();
+
         self.entries.insert(0, entry);
     }
 

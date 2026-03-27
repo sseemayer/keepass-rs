@@ -113,6 +113,7 @@ impl Deref for AttachmentRef<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentRef should only be created with valid AttachmentIds
+        #[allow(clippy::expect_used)]
         self.database
             .attachments
             .get(&self.id)
@@ -198,6 +199,7 @@ impl Deref for AttachmentMut<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentMut should only be created with valid AttachmentIds
+        #[allow(clippy::expect_used)]
         self.database
             .attachments
             .get(&self.id)
@@ -208,6 +210,7 @@ impl Deref for AttachmentMut<'_> {
 impl DerefMut for AttachmentMut<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: AttachmentMut should only be created with valid AttachmentIds
+        #[allow(clippy::expect_used)]
         self.database
             .attachments
             .get_mut(&self.id)
