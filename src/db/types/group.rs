@@ -68,7 +68,7 @@ pub struct Group {
     /// The list of time fields for this group
     pub times: Times,
 
-    // Custom Data
+    /// Custom Data
     pub custom_data: HashMap<String, CustomDataItem>,
 
     /// Whether the group is expanded in the user interface
@@ -592,6 +592,7 @@ pub struct GroupTrack<'a> {
 }
 
 impl GroupTrack<'_> {
+    /// Turn the GroupTrack back into a regular GroupMut
     pub fn as_mut(&mut self) -> GroupMut<'_> {
         GroupMut::new(self.database, self.id)
     }

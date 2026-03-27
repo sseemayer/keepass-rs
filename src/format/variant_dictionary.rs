@@ -284,18 +284,35 @@ impl<'a> From<&'a VariantDictionaryValue> for Option<&'a Vec<u8>> {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum VariantDictionaryError {
+    /// An invalid VariantDictionary version was encountered.
     #[error("Invalid variant dictionary version: {}", version)]
-    InvalidVersion { version: u16 },
+    InvalidVersion {
+        /// The version number that was encountered
+        version: u16,
+    },
 
+    /// An invalid value type was encountered while parsing a VariantDictionary.
     #[error("Invalid value type: {}", value_type)]
-    InvalidValueType { value_type: u8 },
+    InvalidValueType {
+        /// The value type identifier that was encountered
+        value_type: u8,
+    },
 
+    /// A required key was missing from the VariantDictionary.
     #[error("Missing key: {}", key)]
-    MissingKey { key: String },
+    MissingKey {
+        /// The name of the missing key
+        key: String,
+    },
 
+    /// A value was found for the specified key, but it was of an unexpected type.
     #[error("Mistyped value: {}", key)]
-    Mistyped { key: String },
+    Mistyped {
+        /// The name of the key whose value was mistyped
+        key: String,
+    },
 
+    /// The VariantDictionary did not end with a null byte (0x00) as expected.
     #[error("VariantDictionary did not end with null byte, when it should")]
     NotTerminated,
 }

@@ -9,13 +9,18 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::key::KeyElement;
 
+/// Represents a challenge-response key, which can be either a local secret or a Yubikey device.
 #[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
 #[non_exhaustive]
 pub enum ChallengeResponseKey {
+    /// A local challenge-response key represented by a hexadecimal string secret.
     LocalChallenge(String),
+
+    /// A Yubikey challenge-response key, consisting of a Yubikey device and a slot number.
     YubikeyChallenge(Yubikey, String),
 }
 
+/// Represents a Yubikey device with its serial number and optional name.
 #[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Yubikey {
     pub serial_number: u32,
@@ -51,6 +56,7 @@ impl ChallengeResponseKey {
         }
     }
 
+    /// Retrieves a list of all available Yubikey devices connected to the system.
     pub fn get_available_yubikeys() -> Result<Vec<Yubikey>, ChallengeResponseKeyError> {
         let mut challenge_response_client = ChallengeResponse::new()?;
 
@@ -68,6 +74,16 @@ impl ChallengeResponseKey {
         Ok(devices)
     }
 
+    /// Retrieves a specific Yubikey device based on the provided serial number.
+    ///
+    /// If `serial_number` is `None` and only one Yubikey device is connected, that device will be
+    /// returned.
+    ///
+    /// If `serial_number` is `None` and multiple Yubikey devices are connected, an error will be
+    /// returned indicating that the selection is ambiguous.
+    ///
+    /// If `serial_number` is provided but no matching device is found, an error will be returned
+    /// indicating that the specified key was not found.
     pub fn get_yubikey(serial_number: Option<u32>) -> Result<Yubikey, ChallengeResponseKeyError> {
         let devices = ChallengeResponseKey::get_available_yubikeys()?;
         if devices.is_empty() {
@@ -90,30 +106,45 @@ impl ChallengeResponseKey {
     }
 }
 
+/// Errors that can occur during challenge-response key operations.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ChallengeResponseKeyError {
+    /// No challenge-response keys are connected to the system.
     #[error("No challenge-respone keys are connected to the system.")]
     NoKeys,
 
+    /// Multiple challenge-response keys are connected to the system, but no serial number was
+    /// provided to disambiguate them.
     #[error("Multiple challenge-response keys are connected to the system. Please provide a serial number.")]
     AmbiguousKeys,
 
+    /// A challenge-response key with the specified serial number was not found among the connected
+    /// devices.
     #[error("Challenge-response key with serial number {0} not found.")]
     KeyNotFound(u32),
 
+    /// The specified key slot is invalid or not supported by the Yubikey device.
     #[error("Invalid key slot: {0}")]
     InvalidSlot(String),
 
+    /// Errors originating from the underlying challenge-response library, such as device
+    /// communication failures or configuration issues.
     #[error(transparent)]
     Api(#[from] challenge_response::error::ChallengeResponseError),
 
+    /// Errors that occur during the decoding of the local challenge secret from hexadecimal
+    /// format.
     #[error("Error decoding local challenge secret: {0}")]
     Hex(#[from] FromHexError),
 
+    /// Errors that occur during the calculation of the HMAC-SHA1 response for a local challenge.
     #[error("Local secret has invalid length")]
     InvalidLength(#[from] InvalidLength),
 
+    /// Errors that occur when a challenge-response operation is attempted but the authentication
+    /// process was not performed, such as when a required Yubikey device is not present or
+    /// accessible.
     #[error("Challenge-response authentication was not performed")]
     NotPerformed,
 }
