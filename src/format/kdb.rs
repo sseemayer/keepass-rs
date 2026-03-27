@@ -193,7 +193,9 @@ fn parse_groups(
             }
         }
 
-        *data = &data[6 + field_size as usize..];
+        *data = data
+            .get(6 + field_size as usize..)
+            .ok_or(DatabaseOpenError::UnexpectedEof)?;
     }
 
     if parsing_gid.is_some() {

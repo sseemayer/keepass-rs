@@ -52,6 +52,7 @@ pub enum DatabaseVersion {
 impl DatabaseVersion {
     /// Parses the database version from the given byte slice, which should contain the first 12
     /// bytes of a KDBX file.
+    #[allow(clippy::indexing_slicing)] // we check slice length at the beginnning
     pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseVersionParseError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
             return Err(DatabaseVersionParseError::UnexpectedEof);

@@ -66,7 +66,7 @@ pub enum GroupOrEntry {
 impl Group {
     pub(crate) fn xml_to_db_handle(
         self,
-        mut target: crate::db::GroupMut,
+        mut target: crate::db::GroupMut<'_>,
         attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
         custom_icons: &HashMap<crate::db::CustomIconId, crate::db::CustomIcon>,
         inner_decryptor: &mut dyn Cipher,
@@ -112,7 +112,7 @@ impl Group {
 
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
-        source: crate::db::GroupRef,
+        source: crate::db::GroupRef<'_>,
         inner_cipher: &mut dyn Cipher,
     ) -> Result<Self, CryptographyError> {
         let mut children = Vec::new();
