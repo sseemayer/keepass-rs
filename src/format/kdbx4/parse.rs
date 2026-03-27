@@ -54,6 +54,7 @@ pub(crate) fn decrypt_kdbx4(
     //      header_sha256       - A Sha256 hash of header_data (for verification of header integrity)
     //      header_hmac         - A HMAC of the header_data (for verification of the key_elements)
     //      hmac_block_stream   - A HMAC-verified block stream of encrypted and compressed blocks
+    #[allow(clippy::indexing_slicing)] // inner_header_start is provided by parse_outer_header
     let header_data = &data[0..inner_header_start];
 
     let header_sha256 = data
@@ -95,6 +96,8 @@ pub(crate) fn decrypt_kdbx4(
         &hmac_block_stream::HMAC_KEY_END,
     ]);
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+
+    #[allow(clippy::expect_used)] // HMAC block key is always correctly sized, so this can't fail
     if header_hmac
         != crypt::calculate_hmac(&[header_data], &header_hmac_key)
             .expect("HMAC block key always correctly sized")
@@ -123,7 +126,9 @@ pub(crate) fn decrypt_kdbx4(
         .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::InnerHeader(e))))?;
 
     // after inner header is one XML document
-    let xml = &payload[body_start..];
+    let xml = payload
+        .get(body_start..)
+        .ok_or(DatabaseOpenError::UnexpectedEof)?;
 
     // initialize the inner decryptor
     let inner_decryptor = inner_header
@@ -293,9 +298,16 @@ fn parse_inner_header(
     let mut header_attachments = Vec::new();
 
     loop {
-        let entry_type = data[pos];
-        let entry_length: usize = LittleEndian::read_u32(&data[pos + 1..(pos + 5)]) as usize;
-        let entry_buffer = &data[(pos + 5)..(pos + 5 + entry_length)];
+        let entry_type = *data.get(pos).ok_or(Kdbx4InnerHeaderError::UnexpectedEof)?;
+
+        let entry_length = data
+            .get(pos + 1..(pos + 5))
+            .ok_or(Kdbx4InnerHeaderError::UnexpectedEof)?;
+        let entry_length: usize = LittleEndian::read_u32(entry_length) as usize;
+
+        let entry_buffer = data
+            .get((pos + 5)..(pos + 5 + entry_length))
+            .ok_or(Kdbx4InnerHeaderError::UnexpectedEof)?;
 
         pos += 5 + entry_length;
 
@@ -308,7 +320,12 @@ fn parse_inner_header(
 
             INNER_HEADER_RANDOM_STREAM_KEY => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
+            #[allow(clippy::indexing_slicing)] // we check entry buffer length at the beginning of the block
             INNER_HEADER_BINARY_ATTACHMENTS => {
+                if entry_buffer.is_empty() {
+                    return Err(Kdbx4InnerHeaderError::UnexpectedEof);
+                }
+
                 let flags = entry_buffer[0];
                 let data = entry_buffer[1..].to_vec();
 
@@ -358,6 +375,10 @@ pub enum Kdbx4InnerHeaderError {
     /// The inner header is missing a required field
     #[error("Inner header incomplete - missing {0}")]
     Incomplete(&'static str),
+
+    /// The file ended unexpectedly while parsing the inner header
+    #[error("Unexpected end of file while parsing inner header")]
+    UnexpectedEof,
 }
 
 /// Errors that can occur while parsing a KDBX4 database

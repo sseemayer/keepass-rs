@@ -124,6 +124,7 @@ impl CustomIconRef<'_> {
 impl Deref for CustomIconRef<'_> {
     type Target = CustomIcon;
 
+    #[allow(clippy::expect_used)] // CustomIconRef should only be created with valid CustomIconIds
     fn deref(&self) -> &Self::Target {
         self.database
             .custom_icons
@@ -220,6 +221,7 @@ impl CustomIconMut<'_> {
 impl Deref for CustomIconMut<'_> {
     type Target = CustomIcon;
 
+    #[allow(clippy::expect_used)] // CustomIconMut should only be created with valid CustomIconIds
     fn deref(&self) -> &Self::Target {
         self.database
             .custom_icons
@@ -229,6 +231,7 @@ impl Deref for CustomIconMut<'_> {
 }
 
 impl DerefMut for CustomIconMut<'_> {
+    #[allow(clippy::expect_used)] // CustomIconMut should only be created with valid CustomIconIds
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.database
             .custom_icons

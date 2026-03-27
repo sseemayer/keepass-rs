@@ -268,6 +268,7 @@ impl Deref for EntryRef<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existance checked on EntryRef creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &entry.history.as_ref().unwrap().entries[n]
         } else {
             entry
@@ -300,23 +301,6 @@ impl EntryMut<'_> {
             database,
             id,
             history_index,
-        }
-    }
-
-    /// Gets an [EntryMut] to a historical version of the [Entry], if it exists
-    pub(crate) fn historical(&mut self, index: usize) -> Option<EntryMut<'_>> {
-        if let Some(h) = &self.history {
-            if index < h.entries.len() {
-                Some(EntryMut {
-                    database: self.database,
-                    id: self.id,
-                    history_index: Some(index),
-                })
-            } else {
-                None
-            }
-        } else {
-            None
         }
     }
 
@@ -604,6 +588,7 @@ impl Deref for EntryMut<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existence checked on EntryMut creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &entry.history.as_ref().unwrap().entries[n]
         } else {
             entry
@@ -619,6 +604,7 @@ impl DerefMut for EntryMut<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existence checked on EntryMut creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &mut entry.history.as_mut().unwrap().entries[n]
         } else {
             entry

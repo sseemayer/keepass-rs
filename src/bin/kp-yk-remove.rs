@@ -1,4 +1,4 @@
-/// utility to remove a Yubikey from a database's key
+//! utility to remove a Yubikey from a database's key
 use std::fs::File;
 
 use anyhow::Result;
@@ -31,7 +31,7 @@ struct Args {
     no_password: bool,
 }
 
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;

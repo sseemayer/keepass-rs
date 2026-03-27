@@ -100,6 +100,8 @@ impl ChallengeResponseKey {
             if devices.len() > 1 {
                 return Err(ChallengeResponseKeyError::AmbiguousKeys);
             }
+
+            #[allow(clippy::indexing_slicing)] // Safe because we check that the list is not empty above
             Ok(devices[0].clone())
         }
     }

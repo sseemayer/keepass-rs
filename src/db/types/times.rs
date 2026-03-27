@@ -46,12 +46,14 @@ fn now_timestamp() -> i64 {
 
 impl Times {
     /// Returns the current time, without the nanoseconds since the last leap second.
+    #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // current time should always be valid
     pub fn now() -> NaiveDateTime {
         let now = now_timestamp();
         chrono::DateTime::from_timestamp(now, 0).unwrap().naive_utc()
     }
 
     /// Returns the epoch time (January 1, 1970, 00:00:00 UTC) as a `NaiveDateTime`.
+    #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // epoch time is always valid
     pub fn epoch() -> NaiveDateTime {
         chrono::DateTime::from_timestamp(0, 0).unwrap().naive_utc()
     }

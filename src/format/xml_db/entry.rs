@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
-    db::{AttachmentId, Color, EntryId},
+    db::{AttachmentId, Color, EntryId, EntryMut},
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         meta::CustomData,
@@ -62,7 +62,7 @@ pub struct Entry {
 impl Entry {
     pub(crate) fn xml_to_db_handle(
         self,
-        mut target: crate::db::EntryMut,
+        mut target: crate::db::EntryMut<'_>,
         attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
         custom_icons: &HashMap<crate::db::CustomIconId, crate::db::CustomIcon>,
         inner_decryptor: &mut dyn Cipher,
@@ -114,16 +114,17 @@ impl Entry {
             target.history = Some(crate::db::History { entries: Vec::new() });
 
             for (i, e) in h.entries.into_iter().enumerate() {
-                let mut he = crate::db::Entry::with_id(EntryId::from_uuid(e.uuid.0), target.parent);
-                he.history = None; // history entries cannot have their own history
-                target.history.as_mut().unwrap().entries.push(he);
+                let id = EntryId::from_uuid(e.uuid.0);
 
-                e.xml_to_db_handle(
-                    target.historical(i).unwrap(),
-                    attachments,
-                    custom_icons,
-                    inner_decryptor,
-                )?;
+                let mut he = crate::db::Entry::with_id(id, target.parent);
+                he.history = None; // history entries cannot have their own history
+
+                if let Some(h) = target.history.as_mut() {
+                    h.entries.push(he);
+                }
+
+                let historical = EntryMut::new_historical(target.database_mut(), id, Some(i));
+                e.xml_to_db_handle(historical, attachments, custom_icons, inner_decryptor)?;
             }
         }
 
@@ -136,7 +137,7 @@ impl Entry {
 
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
-        db: crate::db::EntryRef,
+        db: crate::db::EntryRef<'_>,
         inner_encryptor: &mut dyn Cipher,
     ) -> Result<Self, CryptographyError> {
         let (icon_id, custom_icon_uuid) = match db.icon {
@@ -180,7 +181,7 @@ impl Entry {
 
         let history = if let Some(h) = db.history.as_ref() {
             let entries = (0..h.entries.len())
-                .map(|i| Entry::db_to_xml(db.historical(i).unwrap(), inner_encryptor))
+                .filter_map(|i| Some(Entry::db_to_xml(db.historical(i)?, inner_encryptor)))
                 .collect::<Result<Vec<_>, CryptographyError>>()?;
 
             Some(History { entries })
