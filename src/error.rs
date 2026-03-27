@@ -3,7 +3,10 @@
 pub use crate::{
     config::{CompressionConfigError, InnerCipherConfigError, KdfConfigError, OuterCipherConfigError},
     crypt::CryptographyError,
-    db::{DatabaseFormatError, DatabaseOpenError, ParseColorError},
+    db::{
+        CustomIconNotFoundError, DatabaseFormatError, DatabaseOpenError, DestinationGroupNotFoundError,
+        MoveGroupError, ParseColorError,
+    },
     format::{
         hmac_block_stream::BlockStreamError,
         kdb::KdbOpenError,

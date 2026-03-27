@@ -15,12 +15,13 @@ pub mod timestamp;
 use serde::{Deserialize, Serialize, Serializer};
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
     crypt::ciphers::Cipher,
+    db::{GroupId, Value},
     format::xml_db::{
         custom_serde::cs_opt_string, entry::UnprotectError, group::Group, meta::Meta, timestamp::Timestamp,
     },
@@ -30,33 +31,46 @@ use crate::{crypt::CryptographyError, db::DatabaseSaveError};
 
 pub fn parse_xml(
     data: &[u8],
-    header_attachments: &[crate::db::Attachment],
+    header_attachments: &[Value<Vec<u8>>],
     inner_decryptor: &mut dyn Cipher,
 ) -> Result<crate::db::Database, ParseXmlError> {
     let kdbx: KeePassFile = quick_xml::de::from_reader(data)?;
     Ok(kdbx.xml_to_db(inner_decryptor, header_attachments)?)
 }
 
+/// Errors that can occur during parsing of the inner XML database of a KDBX file
 #[derive(Debug, Error)]
 pub enum ParseXmlError {
+    /// Errors related to XML deserialization or serialization.
     #[error("Error parsing XML inside KDBX: {0}")]
     Xml(#[from] quick_xml::DeError),
 
+    /// Errors related to unprotecting entries, such as decryption failures or unsupported
+    /// encryption methods.
     #[error("Error unprotecting entry: {0}")]
     Unprotect(#[from] UnprotectError),
 }
 
 #[cfg(feature = "save_kdbx4")]
+#[allow(clippy::type_complexity)]
 pub fn to_xml(
     db: &crate::db::Database,
     inner_encryptor: &mut dyn Cipher,
-) -> Result<(Vec<u8>, Vec<crate::db::Attachment>), DatabaseSaveError> {
-    let mut attachments = Vec::new();
-
-    let kdbx = KeePassFile::db_to_xml(db, inner_encryptor, &mut attachments)?;
+) -> Result<(Vec<u8>, Vec<crate::db::Value<Vec<u8>>>), DatabaseSaveError> {
+    let kdbx = KeePassFile::db_to_xml(db, inner_encryptor)?;
     let xml = quick_xml::se::to_string_with_root("KeePassFile", &kdbx)?
         .as_bytes()
         .to_vec();
+
+    let mut attachments: Vec<(usize, Value<Vec<u8>>)> = db
+        .attachments
+        .iter()
+        .map(|(id, attachment)| (id.id(), attachment.data.clone()))
+        .collect();
+
+    attachments.sort_by_key(|(id, _)| *id);
+
+    let attachments = attachments.into_iter().map(|(_, data)| data).collect();
 
     Ok((xml, attachments))
 }
@@ -73,24 +87,50 @@ impl KeePassFile {
     fn xml_to_db(
         mut self,
         inner_decryptor: &mut dyn Cipher,
-        header_attachments: &[crate::db::Attachment],
+        header_attachments: &[Value<Vec<u8>>],
     ) -> Result<crate::db::Database, UnprotectError> {
-        let mut db = crate::db::Database::new(Default::default());
-        db.root.uuid = self.root.group.uuid.0;
+        let mut db = crate::db::Database::new_with_root_id(GroupId::from_uuid(self.root.group.uuid.0));
 
-        let mut attachments = header_attachments.to_vec();
+        let mut attachments = HashMap::new();
+
+        // convert header attachments (KDBX4-style) to database attachments
+        for (i, header_attachment) in header_attachments.iter().enumerate() {
+            let attachment = crate::db::Attachment {
+                id: crate::db::AttachmentId::new(i),
+                entries: HashSet::new(),
+                data: header_attachment.clone(),
+            };
+            attachments.insert(attachment.id, attachment);
+        }
+
+        // convert XML attachments (KDBX3-style) to database attachments
         if let Some(binaries) = self.meta.binaries.take() {
             for binary in binaries.binaries {
-                attachments.push(binary.xml_to_db(inner_decryptor)?);
+                let id = crate::db::AttachmentId::next_free(&db);
+                let data = binary.xml_to_db(inner_decryptor)?;
+
+                attachments.insert(
+                    id,
+                    crate::db::Attachment {
+                        id,
+                        entries: HashSet::new(),
+                        data,
+                    },
+                );
             }
         }
 
-        let custom_icons = self.meta.custom_icons.take();
-        let custom_icons: HashMap<Uuid, Vec<u8>> = custom_icons
+        let custom_icons = self
+            .meta
+            .custom_icons
+            .take()
             .map(|ci| {
                 ci.icons
                     .into_iter()
-                    .map(|icon| (icon.uuid.0, icon.data))
+                    .map(|icon| {
+                        let ci: crate::db::CustomIcon = icon.into();
+                        (ci.id, ci)
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -111,32 +151,24 @@ impl KeePassFile {
 
         self.root
             .group
-            .xml_to_db_handle(&mut db.root, &attachments, &custom_icons, inner_decryptor)?;
+            .xml_to_db_handle(db.root_mut(), &attachments, &custom_icons, inner_decryptor)?;
+
+        db.attachments = attachments;
+        db.custom_icons = custom_icons;
 
         Ok(db)
     }
 
     /// Convert from database representation to XML representation.
     #[cfg(feature = "save_kdbx4")]
-    fn db_to_xml(
-        db: &crate::db::Database,
-        inner_cipher: &mut dyn Cipher,
-        attachments: &mut Vec<crate::db::Attachment>,
-    ) -> Result<Self, CryptographyError> {
+    fn db_to_xml(db: &crate::db::Database, inner_cipher: &mut dyn Cipher) -> Result<Self, CryptographyError> {
         use crate::format::xml_db::meta::Icon;
 
-        let mut custom_icons = HashMap::new();
-
-        let group = Group::db_to_xml(&db.root, inner_cipher, attachments, &mut custom_icons)?;
+        let group = Group::db_to_xml(db.root(), inner_cipher)?;
 
         let mut meta: Meta = db.meta.clone().into();
-        meta.custom_icons
-            .get_or_insert_default()
-            .icons
-            .extend(custom_icons.into_iter().map(|(uuid, data)| Icon {
-                uuid: UUID(uuid),
-                data,
-            }));
+        meta.custom_icons.get_or_insert_default().icons =
+            db.custom_icons.values().cloned().map(Icon::from).collect();
 
         let deleted_objects = if db.deleted_objects.is_empty() {
             None

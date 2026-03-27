@@ -76,8 +76,13 @@ impl Default for DatabaseConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum OuterCipherConfig {
+    /// Encrypt the database with AES-256 in CBC mode.
     AES256,
+
+    /// Encrypt the database with Twofish in CBC mode.
     Twofish,
+
+    /// Encrypt the database with ChaCha20.
     ChaCha20,
 }
 
@@ -131,19 +136,29 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
 /// Errors with the configuration of the outer encryption
 #[derive(Debug, Error)]
 pub enum OuterCipherConfigError {
+    /// Errors with cryptographic operations
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
 
+    /// The identifier for the outer cipher specified in the database is invalid
     #[error("Invalid outer cipher ID: {:?}", cid)]
-    InvalidOuterCipherID { cid: Vec<u8> },
+    InvalidOuterCipherID {
+        /// The invalid cipher ID that was encountered, as a byte vector
+        cid: Vec<u8>,
+    },
 }
 
 /// Choices for encrypting protected values inside of databases
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum InnerCipherConfig {
+    /// Don't encrypt proected values
     Plain,
+
+    /// Encrypt protected values with Salsa20
     Salsa20,
+
+    /// Encrypt protected values with ChaCha20
     ChaCha20,
 }
 
@@ -194,11 +209,16 @@ impl TryFrom<u32> for InnerCipherConfig {
 /// Errors with the configuration of the inner encryption
 #[derive(Debug, Error)]
 pub enum InnerCipherConfigError {
+    /// A cryptographic error occurred while configuring the inner cipher
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
 
+    /// The identifier for the inner cipher specified in the database is invalid
     #[error("Invalid inner cipher ID: {}", cid)]
-    InvalidInnerCipherID { cid: u32 },
+    InvalidInnerCipherID {
+        /// The invalid cipher ID that was encountered
+        cid: u32,
+    },
 }
 
 // Name of the KDF fields in the variant dictionaries.
@@ -218,22 +238,38 @@ const KDF_ROUNDS: &str = "R";
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum KdfConfig {
     /// Derive keys with repeated AES encryption
-    Aes { rounds: u64 },
+    Aes {
+        /// The number of rounds of AES encryption to perform when deriving keys
+        rounds: u64,
+    },
     /// Derive keys with Argon2d
     Argon2 {
+        /// The number of iterations to perform when deriving keys
         iterations: u64,
+
+        /// The amount of memory (in KiB) to use when deriving keys
         memory: u64,
+
+        /// The degree of parallelism to use when deriving keys
         parallelism: u32,
 
+        /// The version of the Argon2 algorithm to use when deriving keys
         #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
+
     /// Derive keys with Argon2id
     Argon2id {
+        /// The number of iterations to perform when deriving keys
         iterations: u64,
+
+        /// The amount of memory (in KiB) to use when deriving keys
         memory: u64,
+
+        /// The degree of parallelism to use when deriving keys
         parallelism: u32,
 
+        /// The version of the Argon2 algorithm to use when deriving keys
         #[cfg_attr(feature = "serialization", serde(serialize_with = "serialize_argon2_version"))]
         version: argon2::Version,
     },
@@ -416,12 +452,21 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
 /// Errors with the configuration of the Key Derivation Function
 #[derive(Debug, Error)]
 pub enum KdfConfigError {
+    /// An invalid KDF version was specified in the database
     #[error("Invalid KDF version: {}", version)]
-    InvalidKDFVersion { version: u32 },
+    InvalidKDFVersion {
+        /// The invalid KDF version that was encountered
+        version: u32,
+    },
 
+    /// An invalid KDF UUID was specified in the database
     #[error("Invalid KDF UUID: {:?}", uuid)]
-    InvalidKDFUUID { uuid: Vec<u8> },
+    InvalidKDFUUID {
+        /// The invalid KDF UUID that was encountered, as a byte vector
+        uuid: Vec<u8>,
+    },
 
+    /// Errors parsing KDF parameters from the variant dictionary
     #[error(transparent)]
     VariantDictionary(#[from] VariantDictionaryError),
 }
@@ -430,7 +475,10 @@ pub enum KdfConfigError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum CompressionConfig {
+    /// Don't compress the inner data
     None,
+
+    /// Compress the inner data with GZip
     GZip,
 }
 
@@ -468,5 +516,8 @@ impl TryFrom<u32> for CompressionConfig {
 pub enum CompressionConfigError {
     /// The identifier for the compression algorithm specified in the database is invalid
     #[error("Invalid compression algorithm: {}", cid)]
-    InvalidCompressionSuite { cid: u32 },
+    InvalidCompressionSuite {
+        /// The invalid compression suite ID that was encountered
+        cid: u32,
+    },
 }

@@ -1,4 +1,4 @@
-/// utility to dump keepass database internal XML data.
+//! utility to show TOTP code for an entry in a KeePass database
 use std::fs::File;
 
 use anyhow::Result;
@@ -23,7 +23,7 @@ struct Args {
     entry: String,
 }
 
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;
@@ -42,13 +42,13 @@ pub fn main() -> Result<()> {
     }
 
     let db = Database::open(&mut source, key)?;
+    let root = db.root();
 
-    let entry = db
-        .root
+    let entry = root
         .entry_by_name(args.entry.as_str())
-        .expect("Could not find entry with provided name");
+        .ok_or_else(|| anyhow::format_err!("No entry found"))?;
 
-    let totp = entry.get_otp().unwrap();
-    println!("Token is {}", totp.value_now().unwrap().code);
+    let totp = entry.get_otp()?;
+    println!("Token is {}", totp.value_now()?.code);
     Ok(())
 }

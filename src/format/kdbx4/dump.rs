@@ -4,7 +4,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 
 use crate::{
     crypt,
-    db::{Attachment, Database, DatabaseSaveError},
+    db::{Database, DatabaseSaveError, Value},
     format::{
         hmac_block_stream,
         io::WriteLengthTaggedExt,
@@ -79,6 +79,8 @@ pub fn dump_kdbx4(
     // verify credentials
     let hmac_key = crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END]);
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+
+    #[allow(clippy::expect_used)] // HMAC key is always correctly sized, so this can't fail
     let header_hmac =
         crypt::calculate_hmac(&[&header_data], &header_hmac_key).expect("HMAC key always correctly sized");
 
@@ -158,7 +160,11 @@ impl KDBX4OuterHeader {
 }
 
 impl KDBX4InnerHeader {
-    fn dump(&self, header_attachments: &[Attachment], writer: &mut dyn Write) -> Result<(), DatabaseSaveError> {
+    fn dump(
+        &self,
+        header_attachments: &[Value<Vec<u8>>],
+        writer: &mut dyn Write,
+    ) -> Result<(), DatabaseSaveError> {
         writer.write_all(&[INNER_HEADER_RANDOM_STREAM_ID])?;
         writer.write_u32::<LittleEndian>(4)?;
         writer.write_u32::<LittleEndian>(self.inner_random_stream.dump())?;
@@ -168,9 +174,9 @@ impl KDBX4InnerHeader {
 
         for attachment in header_attachments {
             writer.write_u8(INNER_HEADER_BINARY_ATTACHMENTS)?;
-            writer.write_u32::<LittleEndian>((attachment.data.len() + 1) as u32)?;
+            writer.write_u32::<LittleEndian>((attachment.len() + 1) as u32)?;
             writer.write_u8(if attachment.is_protected() { 0x01 } else { 0x00 })?;
-            writer.write_all(&attachment.data)?;
+            writer.write_all(attachment.get())?;
         }
 
         writer.write_u8(INNER_HEADER_END)?;

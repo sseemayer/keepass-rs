@@ -8,7 +8,7 @@ use thiserror::Error;
 use crate::{
     config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
     crypt::{self, ciphers::Cipher},
-    db::{Attachment, Database, DatabaseFormatError, DatabaseOpenError, Value},
+    db::{Database, DatabaseFormatError, DatabaseOpenError, Value},
     format::{
         hmac_block_stream,
         kdbx4::{
@@ -24,25 +24,6 @@ use crate::{
 };
 
 use super::KDBX4InnerHeader;
-
-impl From<&[u8]> for Attachment {
-    fn from(data: &[u8]) -> Self {
-        let flags = data[0];
-        let data = data[1..].to_vec();
-
-        let protected = flags & 0x01 != 0;
-
-        if protected {
-            Attachment {
-                data: Value::protected(data),
-            }
-        } else {
-            Attachment {
-                data: Value::unprotected(data),
-            }
-        }
-    }
-}
 
 /// Open, decrypt and parse a KeePass database from a source and key elements
 pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database, DatabaseOpenError> {
@@ -61,7 +42,7 @@ pub(crate) fn parse_kdbx4(data: &[u8], db_key: &DatabaseKey) -> Result<Database,
 pub(crate) fn decrypt_kdbx4(
     data: &[u8],
     db_key: &DatabaseKey,
-) -> Result<(DatabaseConfig, Vec<Attachment>, Box<dyn Cipher>, Vec<u8>), DatabaseOpenError> {
+) -> Result<(DatabaseConfig, Vec<Value<Vec<u8>>>, Box<dyn Cipher>, Vec<u8>), DatabaseOpenError> {
     let version = DatabaseVersion::parse(data)?;
 
     // parse header
@@ -73,6 +54,7 @@ pub(crate) fn decrypt_kdbx4(
     //      header_sha256       - A Sha256 hash of header_data (for verification of header integrity)
     //      header_hmac         - A HMAC of the header_data (for verification of the key_elements)
     //      hmac_block_stream   - A HMAC-verified block stream of encrypted and compressed blocks
+    #[allow(clippy::indexing_slicing)] // inner_header_start is provided by parse_outer_header
     let header_data = &data[0..inner_header_start];
 
     let header_sha256 = data
@@ -114,6 +96,8 @@ pub(crate) fn decrypt_kdbx4(
         &hmac_block_stream::HMAC_KEY_END,
     ]);
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+
+    #[allow(clippy::expect_used)] // HMAC block key is always correctly sized, so this can't fail
     if header_hmac
         != crypt::calculate_hmac(&[header_data], &header_hmac_key)
             .expect("HMAC block key always correctly sized")
@@ -142,7 +126,9 @@ pub(crate) fn decrypt_kdbx4(
         .map_err(|e| DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::InnerHeader(e))))?;
 
     // after inner header is one XML document
-    let xml = &payload[body_start..];
+    let xml = payload
+        .get(body_start..)
+        .ok_or(DatabaseOpenError::UnexpectedEof)?;
 
     // initialize the inner decryptor
     let inner_decryptor = inner_header
@@ -265,36 +251,46 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Kdbx4Out
     ))
 }
 
+/// Errors that can occur while parsing the KDBX4 outer header
 #[derive(Debug, Error)]
 pub enum Kdbx4OuterHeaderError {
+    /// The file ended unexpectedly while parsing the outer header
     #[error("Unexpected end of file while parsing outer header")]
     UnexpectedEof,
 
+    /// Errors related to the outer cipher configuration
     #[error(transparent)]
     OuterCipherConfig(#[from] crate::config::OuterCipherConfigError),
 
+    /// Errors related to the compression configuration
     #[error(transparent)]
     CompressionConfig(#[from] crate::config::CompressionConfigError),
 
+    /// Errors related to parsing the key derivation function configuration
     #[error("error parsing KDF config: {0}")]
     ParseKdfConfig(#[source] crate::format::variant_dictionary::VariantDictionaryError),
 
+    /// Errors related to parsing the public custom data
     #[error("error parsing public custom data: {0}")]
     ParseCustomData(#[source] crate::format::variant_dictionary::VariantDictionaryError),
 
+    /// Errors related to the key derivation function configuration
     #[error(transparent)]
     KdfConfig(#[from] crate::config::KdfConfigError),
 
+    /// The outer header contains an entry with an unrecognized or invalid entry type identifier
     #[error("Invalid outer header entry: {0}")]
     InvalidEntry(u8),
 
+    /// The outer header is missing a required field
     #[error("Outer header incomplete - missing {0}")]
     Incomplete(&'static str),
 }
 
+#[allow(clippy::type_complexity)]
 fn parse_inner_header(
     data: &[u8],
-) -> Result<(Vec<Attachment>, KDBX4InnerHeader, usize), Kdbx4InnerHeaderError> {
+) -> Result<(Vec<Value<Vec<u8>>>, KDBX4InnerHeader, usize), Kdbx4InnerHeaderError> {
     let mut pos = 0;
 
     let mut inner_random_stream = None;
@@ -302,9 +298,16 @@ fn parse_inner_header(
     let mut header_attachments = Vec::new();
 
     loop {
-        let entry_type = data[pos];
-        let entry_length: usize = LittleEndian::read_u32(&data[pos + 1..(pos + 5)]) as usize;
-        let entry_buffer = &data[(pos + 5)..(pos + 5 + entry_length)];
+        let entry_type = *data.get(pos).ok_or(Kdbx4InnerHeaderError::UnexpectedEof)?;
+
+        let entry_length = data
+            .get(pos + 1..(pos + 5))
+            .ok_or(Kdbx4InnerHeaderError::UnexpectedEof)?;
+        let entry_length: usize = LittleEndian::read_u32(entry_length) as usize;
+
+        let entry_buffer = data
+            .get((pos + 5)..(pos + 5 + entry_length))
+            .ok_or(Kdbx4InnerHeaderError::UnexpectedEof)?;
 
         pos += 5 + entry_length;
 
@@ -317,9 +320,24 @@ fn parse_inner_header(
 
             INNER_HEADER_RANDOM_STREAM_KEY => inner_random_stream_key = Some(entry_buffer.to_vec()),
 
+            #[allow(clippy::indexing_slicing)] // we check entry buffer length at the beginning of the block
             INNER_HEADER_BINARY_ATTACHMENTS => {
-                let header_attachment = Attachment::from(entry_buffer);
-                header_attachments.push(header_attachment);
+                if entry_buffer.is_empty() {
+                    return Err(Kdbx4InnerHeaderError::UnexpectedEof);
+                }
+
+                let flags = entry_buffer[0];
+                let data = entry_buffer[1..].to_vec();
+
+                let protected = flags & 0x01 != 0;
+
+                let data = if protected {
+                    Value::protected(data)
+                } else {
+                    Value::unprotected(data)
+                };
+
+                header_attachments.push(data);
             }
 
             _ => {
@@ -343,32 +361,47 @@ fn parse_inner_header(
     Ok((header_attachments, inner_header, pos))
 }
 
+/// Errors that can occur while parsing the KDBX4 inner header
 #[derive(Debug, Error)]
 pub enum Kdbx4InnerHeaderError {
+    /// Errors related to the inner cipher configuration
     #[error(transparent)]
     InnerCipherConfig(#[from] crate::config::InnerCipherConfigError),
 
+    /// Encountered an invalid header entry
     #[error("Invalid inner header entry: {0}")]
     InvalidEntry(u8),
 
+    /// The inner header is missing a required field
     #[error("Inner header incomplete - missing {0}")]
     Incomplete(&'static str),
+
+    /// The file ended unexpectedly while parsing the inner header
+    #[error("Unexpected end of file while parsing inner header")]
+    UnexpectedEof,
 }
 
+/// Errors that can occur while parsing a KDBX4 database
 #[derive(Debug, Error)]
 pub enum Kdbx4OpenError {
+    /// Errors related to XML parsing of the inner database
     #[error(transparent)]
     Xml(#[from] crate::format::xml_db::ParseXmlError),
 
+    /// Errors related to parsing the outer header of the KDBX4 file
     #[error(transparent)]
     OuterHeader(#[from] Kdbx4OuterHeaderError),
 
+    /// Errors related to parsing the inner header of the KDBX4 file
     #[error(transparent)]
     InnerHeader(#[from] Kdbx4InnerHeaderError),
 
+    /// The SHA256 hash of the outer header did not match the expected value, indicating that the
+    /// header may be corrupted or tampered with.
     #[error("Header hash mismatch - the header may be corrupted")]
     HeaderHashMismatch,
 
+    /// Errors related to the HMAC-verified block stream of the KDBX4 file
     #[error(transparent)]
     BlockStream(#[from] hmac_block_stream::BlockStreamError),
 }

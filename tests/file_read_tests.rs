@@ -1,6 +1,9 @@
+//! Integration tests for various database examples
+
+#[allow(missing_docs)]
 mod file_read_tests {
     use keepass::{
-        db::{Database, DatabaseOpenError, Group},
+        db::{Database, DatabaseOpenError, GroupRef},
         DatabaseKey,
     };
 
@@ -8,10 +11,10 @@ mod file_read_tests {
 
     use std::{fs::File, path::Path};
 
-    fn explore(parent: &Group) -> (usize, usize) {
+    fn explore(parent: GroupRef<'_>) -> (usize, usize) {
         let mut total_entries = 0;
         let mut total_groups = 1;
-        for entry in &parent.entries {
+        for entry in parent.entries() {
             let title = entry.get_title().unwrap_or("(no title)");
             let user = entry.get_username().unwrap_or("(no user)");
             let pass = entry.get_password().unwrap_or("(no password)");
@@ -19,7 +22,7 @@ mod file_read_tests {
             total_entries += 1;
         }
 
-        for group in &parent.groups {
+        for group in parent.groups() {
             println!("Saw group '{0}'", group.name);
             let (ee, eg) = explore(group);
 
@@ -39,11 +42,11 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-        assert_eq!(db.root.name, "sample");
-        assert_eq!(db.root.groups.len(), 3);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root().name, "sample");
+        assert_eq!(db.root().groups().count(), 3);
+        assert_eq!(db.root().entries().count(), 2);
 
-        let (total_entries, total_groups) = explore(&db.root);
+        let (total_entries, total_groups) = explore(db.root());
         assert_eq!(total_groups, 5);
         assert_eq!(total_entries, 6);
 
@@ -62,11 +65,11 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
-        let (total_entries, total_groups) = explore(&db.root);
+        let (total_entries, total_groups) = explore(db.root());
         assert_eq!(total_groups, 1);
         assert_eq!(total_entries, 1);
 
@@ -85,11 +88,11 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 2);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 2);
+        assert_eq!(db.root().entries().count(), 2);
 
-        let (total_entries, total_groups) = explore(&db.root);
+        let (total_entries, total_groups) = explore(db.root());
         assert_eq!(total_groups, 5);
         assert_eq!(total_entries, 6);
 
@@ -109,9 +112,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 2);
 
         Ok(())
     }
@@ -127,9 +130,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 2);
 
         Ok(())
     }
@@ -144,9 +147,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
         Ok(())
     }
@@ -162,9 +165,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
         Ok(())
     }
@@ -180,9 +183,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
         Ok(())
     }
@@ -198,9 +201,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
         Ok(())
     }
@@ -216,9 +219,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
         Ok(())
     }
@@ -235,9 +238,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
         Ok(())
     }
@@ -256,9 +259,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
         Ok(())
     }
@@ -278,9 +281,9 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "testdb02");
-        assert_eq!(db.root.groups.len(), 6);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root().name, "testdb02");
+        assert_eq!(db.root().groups().count(), 6);
+        assert_eq!(db.root().entries().count(), 2);
 
         Ok(())
     }
@@ -313,10 +316,10 @@ mod file_read_tests {
         let db = Database::open(&mut File::open(path)?, DatabaseKey::new().with_password("foobar"))?;
 
         println!("{:?} DB Opened", db);
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 3);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 3);
 
-        let (total_entries, total_groups) = explore(&db.root);
+        let (total_entries, total_groups) = explore(db.root());
         assert_eq!(total_groups, 12);
         assert_eq!(total_entries, 5);
 
@@ -334,10 +337,10 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 1);
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 1);
 
-        let (total_entries, total_groups) = explore(&db.root);
+        let (total_entries, total_groups) = explore(db.root());
         assert_eq!(total_groups, 1);
         assert_eq!(total_entries, 1);
 
@@ -356,13 +359,13 @@ mod file_read_tests {
 
         println!("{:?} DB Opened", db);
 
-        assert_eq!(db.root.name, "Root");
+        assert_eq!(db.root().name, "Root");
         assert_eq!(
             db.meta.recyclebin_uuid,
             Some(uuid!("563171fe-6598-42dc-8003-f98dde32e872"))
         );
 
-        let recycle_bin = db.root.group_by_uuid(db.meta.recyclebin_uuid.unwrap()).unwrap();
+        let recycle_bin = db.recycle_bin().unwrap();
         assert_eq!(recycle_bin.name, "Recycle Bin");
 
         Ok(())
@@ -381,9 +384,9 @@ mod file_read_tests {
                 )),
         )?;
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 2);
         Ok(())
     }
 
@@ -403,9 +406,9 @@ mod file_read_tests {
                 )),
         )?;
 
-        assert_eq!(db.root.name, "Root");
-        assert_eq!(db.root.groups.len(), 0);
-        assert_eq!(db.root.entries.len(), 2);
+        assert_eq!(db.root().name, "Root");
+        assert_eq!(db.root().groups().count(), 0);
+        assert_eq!(db.root().entries().count(), 2);
         Ok(())
     }
 
@@ -439,8 +442,8 @@ mod file_read_tests {
                 Ok(db) => {
                     println!(" - DB Opened");
 
-                    assert_eq!(db.root.name, "Root");
-                    assert_eq!(db.root.entries.len(), 1);
+                    assert_eq!(db.root().name, "Root");
+                    assert_eq!(db.root().entries().count(), 1);
                 }
                 Err(_) => {
                     println!(" - failed with error");
