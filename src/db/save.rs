@@ -20,6 +20,7 @@ impl Database {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum DatabaseSaveError {
     #[error(transparent)]
     Io(#[from] std::io::Error),

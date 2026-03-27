@@ -42,9 +42,9 @@ pub fn main() -> Result<()> {
     }
 
     let db = Database::open(&mut source, key)?;
+    let root = db.root();
 
-    let entry = db
-        .root
+    let entry = root
         .entry_by_name(args.entry.as_str())
         .expect("Could not find entry with provided name");
 

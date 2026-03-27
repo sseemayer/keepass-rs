@@ -12,6 +12,7 @@ const DEFAULT_DIGITS: u32 = 8;
 
 /// Choices of hash algorithm for TOTP
 #[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[non_exhaustive]
 pub enum TOTPAlgorithm {
     Sha1,
     Sha256,
@@ -64,6 +65,7 @@ impl std::fmt::Display for OTPCode {
 
 /// Errors while processing a TOTP specification
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum TOTPError {
     #[error(transparent)]
     UrlFormat(#[from] url::ParseError),
@@ -187,8 +189,8 @@ mod kdbx4_otp_tests {
         let otp_str =
             "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
 
-        let entry = db
-            .root
+        let root = db.root();
+        let entry = root
             .entry_by_name("this entry has totp")
             .ok_or("Entry not found")?;
         assert_eq!(entry.get_title(), Some("this entry has totp"));
