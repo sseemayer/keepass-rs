@@ -11,10 +11,12 @@ mod entry_tests {
             DatabaseKey::new().with_password("demopass"),
         )?;
 
-        // get an entry on the root node
-        let e = db.root.entry_by_name("Sample Entry").expect("Expected an entry");
+        let root = db.root();
 
-        assert_eq!(e.uuid, uuid!("0ebeddb2-ed4e-5144-bc34-1a309266a513"));
+        // get an entry on the root node
+        let e = root.entry_by_name("Sample Entry").expect("Expected an entry");
+
+        assert_eq!(e.id().uuid(), uuid!("0ebeddb2-ed4e-5144-bc34-1a309266a513"));
         assert_eq!(e.get_title(), Some("Sample Entry"));
         assert_eq!(e.get_username(), Some("User Name"));
         assert_eq!(e.get_password(), Some("Password"));
@@ -37,14 +39,13 @@ mod entry_tests {
         }
 
         // get an entry in a subgroup
-        let e = db
-            .root
+        let sg = root
             .group_by_path(&["General", "Subgroup"])
-            .expect("Expected a subgroup")
-            .entry_by_name("test entry")
-            .expect("Expected an entry");
+            .expect("Expected a subgroup");
 
-        assert_eq!(e.uuid, uuid!("5e4c8ad1-9cd5-394c-9039-1178dc140b4a"));
+        let e = sg.entry_by_name("test entry").expect("Expected an entry");
+
+        assert_eq!(e.id().uuid(), uuid!("5e4c8ad1-9cd5-394c-9039-1178dc140b4a"));
         assert_eq!(e.get_title(), Some("test entry"));
         assert_eq!(e.get_username(), Some("jdoe"));
         assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
@@ -69,9 +70,11 @@ mod entry_tests {
             DatabaseKey::new().with_password("demopass"),
         )?;
 
+        let root = db.root();
+
         // get an entry on the root node
-        let e = db.root.entry_by_name("ASDF").expect("Expected an entry");
-        assert_eq!(e.uuid, uuid!("4f3816bd83304865879fa108a12f285c"));
+        let e = root.entry_by_name("ASDF").expect("Expected an entry");
+        assert_eq!(e.id().uuid(), uuid!("4f3816bd83304865879fa108a12f285c"));
         assert_eq!(e.get_title(), Some("ASDF"));
         assert_eq!(e.get_username(), Some("ghj"));
         assert_eq!(e.get_password(), Some("klmno"));
@@ -95,11 +98,11 @@ mod entry_tests {
             &mut File::open(path)?,
             DatabaseKey::new().with_password("password"),
         )?;
-        for g in db.root.groups {
-            for e in g.entries {
-                assert_eq!(Some("admin"), e.get_password());
-            }
+
+        for e in db.iter_all_entries() {
+            assert_eq!(Some("admin"), e.get_password());
         }
+
         Ok(())
     }
 

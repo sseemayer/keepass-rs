@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -201,7 +201,7 @@ impl Binary {
     pub(crate) fn xml_to_db(
         self,
         inner_decryptor: &mut dyn crate::crypt::ciphers::Cipher,
-    ) -> Result<crate::db::Attachment, UnprotectError> {
+    ) -> Result<crate::db::Value<Vec<u8>>, UnprotectError> {
         let mut data = base64_engine::STANDARD.decode(self.value)?;
         let protected = self.protected.unwrap_or(false);
 
@@ -213,15 +213,13 @@ impl Binary {
             data = crate::compression::GZipCompression.decompress(&data)?;
         }
 
-        if protected {
-            Ok(crate::db::Attachment {
-                data: crate::db::Value::protected(data),
-            })
+        let data = if protected {
+            crate::db::Value::protected(data)
         } else {
-            Ok(crate::db::Attachment {
-                data: crate::db::Value::unprotected(data),
-            })
-        }
+            crate::db::Value::unprotected(data)
+        };
+
+        Ok(data)
     }
 }
 
@@ -445,6 +443,26 @@ pub struct Icon {
 
     #[serde(with = "cs_base64")]
     pub data: Vec<u8>,
+}
+
+impl From<crate::db::CustomIcon> for Icon {
+    fn from(db: crate::db::CustomIcon) -> Self {
+        Self {
+            uuid: UUID(db.id().uuid()),
+            data: db.data.clone(),
+        }
+    }
+}
+
+impl From<Icon> for crate::db::CustomIcon {
+    fn from(icon: Icon) -> Self {
+        crate::db::CustomIcon {
+            id: crate::db::CustomIconId::from_uuid(icon.uuid.0),
+            entries: HashSet::new(),
+            groups: HashSet::new(),
+            data: icon.data,
+        }
+    }
 }
 
 #[cfg(test)]
