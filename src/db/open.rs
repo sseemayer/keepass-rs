@@ -60,6 +60,7 @@ impl Database {
 
 /// Errors that can occur when opening a database
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum DatabaseOpenError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -84,6 +85,7 @@ pub enum DatabaseOpenError {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum DatabaseFormatError {
     #[error(transparent)]
     Kdb(#[from] crate::format::kdb::KdbOpenError),

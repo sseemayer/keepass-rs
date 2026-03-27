@@ -9,6 +9,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum MergeEventType {
     Created,
     Deleted,
@@ -17,6 +18,7 @@ pub enum MergeEventType {
 }
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum MergeEventTarget {
     Entry(EntryId),
     Group(GroupId),
@@ -29,8 +31,8 @@ pub struct MergeEvent {
 }
 
 /// Errors while merge two databases
-#[derive(Error)]
-#[derive(Debug)]
+#[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum MergeError {
     #[error("Entries with UUID {0} have the same modification time but have diverged.")]
     EntryModificationTimeNotUpdated(EntryId),

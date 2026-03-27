@@ -33,6 +33,7 @@ const CHA_CHA_20: u32 = 3;
 /// Configuration of how a database should be stored
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[non_exhaustive]
 pub struct DatabaseConfig {
     /// Version of the outer database file
     pub version: DatabaseVersion,
@@ -75,6 +76,7 @@ impl Default for DatabaseConfig {
 /// Choices for outer encryption
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[non_exhaustive]
 pub enum OuterCipherConfig {
     AES256,
     Twofish,
@@ -130,6 +132,7 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
 
 /// Errors with the configuration of the outer encryption
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum OuterCipherConfigError {
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
@@ -141,6 +144,7 @@ pub enum OuterCipherConfigError {
 /// Choices for encrypting protected values inside of databases
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[non_exhaustive]
 pub enum InnerCipherConfig {
     Plain,
     Salsa20,
@@ -193,6 +197,7 @@ impl TryFrom<u32> for InnerCipherConfig {
 
 /// Errors with the configuration of the inner encryption
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum InnerCipherConfigError {
     #[error(transparent)]
     Cryptography(#[from] CryptographyError),
@@ -216,6 +221,7 @@ const KDF_ROUNDS: &str = "R";
 /// Choices for Key Derivation Functions (KDFs)
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[non_exhaustive]
 pub enum KdfConfig {
     /// Derive keys with repeated AES encryption
     Aes { rounds: u64 },
@@ -415,6 +421,7 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
 
 /// Errors with the configuration of the Key Derivation Function
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum KdfConfigError {
     #[error("Invalid KDF version: {}", version)]
     InvalidKDFVersion { version: u32 },
@@ -429,6 +436,7 @@ pub enum KdfConfigError {
 /// Choices of compression algorithm
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[non_exhaustive]
 pub enum CompressionConfig {
     None,
     GZip,
@@ -465,6 +473,7 @@ impl TryFrom<u32> for CompressionConfig {
 
 /// Errors with the configuration of the compression algorithm
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum CompressionConfigError {
     /// The identifier for the compression algorithm specified in the database is invalid
     #[error("Invalid compression algorithm: {}", cid)]

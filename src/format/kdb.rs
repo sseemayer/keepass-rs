@@ -473,6 +473,7 @@ pub(crate) fn parse_kdb(data: &[u8], db_key: &DatabaseKey) -> Result<Database, D
 
 /// Errors that can occur when opening a KeePass 1 database
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum KdbOpenError {
     #[error("Field of type {field_type} has invalid length {field_size}, expected {expected_field_size}")]
     InvalidFieldLength {

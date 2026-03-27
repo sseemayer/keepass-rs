@@ -85,6 +85,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyFileError> {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ParseXmlKeyFileError {
     #[error("The XML keyfile is missing a key data element")]
     EmptyKey,
@@ -213,6 +214,7 @@ impl DatabaseKey {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum DatabaseKeyError {
     #[error("The key contains no components")]
     EmptyKey,

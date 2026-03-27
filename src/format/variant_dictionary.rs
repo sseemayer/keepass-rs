@@ -281,6 +281,7 @@ impl<'a> From<&'a VariantDictionaryValue> for Option<&'a Vec<u8>> {
 
 /// Errors while parsing a VariantDictionary
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum VariantDictionaryError {
     #[error("Invalid variant dictionary version: {}", version)]
     InvalidVersion { version: u16 },

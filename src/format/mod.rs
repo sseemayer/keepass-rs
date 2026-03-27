@@ -31,10 +31,10 @@ pub const KDBX4_MAJOR_VERSION: u16 = 4;
 
 pub const KDBX4_CURRENT_MINOR_VERSION: u16 = 0;
 
-/// Supported KDB database versions, with the associated
-/// minor version.
+/// Supported KDB database versions, with the associated minor version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[non_exhaustive]
 pub enum DatabaseVersion {
     KDB(u16),
     KDB2(u16),
@@ -109,6 +109,7 @@ impl std::fmt::Display for DatabaseVersion {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum DatabaseVersionParseError {
     #[error("Unexpected end of file while reading database version")]
     UnexpectedEof,
