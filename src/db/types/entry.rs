@@ -59,7 +59,7 @@ pub struct Entry {
     pub override_url: Option<String>,
     pub quality_check: Option<bool>,
 
-    pub attachments: HashMap<String, AttachmentId>,
+    pub(crate) attachments: HashMap<String, AttachmentId>,
 
     pub history: Option<History>,
 }
