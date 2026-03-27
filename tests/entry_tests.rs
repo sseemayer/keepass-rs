@@ -1,3 +1,6 @@
+//! Tests for the Entry API
+
+#[allow(missing_docs)]
 mod entry_tests {
     use keepass::{db::DatabaseOpenError, Database, DatabaseKey};
     use std::{fs::File, path::Path};
