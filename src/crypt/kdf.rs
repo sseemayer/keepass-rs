@@ -1,8 +1,8 @@
+use std::convert::TryInto;
+
 use aes::Aes256;
-use cipher::{
-    generic_array::{typenum::U32, GenericArray},
-    BlockEncrypt, KeyInit,
-};
+use cipher::{BlockCipherEncrypt, KeyInit};
+use hybrid_array::{typenum::U32, Array as GenericArray};
 use sha2::{Digest, Sha256};
 
 use super::CryptographyError;
@@ -24,9 +24,18 @@ impl Kdf for AesKdf {
         &self,
         composite_key: &GenericArray<u8, U32>,
     ) -> Result<GenericArray<u8, U32>, CryptographyError> {
-        let cipher = Aes256::new(&GenericArray::clone_from_slice(&self.seed));
-        let mut block1 = GenericArray::clone_from_slice(&composite_key[..16]);
-        let mut block2 = GenericArray::clone_from_slice(&composite_key[16..]);
+        let seed_arr = self
+            .seed
+            .as_slice()
+            .try_into()
+            .map_err(|_| CryptographyError::InvalidLength(cipher::InvalidLength))?;
+        let cipher = Aes256::new(&seed_arr);
+        let mut block1: GenericArray<u8, _> = composite_key[..16]
+            .try_into()
+            .map_err(|_| CryptographyError::InvalidLength(cipher::InvalidLength))?;
+        let mut block2: GenericArray<u8, _> = composite_key[16..]
+            .try_into()
+            .map_err(|_| CryptographyError::InvalidLength(cipher::InvalidLength))?;
         for _ in 0..self.rounds {
             cipher.encrypt_block(&mut block1);
             cipher.encrypt_block(&mut block2);
@@ -76,6 +85,8 @@ impl Kdf for Argon2Kdf {
 
         let key = argon2::hash_raw(composite_key, &self.salt, &config)?;
 
-        Ok(*GenericArray::from_slice(&key))
+        key.as_slice()
+            .try_into()
+            .map_err(|_| CryptographyError::InvalidLength(cipher::InvalidLength))
     }
 }
