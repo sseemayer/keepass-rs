@@ -1,7 +1,5 @@
-use keepass::{
-    db::{DatabaseOpenError, Group},
-    Database, DatabaseKey,
-};
+//! Example for opening and traversing a KeePass database
+use keepass::{db::fields, error::DatabaseOpenError, Database, DatabaseKey};
 use std::fs::File;
 
 fn main() -> Result<(), DatabaseOpenError> {
@@ -10,21 +8,48 @@ fn main() -> Result<(), DatabaseOpenError> {
     let key = DatabaseKey::new().with_password("demopass");
     let db = Database::open(&mut file, key)?;
 
-    explore(&db.root);
+    // Iterate over all entries and print their titles
+    for entry in db.iter_all_entries() {
+        println!("Title: {}", entry.get(fields::TITLE).unwrap_or("<no title>"));
+    }
+
+    // find an entry by title
+    if let Some(entry) = db
+        .iter_all_entries()
+        .find(|e| e.get(fields::TITLE) == Some("asdf"))
+    {
+        println!("\nFound entry with title 'asdf'");
+
+        println!(
+            "Username: {}",
+            entry.get(fields::USERNAME).unwrap_or("<no username>")
+        );
+        println!(
+            "Password: {}",
+            entry.get(fields::PASSWORD).unwrap_or("<no password>")
+        );
+    }
+
+    // print the database structure using a recursive function
+    println!();
+    print_recursively(db.root(), 0);
 
     Ok(())
 }
 
-fn explore(group: &Group) {
-    for group in &group.groups {
-        println!("Saw group '{0}'", group.name);
-        explore(group);
+fn print_recursively(group: keepass::db::GroupRef<'_>, indent: usize) {
+    let indent_str = " ".repeat(indent);
+    println!("{}\u{f07b} {}", indent_str, group.name);
+
+    for subgroup in group.groups() {
+        print_recursively(subgroup, indent + 2);
     }
 
-    for entry in &group.entries {
-        let title = entry.get_title().unwrap_or("(no title)");
-        let user = entry.get_username().unwrap_or("(no username)");
-        let pass = entry.get_password().unwrap_or("(no password)");
-        println!("Entry '{0}': '{1}' : '{2}'", title, user, pass);
+    for entry in group.entries() {
+        println!(
+            "{}  \u{f0b77} {}",
+            indent_str,
+            entry.get(fields::TITLE).unwrap_or("<no title>")
+        );
     }
 }

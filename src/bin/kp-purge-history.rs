@@ -41,32 +41,17 @@ pub fn main() -> Result<()> {
 
     let mut db = Database::open(&mut source, key.clone())?;
 
-    purge_history(&mut db.root)?;
+    db.foreach_entry_mut(|mut entry| {
+        if let Some(history) = &entry.history {
+            let history_size = history.get_entries().len();
+            if history_size != 0 {
+                println!("Removing {} history entries from {}", history_size, entry.id());
+            }
+        }
+        entry.history = None;
+    });
 
     db.save(&mut File::options().write(true).open(&args.in_kdbx)?, key)?;
-
-    Ok(())
-}
-
-fn purge_history_for_entry(entry: &mut keepass::db::Entry) -> Result<()> {
-    if let Some(history) = &entry.history {
-        let history_size = history.get_entries().len();
-        if history_size != 0 {
-            println!("Removing {} history entries from {}", history_size, entry.uuid);
-        }
-    }
-    entry.history = None;
-    Ok(())
-}
-
-fn purge_history(group: &mut keepass::db::Group) -> Result<()> {
-    for entry in &mut group.entries {
-        purge_history_for_entry(entry)?;
-    }
-
-    for group in &mut group.groups {
-        purge_history(group)?;
-    }
 
     Ok(())
 }
