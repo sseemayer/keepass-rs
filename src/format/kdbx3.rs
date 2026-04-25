@@ -147,6 +147,7 @@ fn parse_outer_header(data: &[u8]) -> Result<KDBX3Header, Kdbx3OuterHeaderError>
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Kdbx3OuterHeaderError {
     #[error(transparent)]
     InnerCipher(#[from] crate::config::InnerCipherConfigError),
@@ -278,6 +279,7 @@ pub(crate) fn decrypt_kdbx3(
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Kdbx3OpenError {
     #[error(transparent)]
     OuterHeader(#[from] Kdbx3OuterHeaderError),

@@ -12,6 +12,7 @@ const DEFAULT_DIGITS: u32 = 8;
 
 /// Choices of hash algorithm for TOTP
 #[derive(Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[non_exhaustive]
 pub enum TOTPAlgorithm {
     Sha1,
     Sha256,
@@ -64,6 +65,7 @@ impl std::fmt::Display for OTPCode {
 
 /// Errors while processing a TOTP specification
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum TOTPError {
     #[error(transparent)]
     UrlFormat(#[from] url::ParseError),

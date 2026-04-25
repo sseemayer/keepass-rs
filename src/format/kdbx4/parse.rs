@@ -247,6 +247,7 @@ fn parse_outer_header(data: &[u8]) -> Result<(KDBX4OuterHeader, usize), Kdbx4Out
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Kdbx4OuterHeaderError {
     #[error("Unexpected end of file while parsing outer header")]
     UnexpectedEof,
@@ -336,6 +337,7 @@ fn parse_inner_header(
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Kdbx4InnerHeaderError {
     #[error(transparent)]
     InnerCipherConfig(#[from] crate::config::InnerCipherConfigError),
@@ -348,6 +350,7 @@ pub enum Kdbx4InnerHeaderError {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Kdbx4OpenError {
     #[error(transparent)]
     Xml(#[from] crate::format::xml_db::ParseXmlError),

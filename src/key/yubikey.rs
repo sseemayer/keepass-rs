@@ -10,6 +10,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::key::KeyElement;
 
 #[derive(Debug, Clone, PartialEq, Zeroize, ZeroizeOnDrop)]
+#[non_exhaustive]
 pub enum ChallengeResponseKey {
     LocalChallenge(String),
     YubikeyChallenge(Yubikey, String),
@@ -90,6 +91,7 @@ impl ChallengeResponseKey {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ChallengeResponseKeyError {
     #[error("No challenge-respone keys are connected to the system.")]
     NoKeys,

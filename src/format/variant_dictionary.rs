@@ -164,6 +164,7 @@ impl VariantDictionary {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[non_exhaustive]
 pub enum VariantDictionaryValue {
     UInt32(u32),
     UInt64(u64),
@@ -281,6 +282,7 @@ impl<'a> From<&'a VariantDictionaryValue> for Option<&'a Vec<u8>> {
 
 /// Errors while parsing a VariantDictionary
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum VariantDictionaryError {
     #[error("Invalid variant dictionary version: {}", version)]
     InvalidVersion { version: u16 },

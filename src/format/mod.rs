@@ -109,6 +109,7 @@ impl std::fmt::Display for DatabaseVersion {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum DatabaseVersionParseError {
     #[error("Unexpected end of file while reading database version")]
     UnexpectedEof,
