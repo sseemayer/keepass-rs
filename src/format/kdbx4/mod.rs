@@ -68,7 +68,7 @@ mod kdbx4_tests {
     use crate::format::DatabaseVersion;
     use crate::{
         config::{CompressionConfig, DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig},
-        db::{Attachment, Database, Entry, Group},
+        db::Database,
         format::KDBX4_CURRENT_MINOR_VERSION,
         key::DatabaseKey,
     };
@@ -76,13 +76,11 @@ mod kdbx4_tests {
     #[cfg(feature = "challenge_response")]
     #[test]
     fn test_with_challenge_response() {
-        let mut db = Database::new(DatabaseConfig::default());
+        let mut db = Database::new();
 
-        let mut root_group = Group::new("Root");
-        root_group.entries.push(Entry::new());
-        root_group.entries.push(Entry::new());
-        root_group.entries.push(Entry::new());
-        db.root = root_group;
+        db.root_mut().add_entry();
+        db.root_mut().add_entry();
+        db.root_mut().add_entry();
 
         let mut password_bytes: Vec<u8> = vec![];
         let mut password: String = "".to_string();
@@ -103,22 +101,19 @@ mod kdbx4_tests {
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.entries.len(), 3);
+        assert_eq!(decrypted_db.num_entries(), 3);
     }
 
     fn test_with_config(config: DatabaseConfig) {
-        let mut db = Database::new(config);
+        let mut db = Database::with_config(config);
 
-        let mut root_group = Group::new("Root");
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Demo Entry");
+            e.set_protected(fields::PASSWORD, "secret")
+        });
 
-        let mut entry_with_password = Entry::new();
-        entry_with_password.set_unprotected(fields::TITLE, "Demo Entry");
-        entry_with_password.set_protected(fields::PASSWORD, "secret");
-
-        root_group.entries.push(entry_with_password);
-        root_group.entries.push(Entry::new());
-        root_group.entries.push(Entry::new());
-        db.root = root_group;
+        db.root_mut().add_entry();
+        db.root_mut().add_entry();
 
         let mut password_bytes: Vec<u8> = vec![];
         let mut password: String = "".to_string();
@@ -135,9 +130,10 @@ mod kdbx4_tests {
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.entries.len(), 3);
+        assert_eq!(decrypted_db.num_entries(), 3);
 
-        let entry = decrypted_db.root.entry_by_name("Demo Entry").unwrap();
+        let root = decrypted_db.root();
+        let entry = root.entry_by_name("Demo Entry").unwrap();
         assert_eq!(entry.get_password(), Some("secret"));
     }
 
@@ -196,27 +192,15 @@ mod kdbx4_tests {
     }
 
     #[test]
-    pub fn attachments() {
-        let mut db = Database::new(DatabaseConfig::default());
+    pub fn test_attachments() {
+        let mut db = Database::new();
 
-        let mut entry = Entry::new();
-        entry.set_unprotected(fields::TITLE, "Demo entry");
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Demo entry");
 
-        entry.attachments.insert(
-            "file1.txt".into(),
-            Attachment {
-                data: Value::protected(vec![0x01, 0x02, 0x03, 0x04]),
-            },
-        );
-
-        entry.attachments.insert(
-            "file2.txt".into(),
-            Attachment {
-                data: Value::unprotected(vec![0x04, 0x03, 0x02, 0x01]),
-            },
-        );
-
-        db.root.entries.push(entry);
+            e.add_attachment("file1.txt", Value::protected(vec![0x01, 0x02, 0x03, 0x04]));
+            e.add_attachment("file2.txt", Value::unprotected(vec![0x04, 0x03, 0x02, 0x01]));
+        });
 
         let db_key = DatabaseKey::new().with_password("test");
 
@@ -225,15 +209,75 @@ mod kdbx4_tests {
 
         let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
 
-        assert_eq!(decrypted_db.root.entries.len(), 1);
+        assert_eq!(decrypted_db.num_entries(), 1);
 
-        let attachments = &decrypted_db.root.entries[0].attachments;
+        let root = decrypted_db.root();
 
-        assert_eq!(attachments.len(), 2);
-        assert_eq!(attachments["file1.txt"].is_protected(), true);
-        assert_eq!(attachments["file1.txt"].get(), &[0x01, 0x02, 0x03, 0x04]);
+        let entry = root.entry_by_name("Demo entry").unwrap();
 
-        assert_eq!(attachments["file2.txt"].is_protected(), false);
-        assert_eq!(attachments["file2.txt"].get(), &[0x04, 0x03, 0x02, 0x01]);
+        assert_eq!(entry.attachments().count(), 2);
+
+        assert!(entry.attachment_by_name("file1.txt").is_some());
+        assert!(entry.attachment_by_name("file1.txt").unwrap().is_protected());
+        assert_eq!(
+            entry.attachment_by_name("file1.txt").unwrap().get(),
+            &[0x01, 0x02, 0x03, 0x04]
+        );
+
+        assert!(entry.attachment_by_name("file2.txt").is_some());
+        assert!(!entry.attachment_by_name("file2.txt").unwrap().is_protected());
+        assert_eq!(
+            entry.attachment_by_name("file2.txt").unwrap().get(),
+            &[0x04, 0x03, 0x02, 0x01]
+        );
+    }
+
+    #[test]
+    pub fn test_icons() {
+        let mut db = Database::new();
+
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Entry without icon");
+        });
+
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Entry with built-in icon");
+            e.set_icon_builtin(42);
+        });
+
+        db.root_mut().add_entry().edit(|e| {
+            e.set_unprotected(fields::TITLE, "Entry with custom icon");
+            e.set_icon_custom_new(vec![0x01, 0x02, 0x03, 0x04]);
+        });
+
+        db.root_mut().add_group().edit(|g| {
+            g.name = "Group with custom icon".into();
+            g.set_icon_custom_new(vec![0x04, 0x03, 0x02, 0x01]);
+        });
+
+        let db_key = DatabaseKey::new().with_password("test");
+
+        let mut encrypted_db = Vec::new();
+        dump_kdbx4(&db, &db_key, &mut encrypted_db).unwrap();
+
+        let decrypted_db = parse_kdbx4(&encrypted_db, &db_key).unwrap();
+
+        dbg!(&db, &decrypted_db);
+
+        assert_eq!(decrypted_db.num_entries(), 3);
+
+        let root = decrypted_db.root();
+
+        let entry1 = root.entry_by_name("Entry without icon").unwrap();
+        assert_eq!(entry1.icon(), None);
+
+        let entry2 = root.entry_by_name("Entry with built-in icon").unwrap();
+        assert_eq!(entry2.icon(), Some(&crate::db::Icon::BuiltIn(42)));
+
+        let entry3 = root.entry_by_name("Entry with custom icon").unwrap();
+        assert_eq!(entry3.custom_icon().unwrap().data, &[0x01, 0x02, 0x03, 0x04]);
+
+        let group = root.group_by_name("Group with custom icon").unwrap();
+        assert_eq!(group.custom_icon().unwrap().data, &[0x04, 0x03, 0x02, 0x01]);
     }
 }
