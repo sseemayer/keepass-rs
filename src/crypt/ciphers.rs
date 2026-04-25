@@ -1,7 +1,10 @@
+use std::convert::TryInto;
+
 use aes::Aes256;
 #[cfg(feature = "save_kdbx4")]
-use cipher::BlockEncryptMut;
-use cipher::{block_padding::Pkcs7, generic_array::GenericArray, BlockDecryptMut};
+use cipher::BlockModeEncrypt;
+use cipher::{block_padding::Pkcs7, BlockModeDecrypt};
+use hybrid_array::Array as GenericArray;
 use salsa20::{
     cipher::{KeyIvInit, StreamCipher},
     Salsa20,
@@ -49,7 +52,7 @@ impl Cipher for AES256Cipher {
     fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         let cipher = Aes256CbcEncryptor::new_from_slices(&self.key, &self.iv)?;
 
-        let ciphertext = cipher.encrypt_padded_vec_mut::<Pkcs7>(plaintext);
+        let ciphertext = cipher.encrypt_padded_vec::<Pkcs7>(plaintext);
 
         Ok(ciphertext)
     }
@@ -58,9 +61,7 @@ impl Cipher for AES256Cipher {
 
         let cipher = Aes256CbcDecryptor::new_from_slices(&self.key[..], &self.iv[..])?;
 
-        let len = cipher
-            .decrypt_padded_b2b_mut::<Pkcs7>(ciphertext, &mut out)?
-            .len();
+        let len = cipher.decrypt_padded_b2b::<Pkcs7>(ciphertext, &mut out)?.len();
 
         out.truncate(len);
 
@@ -100,7 +101,7 @@ impl Cipher for TwofishCipher {
     fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptographyError> {
         let cipher = TwofishCbcEncryptor::new_from_slices(&self.key, &self.iv)?;
 
-        let ciphertext = cipher.encrypt_padded_vec_mut::<twofish::cipher::block_padding::Pkcs7>(plaintext);
+        let ciphertext = cipher.encrypt_padded_vec::<twofish::cipher::block_padding::Pkcs7>(plaintext);
 
         Ok(ciphertext)
     }
@@ -109,7 +110,7 @@ impl Cipher for TwofishCipher {
         let cipher = TwofishCbcDecryptor::new_from_slices(&self.key, &self.iv)?;
 
         let mut buf = ciphertext.to_vec();
-        cipher.decrypt_padded_mut::<twofish::cipher::block_padding::Pkcs7>(&mut buf)?;
+        cipher.decrypt_padded::<twofish::cipher::block_padding::Pkcs7>(&mut buf)?;
         Ok(buf)
     }
 
@@ -130,13 +131,11 @@ pub(crate) struct Salsa20Cipher {
 
 impl Salsa20Cipher {
     pub(crate) fn new(key: &[u8]) -> Result<Self, CryptographyError> {
-        let h = calculate_sha256(&[key]);
-
-        let key = GenericArray::from_slice(&h);
+        let key = calculate_sha256(&[key]);
         let iv = GenericArray::from([0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A]);
 
         Ok(Salsa20Cipher {
-            cipher: Salsa20::new(key, &iv),
+            cipher: Salsa20::new(&key, &iv),
         })
     }
 }
@@ -175,11 +174,15 @@ impl ChaCha20Cipher {
     pub(crate) fn new(key: &[u8]) -> Result<Self, CryptographyError> {
         let iv = crate::crypt::calculate_sha512(&[key]);
 
-        let key = GenericArray::from_slice(&iv[0..32]);
-        let nonce = GenericArray::from_slice(&iv[32..44]);
+        let key = iv[0..32]
+            .try_into()
+            .map_err(|_| CryptographyError::InvalidLength(cipher::InvalidLength))?;
+        let nonce = iv[32..44]
+            .try_into()
+            .map_err(|_| CryptographyError::InvalidLength(cipher::InvalidLength))?;
 
         Ok(ChaCha20Cipher {
-            cipher: chacha20::ChaCha20::new(key, nonce),
+            cipher: chacha20::ChaCha20::new(&key, &nonce),
         })
     }
 
