@@ -64,6 +64,7 @@ pub(crate) fn calculate_sha512(elements: &[&[u8]]) -> GenericArray<u8, U64> {
 }
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum CryptographyError {
     #[error(transparent)]
     InvalidLength(#[from] InvalidLength),

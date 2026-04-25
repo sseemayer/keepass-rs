@@ -213,6 +213,7 @@ impl Entry {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum UnprotectError {
     #[error("Error base64 decoding protected value: {0}")]
     Base64(#[from] base64::DecodeError),

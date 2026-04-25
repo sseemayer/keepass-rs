@@ -106,6 +106,7 @@ pub(crate) fn get_hmac_block_key(block_index: u64, key: &GenericArray<u8, U64>) 
 
 /// Errors reading from the HMAC block stream
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum BlockStreamError {
     #[error("Block hash mismatch for block {}", block_index)]
     BlockHashMismatch { block_index: u64 },

@@ -39,6 +39,7 @@ pub fn parse_xml(
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ParseXmlError {
     #[error("Error parsing XML inside KDBX: {0}")]
     Xml(#[from] quick_xml::DeError),

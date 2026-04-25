@@ -545,6 +545,7 @@ impl GroupMut<'_> {
 
 /// Errors that can occur when moving a group to a new parent.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum MoveGroupError {
     /// The root group cannot be moved
     #[error("Cannot move the root group")]
