@@ -1,6 +1,6 @@
 use byteorder::{ByteOrder, LittleEndian};
-use cipher::generic_array::{typenum::U64, GenericArray};
 use hex_literal::hex;
+use hybrid_array::{typenum::U64, Array as GenericArray};
 use thiserror::Error;
 
 pub const HMAC_KEY_END: [u8; 1] = hex!("01");

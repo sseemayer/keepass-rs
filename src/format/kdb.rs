@@ -7,7 +7,7 @@ use crate::{
 };
 
 use byteorder::{ByteOrder, LittleEndian};
-use cipher::generic_array::GenericArray;
+use hybrid_array::Array as GenericArray;
 use thiserror::Error;
 
 use std::{
