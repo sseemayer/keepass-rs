@@ -1,6 +1,7 @@
 mod file_read_tests {
     use keepass::{
-        db::{Database, DatabaseOpenError, GroupRef},
+        config::DatabaseVersion,
+        db::{CustomDataValue, Database, DatabaseOpenError, GroupRef},
         DatabaseKey,
     };
 
@@ -406,6 +407,67 @@ mod file_read_tests {
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn open_kdbx41_with_password() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx41_with_password_aes.kdbx");
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("demopass"),
+        )?;
+
+        println!("{:?} DB Opened", db);
+
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(1));
+
+        assert!(db
+            .meta
+            .custom_data
+            .get("KeePassRPC.Config")
+            .unwrap()
+            .last_modification_time
+            .is_some());
+
+        assert_eq!(db.root().name, "Database");
+        assert_eq!(db.root().groups().count(), 2);
+        assert_eq!(db.root().entries().count(), 4);
+
+        let root = db.root();
+        let group = root.group_by_name("Group with tags").unwrap();
+        assert_eq!(
+            group.tags,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+
+        let group_id = group.id();
+
+        assert!(group.previous_parent().is_none());
+
+        let entry = root.entry_by_name("entry with no quality check").unwrap();
+        assert_eq!(entry.quality_check, false);
+
+        let entry = root.entry_by_name("entry with named custom icon").unwrap();
+        assert_eq!(entry.quality_check, true);
+
+        let icon = entry.custom_icon().unwrap();
+        assert_eq!(icon.name, Some("Egg".to_string()));
+        assert!(icon.last_modification_time.is_some());
+
+        let entry = root.entry_by_name("entry with custom data").unwrap();
+        let cd = entry.custom_data.get("KPRPC JSON").unwrap();
+        assert_eq!(
+            cd.value.as_ref().unwrap(),
+            &CustomDataValue::String("{\"version\":2,\"altUrls\":[\"https://example.com\",\"http://example.com\"],\"blockedUrls\":[],\"regExBlockedUrls\":[],\"regExUrls\":[],\"authenticationMethods\":[\"password\"],\"matcherConfigs\":[{\"matcherType\":\"Url\",\"urlMatchMethod\":\"Domain\"}],\"fields\":[{\"uuid\":\"nkd4kOJMJ0qPOJaAjoTXcw==\",\"valuePath\":\"UserName\",\"page\":1,\"type\":\"Text\",\"matcherConfigs\":[{\"matcherType\":\"UsernameDefaultHeuristic\"}]},{\"uuid\":\"7xtQBZ2+wEizAxNe5rYKzg==\",\"valuePath\":\"Password\",\"page\":1,\"type\":\"Password\",\"matcherConfigs\":[{\"matcherType\":\"PasswordDefaultHeuristic\"}]}]}".to_string())
+        );
+
+        let entry = root.entry_by_name("entry that was moved").unwrap();
+        assert_eq!(entry.previous_parent().unwrap().id(), group_id);
+
+        let moved_group = root.group_by_name("Group that was moved").unwrap();
+        assert_eq!(moved_group.previous_parent().unwrap().id(), group_id);
+
         Ok(())
     }
 

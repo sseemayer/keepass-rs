@@ -26,6 +26,9 @@ pub struct Group {
     #[serde(default, with = "cs_opt_string")]
     pub notes: Option<String>,
 
+    #[serde(default, with = "cs_opt_string")]
+    pub tags: Option<String>,
+
     #[serde(default, rename = "IconID", with = "cs_opt_fromstr")]
     pub icon_id: Option<usize>,
 
@@ -55,6 +58,9 @@ pub struct Group {
 
     #[serde(default, rename = "$value")]
     pub children: Vec<GroupOrEntry>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_parent_group: Option<UUID>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -73,6 +79,10 @@ impl Group {
     ) -> Result<(), UnprotectError> {
         target.name = self.name;
         target.notes = self.notes;
+        target.tags = self
+            .tags
+            .map(|t| t.split(';').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default();
 
         target.icon = if let Some(ci) = self.custom_icon_uuid.and_then(|ci| {
             let icon_id = crate::db::CustomIconId::from_uuid(ci.0);
@@ -93,6 +103,8 @@ impl Group {
         if let Some(cd) = self.custom_data {
             target.custom_data = cd.into();
         }
+
+        target.previous_parent_group = self.previous_parent_group.map(|g| GroupId::from_uuid(g.0));
 
         for child in self.children {
             match child {
@@ -141,6 +153,7 @@ impl Group {
             uuid: UUID(source.id().uuid()),
             name: source.name.clone(),
             notes: source.notes.clone(),
+            tags: source.tags.join(";").into(),
             icon_id,
             custom_icon_uuid,
             times: Some(source.times.clone().into()),
@@ -151,6 +164,7 @@ impl Group {
             last_top_visible_entry: source.last_top_visible_entry.map(|eid| UUID(eid.uuid())),
             custom_data,
             children,
+            previous_parent_group: source.previous_parent_group.map(|gid| UUID(gid.uuid())),
         })
     }
 }
