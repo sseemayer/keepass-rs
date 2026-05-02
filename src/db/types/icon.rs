@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use chrono::NaiveDateTime;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -54,6 +55,9 @@ pub struct CustomIcon {
 
     pub(crate) entries: HashSet<(EntryId, Option<usize>)>,
     pub(crate) groups: HashSet<GroupId>,
+
+    pub name: Option<String>,
+    pub last_modification_time: Option<NaiveDateTime>,
 
     pub data: Vec<u8>,
 }
