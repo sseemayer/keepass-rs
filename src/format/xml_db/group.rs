@@ -53,6 +53,13 @@ pub struct Group {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_data: Option<crate::format::xml_db::meta::CustomData>,
 
+    /// KeePassXC extension: tracks the previous parent group when this group
+    /// is moved, used for undo/restore. Captured here so it is consumed by an
+    /// explicit field instead of falling through to the `children` $value
+    /// catch-all (which would fail to deserialize as a `GroupOrEntry`).
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "cs_opt_string")]
+    pub previous_parent_group: Option<UUID>,
+
     #[serde(default, rename = "$value")]
     pub children: Vec<GroupOrEntry>,
 }
@@ -205,10 +212,15 @@ mod tests {
             <Entry>
                 <UUID>AAECAwQFBgcICQoLDA0ODw==</UUID>
             </Entry>
+            <PreviousParentGroup>oaKjpLGywcLR0tPU1dbX2A==</PreviousParentGroup>
         </Group>"#;
 
         let group: Test<Group> = quick_xml::de::from_str(xml).unwrap();
         assert_eq!(group.0.uuid.0.to_string(), "00010203-0405-0607-0809-0a0b0c0d0e0f");
+        assert_eq!(
+            group.0.previous_parent_group.unwrap().0.to_string(),
+            "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+        );
         assert_eq!(group.0.name, "Example Group");
         assert_eq!(group.0.notes.unwrap(), "This is a test group.");
         assert_eq!(group.0.icon_id.unwrap(), 48);

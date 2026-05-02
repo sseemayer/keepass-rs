@@ -57,6 +57,13 @@ pub struct Entry {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_data: Option<CustomData>,
+
+    /// KeePassXC extension: tracks the previous parent group when this entry
+    /// is moved between groups, used for undo/restore. Captured here so the
+    /// element is consumed by an explicit field rather than tripping the
+    /// strict serde deserializer.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "cs_opt_string")]
+    pub previous_parent_group: Option<UUID>,
 }
 
 impl Entry {
@@ -508,12 +515,17 @@ mod tests {
                 <DataTransferObfuscation>0</DataTransferObfuscation>
                 <DefaultSequence>{USERNAME}{TAB}{PASSWORD}{ENTER}</DefaultSequence>
             </AutoType>
+            <PreviousParentGroup>oaKjpLGywcLR0tPU1dbX2A==</PreviousParentGroup>
         </Entry>"#;
 
         let deserialized: Test<Entry> = quick_xml::de::from_str(xml).unwrap();
         assert_eq!(
             deserialized.0.uuid.0.as_bytes(),
             &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
+        );
+        assert_eq!(
+            deserialized.0.previous_parent_group.unwrap().0.to_string(),
+            "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
         );
         assert_eq!(deserialized.0.icon_id.unwrap(), 1);
         assert_eq!(deserialized.0.foreground_color.unwrap().to_string(), "#FF0000");
