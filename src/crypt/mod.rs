@@ -63,15 +63,19 @@ pub(crate) fn calculate_sha512(elements: &[&[u8]]) -> GenericArray<u8, U64> {
     digest.finalize()
 }
 
+/// Errors that can occur during cryptographic operations
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum CryptographyError {
+    /// An invalid key length was provided
     #[error(transparent)]
     InvalidLength(#[from] InvalidLength),
 
+    /// Data has invalid padding
     #[error(transparent)]
     InvalidPadding(#[from] cipher::block_padding::Error),
 
+    /// Errors related to the Argon2 key derivation function
     #[error(transparent)]
     Argon2(#[from] argon2::Error),
 }

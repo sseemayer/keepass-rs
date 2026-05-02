@@ -1,4 +1,4 @@
-/// utility to recover a Yubikey-protected database using the HMAC-SHA1 secret
+//! utility to recover a Yubikey-protected database using the HMAC-SHA1 secret
 use std::fs::File;
 
 use anyhow::Result;
@@ -24,7 +24,7 @@ struct Args {
     no_password: bool,
 }
 
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;

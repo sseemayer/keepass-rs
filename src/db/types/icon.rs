@@ -22,6 +22,7 @@ pub enum Icon {
     Custom(CustomIconId),
 }
 
+/// A unique identifier for a [CustomIcon]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomIconId(Uuid);
@@ -47,6 +48,7 @@ impl CustomIconId {
     }
 }
 
+/// A custom icon stored in the database, containing raw image data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub struct CustomIcon {
@@ -55,10 +57,12 @@ pub struct CustomIcon {
     pub(crate) entries: HashSet<(EntryId, Option<usize>)>,
     pub(crate) groups: HashSet<GroupId>,
 
+    /// The raw image data
     pub data: Vec<u8>,
 }
 
 impl CustomIcon {
+    /// Get the ID of this custom icon
     pub fn id(&self) -> CustomIconId {
         self.id
     }
@@ -89,6 +93,7 @@ impl CustomIconRef<'_> {
         CustomIconRef { database, id }
     }
 
+    /// Get an immutable reference to the database that owns this custom icon.
     pub fn database(&self) -> &Database {
         self.database
     }
@@ -119,6 +124,7 @@ impl CustomIconRef<'_> {
 impl Deref for CustomIconRef<'_> {
     type Target = CustomIcon;
 
+    #[allow(clippy::expect_used)] // CustomIconRef should only be created with valid CustomIconIds
     fn deref(&self) -> &Self::Target {
         self.database
             .custom_icons
@@ -215,6 +221,7 @@ impl CustomIconMut<'_> {
 impl Deref for CustomIconMut<'_> {
     type Target = CustomIcon;
 
+    #[allow(clippy::expect_used)] // CustomIconMut should only be created with valid CustomIconIds
     fn deref(&self) -> &Self::Target {
         self.database
             .custom_icons
@@ -224,6 +231,7 @@ impl Deref for CustomIconMut<'_> {
 }
 
 impl DerefMut for CustomIconMut<'_> {
+    #[allow(clippy::expect_used)] // CustomIconMut should only be created with valid CustomIconIds
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.database
             .custom_icons

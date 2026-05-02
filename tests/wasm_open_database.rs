@@ -1,3 +1,6 @@
+//! WASM tests for opening KDBX4 databases with Argon2 encryption
+
+#![allow(missing_docs)]
 #![cfg(target_arch = "wasm32")]
 
 use keepass::{db::Database, DatabaseKey};
