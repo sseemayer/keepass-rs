@@ -550,6 +550,17 @@ impl EntryMut<'_> {
     pub fn remove(mut self) {
         let id = self.id;
 
+        // remove this entry's back-reference from its custom icon (if any)
+        self.set_icon_none();
+
+        // also remove back-references for any historical versions that have a custom icon
+        let history_len = self.history.as_ref().map_or(0, |h| h.entries.len());
+        for i in 0..history_len {
+            if let Some(mut hist_entry) = self.historical(i) {
+                hist_entry.set_icon_none();
+            }
+        }
+
         // remove references to this entry from attachments
         self.foreach_attachment_mut(|mut attachment| {
             attachment.entries.retain(|&(entry_id, _)| entry_id != id);
@@ -568,6 +579,17 @@ impl EntryMut<'_> {
             .group_mut(entry.parent)
             .expect("Parent group not found");
         parent.entries.remove(&self.id);
+
+        // Clear any group's last_top_visible_entry that pointed to this entry.
+        // This field is a UI hint and should not hold a dangling EntryId.
+        let group_ids: Vec<GroupId> = self.database.groups.keys().copied().collect();
+        for group_id in group_ids {
+            if let Some(group) = self.database.groups.get_mut(&group_id) {
+                if group.last_top_visible_entry == Some(id) {
+                    group.last_top_visible_entry = None;
+                }
+            }
+        }
     }
 }
 
