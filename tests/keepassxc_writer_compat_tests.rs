@@ -22,7 +22,7 @@
 use keepass::{Database, DatabaseKey};
 
 const FIXTURE_PATH: &str = "tests/resources/test_db_kdbx41_features.kdbx";
-const FIXTURE_PASSWORD: &str = "correct horse battery staple";
+const FIXTURE_PASSWORD: &str = "demopass";
 
 fn load_and_resave_xml() -> String {
     let mut f = std::fs::File::open(FIXTURE_PATH).expect("open fixture");

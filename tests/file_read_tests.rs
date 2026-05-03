@@ -1,5 +1,6 @@
 mod file_read_tests {
     use keepass::{
+        config::DatabaseVersion,
         db::{Database, DatabaseOpenError, GroupRef},
         DatabaseKey,
     };
@@ -39,6 +40,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
+        assert_eq!(db.config.version, DatabaseVersion::KDB3(1));
         assert_eq!(db.root().name, "sample");
         assert_eq!(db.root().groups().count(), 3);
         assert_eq!(db.root().entries().count(), 2);
@@ -62,6 +64,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
+        assert_eq!(db.config.version, DatabaseVersion::KDB3(1));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -85,6 +88,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
+        assert_eq!(db.config.version, DatabaseVersion::KDB3(1));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 2);
         assert_eq!(db.root().entries().count(), 2);
@@ -108,7 +112,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 2);
@@ -126,7 +130,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 2);
@@ -143,7 +147,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(1));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -161,7 +165,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -179,7 +183,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -197,7 +201,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -215,7 +219,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -234,7 +238,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -255,7 +259,7 @@ mod file_read_tests {
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
@@ -272,12 +276,12 @@ mod file_read_tests {
         let db = Database::open(
             &mut File::open(path)?,
             DatabaseKey::new()
-                .with_password("123123")
+                .with_password("demopass")
                 .with_keyfile(&mut File::open(kf_path)?)?,
         )?;
 
         println!("{:?} DB Opened", db);
-
+        assert_eq!(db.config.version, DatabaseVersion::KDB4(0));
         assert_eq!(db.root().name, "testdb02");
         assert_eq!(db.root().groups().count(), 6);
         assert_eq!(db.root().entries().count(), 2);
@@ -313,6 +317,7 @@ mod file_read_tests {
         let db = Database::open(&mut File::open(path)?, DatabaseKey::new().with_password("foobar"))?;
 
         println!("{:?} DB Opened", db);
+        assert_eq!(db.config.version, DatabaseVersion::KDB(2));
         assert_eq!(db.root().name, "Root");
         assert_eq!(db.root().groups().count(), 3);
 
@@ -330,10 +335,11 @@ mod file_read_tests {
         let path = Path::new("tests/resources/test_db_kdb3_with_file_larger_1mb.kdbx");
         let db = Database::open(
             &mut File::open(path)?,
-            DatabaseKey::new().with_password("samplepassword"),
+            DatabaseKey::new().with_password("demopass"),
         )?;
 
         println!("{:?} DB Opened", db);
+        assert_eq!(db.config.version, DatabaseVersion::KDB3(1));
         assert_eq!(db.root().groups().count(), 0);
         assert_eq!(db.root().entries().count(), 1);
 
