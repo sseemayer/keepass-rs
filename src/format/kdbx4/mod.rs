@@ -230,6 +230,20 @@ mod kdbx4_tests {
             entry.attachment_by_name("file2.txt").unwrap().get(),
             &[0x04, 0x03, 0x02, 0x01]
         );
+
+        // attachments_named() yields (name, AttachmentRef) pairs, allowing callers
+        // to recover the per-entry filename without a separate lookup.
+        let mut seen = std::collections::HashSet::new();
+        for (name, attachment) in entry.attachments_named() {
+            let expected: &[u8] = match name {
+                "file1.txt" => &[0x01, 0x02, 0x03, 0x04],
+                "file2.txt" => &[0x04, 0x03, 0x02, 0x01],
+                _ => panic!("unexpected attachment name: {}", name),
+            };
+            assert_eq!(attachment.get(), expected);
+            assert!(seen.insert(name.to_owned()), "duplicate name: {}", name);
+        }
+        assert_eq!(seen.len(), 2);
     }
 
     #[test]
