@@ -9,7 +9,7 @@ use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
     db::{AttachmentId, Color, EntryId, GroupId},
     format::xml_db::{
-        custom_serde::{cs_bool, cs_opt_fromstr, cs_opt_intbool, cs_opt_string},
+        custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_intbool, cs_opt_string},
         meta::CustomData,
         times::Times,
         UUID,
@@ -68,7 +68,7 @@ pub struct Entry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_data: Option<CustomData>,
 
-    #[serde(default, with = "cs_opt_intbool")]
+    #[serde(default, with = "cs_opt_bool", skip_serializing_if = "Option::is_none")]
     pub quality_check: Option<bool>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
