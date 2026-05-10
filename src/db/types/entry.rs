@@ -239,6 +239,17 @@ impl EntryRef<'_> {
             .map(move |attachment_id| AttachmentRef::new(self.database, attachment_id))
     }
 
+    /// Get an iterator over the (name, attachment) pairs of this entry.
+    ///
+    /// Useful when callers need both the attachment's filename (the key under
+    /// which it is stored on the entry) and its data, since [`AttachmentRef`]
+    /// itself does not expose the per-entry name.
+    pub fn attachments_named(&self) -> impl Iterator<Item = (&str, AttachmentRef<'_>)> {
+        self.attachments.iter().map(move |(name, &attachment_id)| {
+            (name.as_str(), AttachmentRef::new(self.database, attachment_id))
+        })
+    }
+
     /// Get the custom icon of this entry, if it exists and is a custom icon.
     pub fn custom_icon(&self) -> Option<CustomIconRef<'_>> {
         if let Some(Icon::Custom(custom_icon_id)) = self.icon {
