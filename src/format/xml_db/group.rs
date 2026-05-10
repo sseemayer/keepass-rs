@@ -160,6 +160,7 @@ impl Group {
     }
 }
 
+#[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,9 +227,9 @@ mod tests {
             group.0.default_auto_type_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
         );
-        assert_eq!(group.0.enable_auto_type.unwrap(), true);
-        assert_eq!(group.0.enable_searching.unwrap(), false);
-        assert_eq!(group.0.custom_data.is_some(), true);
+        assert!(group.0.enable_auto_type.unwrap());
+        assert!(!group.0.enable_searching.unwrap());
+        assert!(group.0.custom_data.is_some());
         assert_eq!(group.0.children.len(), 4);
     }
 }

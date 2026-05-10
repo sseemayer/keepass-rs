@@ -290,6 +290,7 @@ pub struct DeletedObject {
     deletion_time: Option<Timestamp>,
 }
 
+#[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
 
@@ -301,7 +302,7 @@ mod tests {
     #[test]
     fn test_deserialize_uuid() {
         let uuid_str = "AAECAwQFBgcICQoLDA0ODw==";
-        let uuid: UUID = quick_xml::de::from_str(&format!("{}", uuid_str)).unwrap();
+        let uuid: UUID = quick_xml::de::from_str(uuid_str).unwrap();
         assert_eq!(
             uuid.0.as_bytes(),
             &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]

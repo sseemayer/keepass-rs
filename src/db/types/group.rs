@@ -695,6 +695,7 @@ impl DerefMut for GroupTrack<'_> {
 pub struct CannotDeleteRootError;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod group_tests {
     use crate::db::fields;
     use crate::Database;

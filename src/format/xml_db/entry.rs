@@ -370,6 +370,7 @@ pub struct History {
     pub entries: Vec<Entry>,
 }
 
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
 
@@ -388,7 +389,7 @@ mod tests {
         let deserialized: Test<StringField> = quick_xml::de::from_str(xml).unwrap();
         assert_eq!(deserialized.0.key, "Title");
         assert_eq!(deserialized.0.value.value.unwrap(), "Example Title");
-        assert_eq!(deserialized.0.value.protected, false);
+        assert!(!deserialized.0.value.protected);
 
         let xml_protected = r#"<String>
             <Key>Password</Key>
@@ -398,7 +399,7 @@ mod tests {
         let deserialized_protected: Test<StringField> = quick_xml::de::from_str(xml_protected).unwrap();
         assert_eq!(deserialized_protected.0.key, "Password");
         assert_eq!(deserialized_protected.0.value.value.unwrap(), "cGFzc3dvcmQ=");
-        assert_eq!(deserialized_protected.0.value.protected, true);
+        assert!(deserialized_protected.0.value.protected);
     }
 
     #[test]
@@ -466,8 +467,8 @@ mod tests {
         </AutoType>"#;
 
         let deserialized: Test<AutoType> = quick_xml::de::from_str(xml).unwrap();
-        assert_eq!(deserialized.0.enabled, true);
-        assert_eq!(deserialized.0.data_transfer_obfuscation.unwrap(), false);
+        assert!(deserialized.0.enabled);
+        assert!(!deserialized.0.data_transfer_obfuscation.unwrap());
         assert_eq!(
             deserialized.0.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
@@ -547,8 +548,8 @@ mod tests {
         assert_eq!(deserialized.0.binary_fields[0].value.value_ref, 1);
         assert!(deserialized.0.auto_type.is_some());
         let autotype = deserialized.0.auto_type.unwrap();
-        assert_eq!(autotype.enabled, true);
-        assert_eq!(autotype.data_transfer_obfuscation.unwrap(), false);
+        assert!(autotype.enabled);
+        assert!(!autotype.data_transfer_obfuscation.unwrap());
         assert_eq!(
             autotype.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"

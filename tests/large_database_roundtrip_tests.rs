@@ -2,7 +2,7 @@
 //! affect large databases, such as memory management problems or performance bottlenecks.
 
 #[cfg(feature = "save_kdbx4")]
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::unwrap_used)]
 mod large_file_roundtrip_tests {
     use std::fs::File;
 

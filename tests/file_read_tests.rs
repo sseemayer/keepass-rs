@@ -1,6 +1,11 @@
 //! Integration tests for various database examples
 
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    clippy::indexing_slicing,
+    clippy::expect_used,
+    clippy::unwrap_used
+)]
 mod file_read_tests {
     use keepass::{
         config::DatabaseVersion,

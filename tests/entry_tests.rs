@@ -1,6 +1,6 @@
 //! Tests for the Entry API
 
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::expect_used, clippy::unwrap_used)]
 mod entry_tests {
     use keepass::{db::DatabaseOpenError, Database, DatabaseKey};
     use std::{fs::File, path::Path};

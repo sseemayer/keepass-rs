@@ -480,6 +480,7 @@ impl From<Icon> for crate::db::CustomIcon {
     }
 }
 
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
 
@@ -670,13 +671,13 @@ mod tests {
                 binaries: vec![
                     Binary {
                         id: 0,
-                        value: base64_engine::STANDARD.encode(&[1, 2, 3, 4, 5]),
+                        value: base64_engine::STANDARD.encode([1, 2, 3, 4, 5]),
                         compressed: Some(false),
                         protected: Some(false),
                     },
                     Binary {
                         id: 1,
-                        value: base64_engine::STANDARD.encode(&[10, 20, 30, 40, 50]),
+                        value: base64_engine::STANDARD.encode([10, 20, 30, 40, 50]),
                         compressed: Some(true),
                         protected: Some(true),
                     },
@@ -827,7 +828,7 @@ mod tests {
             &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
         );
         assert_eq!(icons.icons[0].data, vec![1, 2, 3, 4, 5]);
-        assert_eq!(meta.recycle_bin_enabled.unwrap(), true);
+        assert!(meta.recycle_bin_enabled.unwrap());
         assert_eq!(
             meta.recycle_bin_uuid.unwrap().0.as_bytes(),
             &[0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f]
@@ -866,14 +867,14 @@ mod tests {
         assert_eq!(binaries.binaries[0].protected, Some(false));
         assert_eq!(
             binaries.binaries[0].value,
-            base64_engine::STANDARD.encode(&[1, 2, 3, 4, 5])
+            base64_engine::STANDARD.encode([1, 2, 3, 4, 5])
         );
         assert_eq!(binaries.binaries[1].id, 1);
         assert_eq!(binaries.binaries[1].compressed, Some(true));
         assert_eq!(binaries.binaries[1].protected, Some(true));
         assert_eq!(
             binaries.binaries[1].value,
-            base64_engine::STANDARD.encode(&[10, 20, 30, 40, 50])
+            base64_engine::STANDARD.encode([10, 20, 30, 40, 50])
         );
 
         let cd = meta.custom_data.unwrap();

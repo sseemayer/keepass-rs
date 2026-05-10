@@ -1,6 +1,7 @@
 //! tests for keyfile format support
 #![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
+#![allow(clippy::indexing_slicing, clippy::expect_used)]
 
 mod common;
 

@@ -335,6 +335,7 @@ pub enum VariantDictionaryError {
     UnexpectedEof,
 }
 
+#[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod variant_dictionary_tests {
     use hex_literal::hex;
