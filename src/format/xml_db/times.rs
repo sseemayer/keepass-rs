@@ -42,9 +42,8 @@ impl From<Times> for crate::db::Times {
 
 impl From<crate::db::Times> for Times {
     fn from(t: crate::db::Times) -> Self {
-        // Use ISO 8601 format for all timestamps
         // NOTE: we could store this in the Times struct to improve round-tripping
-        let mode = TimestampMode::Iso8601;
+        let mode = TimestampMode::Base64;
 
         Times {
             creation_time: t.creation.map(|time| Timestamp { mode, time }),
