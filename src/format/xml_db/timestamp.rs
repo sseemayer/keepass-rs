@@ -45,9 +45,8 @@ impl From<Timestamp> for NaiveDateTime {
 
 impl From<NaiveDateTime> for Timestamp {
     fn from(t: NaiveDateTime) -> Self {
-        // NOTE: always use ISO8601 for serialization. We could remember the original format to
-        // have more faithful round-tripping
-        Timestamp::new_iso8601(t)
+        // always use base64 for serialization since that seems to be most compatible with keepass
+        Timestamp::new_base64(t)
     }
 }
 

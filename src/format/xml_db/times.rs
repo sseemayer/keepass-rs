@@ -2,27 +2,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::format::xml_db::{
     custom_serde::{cs_opt_bool, cs_opt_fromstr, cs_opt_string},
-    timestamp::{Timestamp, TimestampMode},
+    timestamp::Timestamp,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Times {
-    #[serde(default, with = "cs_opt_string")]
+    #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub creation_time: Option<Timestamp>,
-    #[serde(default, with = "cs_opt_string")]
+    #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub last_modification_time: Option<Timestamp>,
-    #[serde(default, with = "cs_opt_string")]
+    #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub last_access_time: Option<Timestamp>,
-    #[serde(default, with = "cs_opt_string")]
+    #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub expiry_time: Option<Timestamp>,
 
-    #[serde(default, with = "cs_opt_bool")]
+    #[serde(default, with = "cs_opt_bool", skip_serializing_if = "Option::is_none")]
     pub expires: Option<bool>,
-    #[serde(default, with = "cs_opt_fromstr")]
+    #[serde(default, with = "cs_opt_fromstr", skip_serializing_if = "Option::is_none")]
     pub usage_count: Option<usize>,
 
-    #[serde(default, with = "cs_opt_string")]
+    #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub location_changed: Option<Timestamp>,
 }
 
@@ -42,16 +42,12 @@ impl From<Times> for crate::db::Times {
 
 impl From<crate::db::Times> for Times {
     fn from(t: crate::db::Times) -> Self {
-        // Use ISO 8601 format for all timestamps
-        // NOTE: we could store this in the Times struct to improve round-tripping
-        let mode = TimestampMode::Iso8601;
-
         Times {
-            creation_time: t.creation.map(|time| Timestamp { mode, time }),
-            last_modification_time: t.last_modification.map(|time| Timestamp { mode, time }),
-            last_access_time: t.last_access.map(|time| Timestamp { mode, time }),
-            expiry_time: t.expiry.map(|time| Timestamp { mode, time }),
-            location_changed: t.location_changed.map(|time| Timestamp { mode, time }),
+            creation_time: t.creation.map(|time| time.into()),
+            last_modification_time: t.last_modification.map(|time| time.into()),
+            last_access_time: t.last_access.map(|time| time.into()),
+            expiry_time: t.expiry.map(|time| time.into()),
+            location_changed: t.location_changed.map(|time| time.into()),
             expires: t.expires,
             usage_count: t.usage_count,
         }
