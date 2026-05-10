@@ -1,25 +1,15 @@
+#![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
 
 mod common;
 
-use common::{combo_by_label, config_and_key_for};
-use keepass::{
-    config::DatabaseConfig,
-    db::{Database, Value},
-    DatabaseKey,
-};
+use common::combo_by_label;
+use keepass::db::{Database, Value};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
-fn baseline_setup() -> (DatabaseConfig, DatabaseKey, impl Fn() -> DatabaseKey) {
-    let combo = combo_by_label("aes256+none+inner-chacha20+argon2d");
-    let (cfg, key) = config_and_key_for(&combo);
-    let reopen_key = move || config_and_key_for(&combo).1;
-    (cfg, key, reopen_key)
-}
-
 fn drive(label: &str, payloads: Vec<Vec<u8>>) {
-    let (cfg, key, reopen_key) = baseline_setup();
-    let mut db = Database::with_config(cfg);
+    let combo = combo_by_label("aes256+none+inner-chacha20+argon2d");
+    let mut db = Database::with_config(combo.get_config());
 
     {
         let mut root = db.root_mut();
@@ -30,8 +20,8 @@ fn drive(label: &str, payloads: Vec<Vec<u8>>) {
         }
     }
 
-    let bytes = common::save_to_vec(&db, key);
-    let parsed = Database::open(&mut bytes.as_slice(), reopen_key())
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let parsed = Database::open(&mut bytes.as_slice(), combo.get_key())
         .unwrap_or_else(|err| panic!("{}: reopen failed: {:?}", label, err));
 
     assert_eq!(

@@ -1,26 +1,21 @@
+#![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
 
 mod common;
 
 use std::io::Cursor;
 
-use common::{baseline_combo, config_and_key_for, minimal_database, KeyfileKind};
+use common::{baseline_combo, KeyfileKind};
 use keepass::{Database, DatabaseKey};
 
-fn root_child_count(db: &Database) -> usize {
-    let r = db.root();
-    r.entries().count() + r.groups().count()
-}
-
 fn drive(kind: KeyfileKind, label: &str) {
-    let (cfg, _) = config_and_key_for(&baseline_combo());
-
+    let combo = baseline_combo();
     let bytes = kind.to_bytes();
     let key = DatabaseKey::new()
         .with_keyfile(&mut Cursor::new(bytes.clone()))
         .expect("keyfile parse");
 
-    let db = minimal_database(cfg);
+    let db = combo.minimal_database();
     let saved = common::save_to_vec(&db, key);
 
     let reopen_key = DatabaseKey::new()
@@ -28,7 +23,8 @@ fn drive(kind: KeyfileKind, label: &str) {
         .expect("keyfile parse 2");
     let parsed = Database::open(&mut saved.as_slice(), reopen_key)
         .unwrap_or_else(|e| panic!("{} reopen failed: {:?}", label, e));
-    assert_eq!(root_child_count(&parsed), root_child_count(&db));
+    assert_eq!(parsed.root().entries().count(), 1);
+    assert_eq!(parsed.root().groups().count(), 0);
 }
 
 #[test]
@@ -53,31 +49,33 @@ fn keyfile_xml_v2_round_trip() {
 
 #[test]
 fn keyfile_invalid_xml_falls_back_to_hash() {
-    let (cfg, _) = config_and_key_for(&baseline_combo());
+    let combo = baseline_combo();
     let garbage = b"<not><a><keyfile></a></not>".to_vec();
     let key = DatabaseKey::new()
         .with_keyfile(&mut Cursor::new(garbage.clone()))
         .expect("garbage keyfile accepted");
-    let db = minimal_database(cfg);
+    let db = combo.minimal_database();
     let saved = common::save_to_vec(&db, key);
     let reopen = DatabaseKey::new()
         .with_keyfile(&mut Cursor::new(garbage))
         .expect("garbage keyfile accepted 2");
     let parsed = Database::open(&mut saved.as_slice(), reopen).expect("garbage keyfile reopens");
-    assert_eq!(root_child_count(&parsed), 1);
+    assert_eq!(parsed.root().entries().count(), 1);
+    assert_eq!(parsed.root().groups().count(), 0);
 }
 
 #[test]
 fn keyfile_empty_is_consistent() {
-    let (cfg, _) = config_and_key_for(&baseline_combo());
+    let combo = baseline_combo();
     let key = DatabaseKey::new()
         .with_keyfile(&mut Cursor::new(Vec::<u8>::new()))
         .expect("empty keyfile accepted");
-    let db = minimal_database(cfg);
+    let db = combo.minimal_database();
     let saved = common::save_to_vec(&db, key);
     let reopen = DatabaseKey::new()
         .with_keyfile(&mut Cursor::new(Vec::<u8>::new()))
         .expect("empty keyfile accepted");
     let parsed = Database::open(&mut saved.as_slice(), reopen).expect("empty keyfile reopens");
-    assert_eq!(root_child_count(&parsed), 1);
+    assert_eq!(parsed.root().entries().count(), 1);
+    assert_eq!(parsed.root().groups().count(), 0);
 }

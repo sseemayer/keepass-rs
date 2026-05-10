@@ -88,6 +88,7 @@ base32 = { version = "0.5", optional = true }
 rustfmt = "0.10"
 tempfile = "3"
 rand = "0.8"
+test-with = { version = "0.16", default-features = false, features = ["executable"] }
 
 # Browser-only deps: wasm32-unknown-unknown is the canonical browser target.
 # wasi-flavoured wasm32 targets (wasm32-wasip1, wasm32-wasip2) use their own

@@ -1,25 +1,16 @@
+#![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
 
 mod common;
 
-use common::{baseline_combo, config_and_key_for, minimal_database, rich_database, round_trip_combos, Combo};
+use common::{baseline_combo, round_trip_combos, Combo};
 use keepass::{db::Value, Database};
-
-fn opening_key_for(combo: &Combo) -> keepass::DatabaseKey {
-    config_and_key_for(combo).1
-}
-
-fn root_child_count(db: &Database) -> usize {
-    let root = db.root();
-    root.entries().count() + root.groups().count()
-}
 
 #[test]
 fn matrix_round_trip_minimal_database() {
     for combo in &round_trip_combos() {
-        let (cfg, key) = config_and_key_for(combo);
-        let db = minimal_database(cfg);
-        let bytes = common::save_to_vec(&db, key);
+        let db = combo.minimal_database();
+        let bytes = common::save_to_vec(&db, combo.get_key());
         assert!(
             bytes.len() > 32,
             "combo {} produced suspiciously small output ({} bytes)",
@@ -32,9 +23,9 @@ fn matrix_round_trip_minimal_database() {
             "combo {} missing kdbx magic",
             combo.label
         );
-        let parsed = Database::open(&mut bytes.as_slice(), opening_key_for(combo))
+        let parsed = Database::open(&mut bytes.as_slice(), combo.get_key())
             .unwrap_or_else(|e| panic!("combo {} reopen failed: {:?}", combo.label, e));
-        assert_eq!(root_child_count(&parsed), root_child_count(&db));
+        assert_eq!(parsed, db, "combo {} round-trip mismatch", combo.label);
     }
 }
 
@@ -50,11 +41,10 @@ fn matrix_round_trip_rich_database_subset() {
         })
         .collect();
     for combo in &subset {
-        let (cfg, key) = config_and_key_for(combo);
-        let db = rich_database(cfg);
-        let bytes = common::save_to_vec(&db, key);
+        let db = combo.rich_database();
+        let bytes = common::save_to_vec(&db, combo.get_key());
 
-        let parsed = Database::open(&mut bytes.as_slice(), opening_key_for(combo))
+        let parsed = Database::open(&mut bytes.as_slice(), combo.get_key())
             .unwrap_or_else(|e| panic!("combo {} reopen failed: {:?}", combo.label, e));
 
         assert_eq!(
@@ -108,26 +98,22 @@ fn matrix_round_trip_rich_database_subset() {
 #[test]
 fn second_save_is_self_consistent() {
     let combo = baseline_combo();
-    let (cfg, key) = config_and_key_for(&combo);
-    let db = rich_database(cfg);
-    let bytes_a = common::save_to_vec(&db, key);
-    let parsed_a = Database::open(&mut bytes_a.as_slice(), opening_key_for(&combo)).unwrap();
+    let db = combo.rich_database();
+    let bytes_a = common::save_to_vec(&db, combo.get_key());
+    let parsed_a = Database::open(&mut bytes_a.as_slice(), combo.get_key()).unwrap();
 
-    let bytes_b = common::save_to_vec(&parsed_a, opening_key_for(&combo));
-    let parsed_b = Database::open(&mut bytes_b.as_slice(), opening_key_for(&combo)).unwrap();
+    let bytes_b = common::save_to_vec(&parsed_a, combo.get_key());
+    let parsed_b = Database::open(&mut bytes_b.as_slice(), combo.get_key()).unwrap();
 
-    assert_eq!(root_child_count(&parsed_a), root_child_count(&parsed_b));
-    assert_eq!(parsed_a.num_attachments(), parsed_b.num_attachments());
-    assert_eq!(parsed_a.meta.database_name, parsed_b.meta.database_name);
+    assert_eq!(parsed_a, parsed_b);
 }
 
 #[test]
 fn protected_field_decrypts_after_round_trip() {
     let combo = baseline_combo();
-    let (cfg, key) = config_and_key_for(&combo);
-    let db = rich_database(cfg);
-    let bytes = common::save_to_vec(&db, key);
-    let parsed = Database::open(&mut bytes.as_slice(), opening_key_for(&combo)).unwrap();
+    let db = combo.rich_database();
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let parsed = Database::open(&mut bytes.as_slice(), combo.get_key()).unwrap();
 
     let root = parsed.root();
     let entry = root
