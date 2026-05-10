@@ -1,3 +1,4 @@
+//! tests for cross-tool compatibility of generated databases
 #![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
 

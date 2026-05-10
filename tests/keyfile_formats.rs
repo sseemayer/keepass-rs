@@ -1,3 +1,4 @@
+//! tests for keyfile format support
 #![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
 

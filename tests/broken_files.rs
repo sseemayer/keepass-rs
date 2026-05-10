@@ -1,3 +1,4 @@
+//! tests for graceful handling of broken databases
 #![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
 
