@@ -102,11 +102,11 @@ impl Group {
         for child in self.children {
             match child {
                 GroupOrEntry::Group(g) => {
-                    let new_group = target.add_group_with_id(GroupId::from_uuid(g.uuid.0));
+                    let new_group = target.add_group_with_id(GroupId::from_uuid(g.uuid.0))?;
                     g.xml_to_db_handle(new_group, attachments, custom_icons, inner_decryptor)?;
                 }
                 GroupOrEntry::Entry(e) => {
-                    let new_entry = target.add_entry_with_id(EntryId::from_uuid(e.uuid.0));
+                    let new_entry = target.add_entry_with_id(EntryId::from_uuid(e.uuid.0))?;
                     e.xml_to_db_handle(new_entry, attachments, custom_icons, inner_decryptor)?;
                 }
             }

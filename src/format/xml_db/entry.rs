@@ -233,6 +233,10 @@ pub enum UnprotectError {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    /// The XML payload contains two groups or entries with the same identifier.
+    #[error(transparent)]
+    DuplicateIdentifier(#[from] crate::db::AddError),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

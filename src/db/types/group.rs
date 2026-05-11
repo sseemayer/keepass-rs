@@ -24,13 +24,24 @@ impl GroupId {
         Self(Uuid::new_v4())
     }
 
-    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
+    /// Build a `GroupId` from an existing [Uuid].
+    ///
+    /// Useful when a group's identifier needs to be pinned (e.g. test fixtures or migrations).
+    /// Pair with [Group::add_group_with_id][GroupMut::add_group_with_id] to insert
+    /// a group under a chosen identifier.
+    pub const fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 
     /// Get the Uuid contained inside
     pub fn uuid(&self) -> Uuid {
         self.0
+    }
+}
+
+impl From<Uuid> for GroupId {
+    fn from(uuid: Uuid) -> Self {
+        Self::from_uuid(uuid)
     }
 }
 
@@ -300,10 +311,12 @@ impl GroupMut<'_> {
         let new_group = Group::new(Some(self.id));
         let id = new_group.id;
 
-        self.groups.insert(id);
-        self.database.groups.insert(id, new_group);
-
-        GroupMut::new(self.database, id)
+        // A freshly-generated v4 UUID does not collide with an existing identifier in any
+        // realistic scenario, so the duplicate check inside `add_group_with_id` cannot trip
+        // here.
+        #[allow(clippy::expect_used)] // fresh v4 UUID cannot collide
+        self.add_group_with_id(id)
+            .expect("fresh v4 UUID cannot collide with an existing group identifier")
     }
 
     /// Adds a new entry to this group and returns a mutable reference to it.
@@ -311,34 +324,75 @@ impl GroupMut<'_> {
         let new_entry = Entry::new(self.id);
         let id = new_entry.id();
 
-        self.entries.insert(id);
-        self.database.entries.insert(id, new_entry);
-
-        EntryMut::new(self.database, id)
+        // A freshly-generated v4 UUID does not collide with an existing identifier in any
+        // realistic scenario, so the duplicate check inside `add_entry_with_id` cannot trip
+        // here.
+        #[allow(clippy::expect_used)] // fresh v4 UUID cannot collide
+        self.add_entry_with_id(id)
+            .expect("fresh v4 UUID cannot collide with an existing entry identifier")
     }
 
-    pub(crate) fn add_entry_with_id(&mut self, id: EntryId) -> EntryMut<'_> {
+    /// Adds a new entry under a caller-supplied [EntryId] and returns a mutable reference to it.
+    ///
+    /// Returns [AddError::DuplicateEntryUuid] if an entry with the same identifier already
+    /// exists anywhere in the database.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use keepass::db::{Database, EntryId, fields};
+    /// use uuid::uuid;
+    ///
+    /// let mut db = Database::new();
+    /// let entry_id: EntryId = uuid!("00000000-0000-0000-0000-000000000001").into();
+    /// db.root_mut()
+    ///     .add_entry_with_id(entry_id)
+    ///     .unwrap()
+    ///     .edit(|e| {
+    ///         e.set_unprotected(fields::TITLE, "My entry with defined UUID");
+    ///     });
+    /// ```
+    pub fn add_entry_with_id(&mut self, id: EntryId) -> Result<EntryMut<'_>, AddError> {
         if self.database.entries.contains_key(&id) {
-            panic!("Entry with ID {} already exists", id);
+            return Err(AddError::DuplicateEntryUuid(id.uuid()));
         }
 
         let new_entry = Entry::with_id(id, self.id);
         self.entries.insert(id);
         self.database.entries.insert(id, new_entry);
 
-        EntryMut::new(self.database, id)
+        Ok(EntryMut::new(self.database, id))
     }
 
-    pub(crate) fn add_group_with_id(&mut self, id: GroupId) -> GroupMut<'_> {
+    /// Adds a new subgroup under a caller-supplied [GroupId] and returns a mutable reference to
+    /// it.
+    ///
+    /// Returns [AddError::DuplicateGroupUuid] if a group with the same identifier already
+    /// exists anywhere in the database.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use keepass::db::{Database, GroupId};
+    /// use uuid::uuid;
+    ///
+    /// let mut db = Database::new();
+    /// let group_id: GroupId = uuid!("00000000-0000-0000-0000-000000000002").into();
+    /// db.root_mut()
+    ///     .add_group_with_id(group_id)
+    ///     .unwrap()
+    ///     .edit(|g| g.name = "Pinned group".to_string());
+    /// ```
+    pub fn add_group_with_id(&mut self, id: GroupId) -> Result<GroupMut<'_>, AddError> {
         if self.database.groups.contains_key(&id) {
-            panic!("Group with ID {} already exists", id);
+            return Err(AddError::DuplicateGroupUuid(id.uuid()));
         }
 
         let new_group = Group::with_id(id, Some(self.id));
         self.groups.insert(id);
         self.database.groups.insert(id, new_group);
 
-        GroupMut::new(self.database, id)
+        Ok(GroupMut::new(self.database, id))
     }
 
     /// Get a mutable reference to the database this group belongs to
@@ -541,6 +595,22 @@ impl GroupMut<'_> {
             id: self.id,
         }
     }
+}
+
+/// Errors that can occur when adding a group or entry under a caller-supplied identifier.
+///
+/// Returned by [GroupMut::add_entry_with_id] and [GroupMut::add_group_with_id] when the
+/// supplied identifier is already in use elsewhere in the database.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum AddError {
+    /// An entry with the given UUID already exists in the database.
+    #[error("entry with UUID {0} already exists")]
+    DuplicateEntryUuid(Uuid),
+
+    /// A group with the given UUID already exists in the database.
+    #[error("group with UUID {0} already exists")]
+    DuplicateGroupUuid(Uuid),
 }
 
 /// Errors that can occur when moving a group to a new parent.
@@ -753,5 +823,98 @@ mod group_tests {
             .unwrap()
             .entry_mut(sample_entry_id)
             .is_some());
+    }
+
+    #[test]
+    fn add_entry_with_id_uses_supplied_uuid() {
+        use crate::db::EntryId;
+        use uuid::uuid;
+
+        let mut db = Database::new();
+        let pinned_uuid = uuid!("00000000-0000-0000-0000-0000000000aa");
+        let pinned: EntryId = pinned_uuid.into();
+
+        let inserted_id = db
+            .root_mut()
+            .add_entry_with_id(pinned)
+            .unwrap()
+            .edit(|e| {
+                e.set_unprotected(fields::TITLE, "pinned");
+            })
+            .id();
+
+        assert_eq!(inserted_id, pinned);
+        assert_eq!(inserted_id.uuid(), pinned_uuid);
+        assert_eq!(db.entry(pinned).unwrap().get(fields::TITLE), Some("pinned"),);
+    }
+
+    #[test]
+    fn add_entry_with_id_duplicate_returns_error() {
+        use crate::db::{AddError, EntryId};
+        use uuid::uuid;
+
+        let mut db = Database::new();
+        let pinned: EntryId = uuid!("00000000-0000-0000-0000-0000000000ab").into();
+
+        db.root_mut().add_entry_with_id(pinned).unwrap();
+        match db.root_mut().add_entry_with_id(pinned) {
+            Err(AddError::DuplicateEntryUuid(u)) => assert_eq!(u, pinned.uuid()),
+            Err(other) => panic!("expected DuplicateEntryUuid, got {:?}", other),
+            Ok(_) => panic!("expected duplicate UUID to fail"),
+        }
+    }
+
+    #[test]
+    fn add_group_with_id_uses_supplied_uuid() {
+        use crate::db::GroupId;
+        use uuid::uuid;
+
+        let mut db = Database::new();
+        let pinned_uuid = uuid!("00000000-0000-0000-0000-0000000000ba");
+        let pinned: GroupId = pinned_uuid.into();
+
+        let inserted_id = db
+            .root_mut()
+            .add_group_with_id(pinned)
+            .unwrap()
+            .edit(|g| g.name = "pinned".into())
+            .id();
+
+        assert_eq!(inserted_id, pinned);
+        assert_eq!(inserted_id.uuid(), pinned_uuid);
+        assert_eq!(db.group(pinned).unwrap().name, "pinned");
+    }
+
+    #[test]
+    fn add_group_with_id_duplicate_returns_error() {
+        use crate::db::{AddError, GroupId};
+        use uuid::uuid;
+
+        let mut db = Database::new();
+        let pinned: GroupId = uuid!("00000000-0000-0000-0000-0000000000bb").into();
+
+        db.root_mut().add_group_with_id(pinned).unwrap();
+        match db.root_mut().add_group_with_id(pinned) {
+            Err(AddError::DuplicateGroupUuid(u)) => assert_eq!(u, pinned.uuid()),
+            Err(other) => panic!("expected DuplicateGroupUuid, got {:?}", other),
+            Ok(_) => panic!("expected duplicate UUID to fail"),
+        }
+    }
+
+    #[test]
+    fn from_uuid_impls_match_constructors() {
+        use crate::db::{EntryId, GroupId};
+        use uuid::uuid;
+
+        let raw = uuid!("00000000-0000-0000-0000-0000000000cc");
+        let from_entry: EntryId = raw.into();
+        let from_entry_ctor = EntryId::from_uuid(raw);
+        assert_eq!(from_entry, from_entry_ctor);
+        assert_eq!(from_entry.uuid(), raw);
+
+        let from_group: GroupId = raw.into();
+        let from_group_ctor = GroupId::from_uuid(raw);
+        assert_eq!(from_group, from_group_ctor);
+        assert_eq!(from_group.uuid(), raw);
     }
 }

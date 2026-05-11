@@ -155,7 +155,10 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
         // does the parent exist in dest?
         if let Some(mut parent) = dest_db.group_mut(parent_id) {
             // yes - re-add the group
-            let mut dest_group = parent.add_group_with_id(id);
+            #[allow(clippy::expect_used)] // id was selected from source_groups.difference(dest_groups)
+            let mut dest_group = parent
+                .add_group_with_id(id)
+                .expect("group id was filtered to be absent in dest");
             dest_group.times = source.times.clone();
             dest_group.name = source.name.clone();
             dest_group.notes = source.notes.clone();
@@ -393,7 +396,10 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
             continue;
         };
 
-        let mut entry = parent.add_entry_with_id(id);
+        #[allow(clippy::expect_used)] // id was selected from source_entries.difference(dest_entries)
+        let mut entry = parent
+            .add_entry_with_id(id)
+            .expect("entry id was filtered to be absent in dest");
         *entry = source_entry.deref().clone();
 
         log.events.push(MergeEvent {
@@ -702,22 +708,28 @@ mod merge_tests {
         // build up root -> group1 -> subgroup1 -> entry2
         db.root_mut()
             .add_group_with_id(GROUP1_ID)
+            .unwrap()
             .edit(|g| g.name = "group1".to_string())
             .add_group_with_id(SUBGROUP1_ID)
+            .unwrap()
             .edit(|sg| sg.name = "subgroup1".to_string())
             .add_entry_with_id(ENTRY2_ID)
+            .unwrap()
             .edit(|e| e.set_unprotected("Title", "entry2"));
 
         // build up root -> group2 -> subgroup2
         db.root_mut()
             .add_group_with_id(GROUP2_ID)
+            .unwrap()
             .edit(|g| g.name = "group2".to_string())
             .add_group_with_id(SUBGROUP2_ID)
+            .unwrap()
             .edit(|sg| sg.name = "subgroup2".to_string());
 
         // Placing the first entry in the root group
         db.root_mut()
             .add_entry_with_id(ENTRY1_ID)
+            .unwrap()
             .edit(|e| e.set_unprotected("Title", "entry1"));
 
         db

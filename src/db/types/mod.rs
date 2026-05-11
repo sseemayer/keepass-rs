@@ -17,7 +17,7 @@ pub use autotype::{AutoType, AutoTypeAssociation};
 pub use color::{Color, ParseColorError};
 pub use custom_data::{CustomDataItem, CustomDataValue};
 pub use entry::{DestinationGroupNotFoundError, Entry, EntryId, EntryMut, EntryRef, EntryTrack};
-pub use group::{Group, GroupId, GroupMut, GroupRef, GroupTrack, MoveGroupError};
+pub use group::{AddError, Group, GroupId, GroupMut, GroupRef, GroupTrack, MoveGroupError};
 pub use history::History;
 pub use icon::{CustomIcon, CustomIconId, CustomIconMut, CustomIconNotFoundError, CustomIconRef, Icon};
 pub use meta::{MemoryProtection, Meta};
