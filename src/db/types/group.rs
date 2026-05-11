@@ -505,7 +505,11 @@ impl GroupMut<'_> {
     }
 
     /// Deletes this group and all its child groups and entries from the database.
-    pub fn remove(self) {
+    pub fn remove(mut self) {
+        // Remove this group's back-reference from its custom icon (if any) before
+        // the group is erased from db.groups, so the back-ref set stays consistent.
+        self.set_icon_none();
+
         // Remove from parent
         if let Some(parent_id) = self.parent {
             if let Some(mut parent) = self.database.group_mut(parent_id) {
@@ -531,6 +535,23 @@ impl GroupMut<'_> {
 
         // Finally, remove this group from the database
         self.database.groups.remove(&self.id);
+
+        // Clear any Meta UUID fields that referenced this group, so they don't
+        // silently hold stale UUIDs that would be round-tripped back to disk.
+        let uuid = self.id.0;
+        let meta = &mut self.database.meta;
+        if meta.recyclebin_uuid == Some(uuid) {
+            meta.recyclebin_uuid = None;
+        }
+        if meta.entry_templates_group == Some(uuid) {
+            meta.entry_templates_group = None;
+        }
+        if meta.last_selected_group == Some(uuid) {
+            meta.last_selected_group = None;
+        }
+        if meta.last_top_visible_group == Some(uuid) {
+            meta.last_top_visible_group = None;
+        }
     }
 
     /// Convert this mutable group reference into a history-tracking variant that will record
