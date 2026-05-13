@@ -153,6 +153,45 @@ impl KeePassFile {
         db.attachments = attachments;
         db.custom_icons = custom_icons;
 
+        // Re-populate CustomIcon back-reference sets.
+        //
+        // The XML parser creates CustomIcon values with empty `entries` and `groups` sets
+        // because icon data and entry/group data live in separate parts of the XML file.
+        // We perform a single pass here to reconstruct all back-references from the icon
+        // fields that were already set on each entry and group during xml_to_db_handle.
+        let entry_ids: Vec<crate::db::EntryId> = db.entries.keys().copied().collect();
+        for entry_id in entry_ids {
+            // current version
+            if let Some(crate::db::Icon::Custom(icon_id)) = db.entries[&entry_id].icon {
+                if let Some(icon) = db.custom_icons.get_mut(&icon_id) {
+                    icon.entries.insert((entry_id, None));
+                }
+            }
+            // historical versions
+            let history_len = db.entries[&entry_id]
+                .history
+                .as_ref()
+                .map_or(0, |h| h.entries.len());
+            for i in 0..history_len {
+                if let Some(crate::db::Icon::Custom(icon_id)) =
+                    db.entries[&entry_id].history.as_ref().unwrap().entries[i].icon
+                {
+                    if let Some(icon) = db.custom_icons.get_mut(&icon_id) {
+                        icon.entries.insert((entry_id, Some(i)));
+                    }
+                }
+            }
+        }
+
+        let group_ids: Vec<crate::db::GroupId> = db.groups.keys().copied().collect();
+        for group_id in group_ids {
+            if let Some(crate::db::Icon::Custom(icon_id)) = db.groups[&group_id].icon {
+                if let Some(icon) = db.custom_icons.get_mut(&icon_id) {
+                    icon.groups.insert(group_id);
+                }
+            }
+        }
+
         Ok(db)
     }
 
