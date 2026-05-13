@@ -15,6 +15,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+      - name: Install cross-tool test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y keepassxc mono-complete unzip
+          curl -fsSL "https://sourceforge.net/projects/keepass/files/KeePass%202.x/2.61.1/KeePass-2.61.1.zip/download" -o /tmp/KeePass.zip
+          curl -fsSL "https://keepass.info/extensions/v2/kpscript/KPScript-2.61.1.zip" -o /tmp/KPScript.zip
+          sudo mkdir -p /usr/local/lib/kpscript
+          sudo unzip -o /tmp/KeePass.zip -d /usr/local/lib/kpscript
+          sudo unzip -o /tmp/KPScript.zip -d /usr/local/lib/kpscript
+          printf '#!/bin/sh\nexec mono /usr/local/lib/kpscript/KPScript.exe "$@"\n' | sudo tee /usr/local/bin/kpscript > /dev/null
+          sudo chmod +x /usr/local/bin/kpscript
       - name: run cargo test
         run: cargo test --all-features
 
