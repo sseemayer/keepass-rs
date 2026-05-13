@@ -315,6 +315,19 @@ impl EntryMut<'_> {
         }
     }
 
+    /// Gets an [EntryMut] to a historical version of the [Entry], if it exists
+    pub(crate) fn historical(&mut self, index: usize) -> Option<EntryMut<'_>> {
+        if index < self.history.as_ref()?.entries.len() {
+            Some(EntryMut {
+                database: self.database,
+                id: self.id,
+                history_index: Some(index),
+            })
+        } else {
+            None
+        }
+    }
+
     /// Get an immutable reference to the entry.
     pub fn as_ref(&self) -> EntryRef<'_> {
         EntryRef {
