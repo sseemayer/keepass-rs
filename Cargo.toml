@@ -38,7 +38,7 @@ byteorder = "1"
 flate2 = "1"
 base64 = "0.22"
 serde = { version = "1",  features = ["derive"] }
-quick-xml = { version = "0.39.1", features = ["serialize"] }
+quick-xml = { version = "0.40", features = ["serialize"] }
 hex-literal = "1"
 secrecy = "0.10.3"
 chrono = { version = "0.4.23", default-features = false, features = [
