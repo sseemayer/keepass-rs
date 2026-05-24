@@ -11,6 +11,7 @@ use crate::{
     format::xml_db::{
         custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_intbool, cs_opt_string},
         meta::CustomData,
+        tags::{join_tags, split_tags},
         times::Times,
         UUID,
     },
@@ -95,10 +96,7 @@ impl Entry {
         target.foreground_color = self.foreground_color;
         target.background_color = self.background_color;
         target.override_url = self.override_url;
-        target.tags = self
-            .tags
-            .map(|t| t.split(',').map(|s| s.to_string()).collect())
-            .unwrap_or_default();
+        target.tags = self.tags.as_deref().map(split_tags).unwrap_or_default();
 
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
 
@@ -221,7 +219,7 @@ impl Entry {
             foreground_color: db.foreground_color.clone(),
             background_color: db.background_color.clone(),
             override_url: db.override_url.clone(),
-            tags: db.tags.iter().cloned().reduce(|a, b| format!("{a},{b}")),
+            tags: join_tags(&db.tags),
             times: Some(db.times.clone().into()),
             string_fields,
             binary_fields,

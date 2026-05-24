@@ -10,6 +10,7 @@ use crate::{
     format::xml_db::{
         custom_serde::{cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         entry::{Entry, UnprotectError},
+        tags::{join_tags, split_tags},
         times::Times,
         UUID,
     },
@@ -84,10 +85,7 @@ impl Group {
     ) -> Result<(), UnprotectError> {
         target.name = self.name;
         target.notes = self.notes;
-        target.tags = self
-            .tags
-            .map(|t| t.split(';').map(|s| s.trim().to_string()).collect())
-            .unwrap_or_default();
+        target.tags = self.tags.as_deref().map(split_tags).unwrap_or_default();
 
         target.icon = if let Some(ci) = self.custom_icon_uuid.and_then(|ci| {
             let icon_id = crate::db::CustomIconId::from_uuid(ci.0);
@@ -158,7 +156,7 @@ impl Group {
             uuid: UUID(source.id().uuid()),
             name: source.name.clone(),
             notes: source.notes.clone(),
-            tags: source.tags.join(";").into(),
+            tags: join_tags(&source.tags),
             icon_id,
             custom_icon_uuid,
             times: Some(source.times.clone().into()),
