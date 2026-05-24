@@ -135,7 +135,7 @@ impl Entry {
                 target.history.as_mut().unwrap().entries.push(he);
 
                 e.xml_to_db_handle(
-                    target.historical(i).unwrap(),
+                    target.historical(i).expect("history element exists"),
                     attachments,
                     custom_icons,
                     inner_decryptor,
@@ -246,9 +246,13 @@ pub enum UnprotectError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// The XML payload contains two groups or entries with the same identifier.
+    /// the XML database contains two entries with the same UUID
     #[error(transparent)]
-    DuplicateIdentifier(#[from] crate::db::AddError),
+    DuplicateEntryId(#[from] crate::db::DuplicateEntryIdError),
+
+    /// the XML database contains two groups with the same UUID
+    #[error(transparent)]
+    DuplicateGroupId(#[from] crate::db::DuplicateGroupIdError),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

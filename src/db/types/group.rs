@@ -349,7 +349,7 @@ impl GroupMut<'_> {
 
     /// Adds a new entry under a caller-supplied [EntryId] and returns a mutable reference to it.
     ///
-    /// Returns [AddError::DuplicateEntryUuid] if an entry with the same identifier already
+    /// Returns [DuplicateEntryIdError] if an entry with the same identifier already
     /// exists anywhere in the database.
     ///
     /// # Example
@@ -367,9 +367,9 @@ impl GroupMut<'_> {
     ///         e.set_unprotected(fields::TITLE, "My entry with defined UUID");
     ///     });
     /// ```
-    pub fn add_entry_with_id(&mut self, id: EntryId) -> Result<EntryMut<'_>, AddError> {
+    pub fn add_entry_with_id(&mut self, id: EntryId) -> Result<EntryMut<'_>, DuplicateEntryIdError> {
         if self.database.entries.contains_key(&id) {
-            return Err(AddError::DuplicateEntryUuid(id.uuid()));
+            return Err(DuplicateEntryIdError(id));
         }
 
         let new_entry = Entry::with_id(id, self.id);
@@ -382,7 +382,7 @@ impl GroupMut<'_> {
     /// Adds a new subgroup under a caller-supplied [GroupId] and returns a mutable reference to
     /// it.
     ///
-    /// Returns [AddError::DuplicateGroupUuid] if a group with the same identifier already
+    /// Returns [DuplicateGroupIdError] if a group with the same identifier already
     /// exists anywhere in the database.
     ///
     /// # Example
@@ -398,9 +398,9 @@ impl GroupMut<'_> {
     ///     .unwrap()
     ///     .edit(|g| g.name = "Pinned group".to_string());
     /// ```
-    pub fn add_group_with_id(&mut self, id: GroupId) -> Result<GroupMut<'_>, AddError> {
+    pub fn add_group_with_id(&mut self, id: GroupId) -> Result<GroupMut<'_>, DuplicateGroupIdError> {
         if self.database.groups.contains_key(&id) {
-            return Err(AddError::DuplicateGroupUuid(id.uuid()));
+            return Err(DuplicateGroupIdError(id));
         }
 
         let new_group = Group::with_id(id, Some(self.id));
@@ -642,21 +642,13 @@ impl GroupMut<'_> {
     }
 }
 
-/// Errors that can occur when adding a group or entry under a caller-supplied identifier.
-///
-/// Returned by [GroupMut::add_entry_with_id] and [GroupMut::add_group_with_id] when the
-/// supplied identifier is already in use elsewhere in the database.
 #[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum AddError {
-    /// An entry with the given UUID already exists in the database.
-    #[error("entry with UUID {0} already exists")]
-    DuplicateEntryUuid(Uuid),
+#[error("a group with ID {0} already exists in the database")]
+pub struct DuplicateGroupIdError(pub GroupId);
 
-    /// A group with the given UUID already exists in the database.
-    #[error("group with UUID {0} already exists")]
-    DuplicateGroupUuid(Uuid),
-}
+#[derive(Debug, Error)]
+#[error("an entry with ID {0} already exists in the database")]
+pub struct DuplicateEntryIdError(pub EntryId);
 
 /// Errors that can occur when moving a group to a new parent.
 #[derive(Debug, Error)]
@@ -895,18 +887,18 @@ mod group_tests {
 
     #[test]
     fn add_entry_with_id_duplicate_returns_error() {
-        use crate::db::{AddError, EntryId};
+        use crate::db::{DuplicateEntryIdError, EntryId};
         use uuid::uuid;
 
         let mut db = Database::new();
         let pinned: EntryId = uuid!("00000000-0000-0000-0000-0000000000ab").into();
 
         db.root_mut().add_entry_with_id(pinned).unwrap();
-        match db.root_mut().add_entry_with_id(pinned) {
-            Err(AddError::DuplicateEntryUuid(u)) => assert_eq!(u, pinned.uuid()),
-            Err(other) => panic!("expected DuplicateEntryUuid, got {:?}", other),
-            Ok(_) => panic!("expected duplicate UUID to fail"),
-        }
+
+        assert!(matches!(
+            db.root_mut().add_entry_with_id(pinned),
+            Err(DuplicateEntryIdError(eid)) if eid == pinned
+        ));
     }
 
     #[test]
@@ -932,18 +924,18 @@ mod group_tests {
 
     #[test]
     fn add_group_with_id_duplicate_returns_error() {
-        use crate::db::{AddError, GroupId};
+        use crate::db::{DuplicateGroupIdError, GroupId};
         use uuid::uuid;
 
         let mut db = Database::new();
         let pinned: GroupId = uuid!("00000000-0000-0000-0000-0000000000bb").into();
 
         db.root_mut().add_group_with_id(pinned).unwrap();
-        match db.root_mut().add_group_with_id(pinned) {
-            Err(AddError::DuplicateGroupUuid(u)) => assert_eq!(u, pinned.uuid()),
-            Err(other) => panic!("expected DuplicateGroupUuid, got {:?}", other),
-            Ok(_) => panic!("expected duplicate UUID to fail"),
-        }
+
+        assert!(matches!(
+            db.root_mut().add_group_with_id(pinned),
+            Err(DuplicateGroupIdError(gid)) if gid == pinned
+        ));
     }
 
     #[test]
