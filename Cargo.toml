@@ -1,7 +1,7 @@
 [package]
 name = "keepass"
 description = "KeePass .kdbx database file parser"
-keywords = ["keepass", "kdbx", "kdb", "password manager"]
+keywords = ["keepass", "kdbx", "kdb", "password"]
 categories = ["parser-implementations", "security"]
 
 edition = "2018"
