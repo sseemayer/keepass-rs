@@ -194,7 +194,7 @@ pub fn fast_combo() -> Combo {
 impl Combo {
     pub fn get_config(&self) -> DatabaseConfig {
         let mut cfg = DatabaseConfig::default();
-        cfg.version = DatabaseVersion::KDB4(0);
+        cfg.version = DatabaseVersion::KDB4(1);
         cfg.outer_cipher_config = self.outer_cipher.clone();
         cfg.compression_config = self.compression.clone();
         cfg.inner_cipher_config = self.inner_cipher.clone();

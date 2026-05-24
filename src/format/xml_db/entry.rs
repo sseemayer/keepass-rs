@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
-    db::{AttachmentId, Color, EntryId},
+    db::{AttachmentId, Color, EntryId, GroupId},
     format::xml_db::{
-        custom_serde::{cs_bool, cs_opt_fromstr, cs_opt_intbool, cs_opt_string},
+        custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_intbool, cs_opt_string},
         meta::CustomData,
         times::Times,
         UUID,
@@ -67,6 +67,12 @@ pub struct Entry {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_data: Option<CustomData>,
+
+    #[serde(default, with = "cs_opt_bool", skip_serializing_if = "Option::is_none")]
+    pub quality_check: Option<bool>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_parent_group: Option<UUID>,
 }
 
 impl Entry {
@@ -140,6 +146,10 @@ impl Entry {
         if let Some(cd) = self.custom_data {
             target.custom_data = cd.into();
         }
+
+        target.quality_check = self.quality_check.unwrap_or(true);
+
+        target.previous_parent_group = self.previous_parent_group.map(|g| GroupId::from_uuid(g.0));
 
         Ok(())
     }
@@ -218,6 +228,8 @@ impl Entry {
             auto_type: db.autotype.as_ref().map(|at| at.clone().into()),
             history,
             custom_data,
+            quality_check: Some(db.quality_check),
+            previous_parent_group: db.previous_parent_group.map(|g| UUID(g.uuid())),
         })
     }
 }
