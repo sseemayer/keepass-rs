@@ -322,6 +322,7 @@ impl GroupMut<'_> {
     }
 
     /// Adds a new subgroup to this group and returns a mutable reference to it.
+    #[allow(clippy::missing_panics_doc)]
     pub fn add_group(&mut self) -> GroupMut<'_> {
         let new_group = Group::new(Some(self.id));
         let id = new_group.id;
@@ -335,6 +336,7 @@ impl GroupMut<'_> {
     }
 
     /// Adds a new entry to this group and returns a mutable reference to it.
+    #[allow(clippy::missing_panics_doc)]
     pub fn add_entry(&mut self) -> EntryMut<'_> {
         let new_entry = Entry::new(self.id);
         let id = new_entry.id();
@@ -642,10 +644,12 @@ impl GroupMut<'_> {
     }
 }
 
+/// Attempted to add a group with an ID that already exists in the database.
 #[derive(Debug, Error)]
 #[error("a group with ID {0} already exists in the database")]
 pub struct DuplicateGroupIdError(pub GroupId);
 
+/// Attempted to add an entry with an ID that already exists in the database.
 #[derive(Debug, Error)]
 #[error("an entry with ID {0} already exists in the database")]
 pub struct DuplicateEntryIdError(pub EntryId);
