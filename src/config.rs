@@ -14,11 +14,10 @@ use crate::{
         ciphers::{self},
         kdf, CryptographyError,
     },
-    format::{
-        variant_dictionary::{VariantDictionary, VariantDictionaryError},
-        KDBX4_CURRENT_MINOR_VERSION,
-    },
+    format::{variant_dictionary::VariantDictionaryError, KDBX4_CURRENT_MINOR_VERSION},
 };
+
+pub use crate::format::variant_dictionary::{VariantDictionary, VariantDictionaryValue};
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
 const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
