@@ -60,7 +60,7 @@ pub struct CustomIcon {
 
     /// Filename for the icon
     pub name: Option<String>,
-  
+
     /// Last modification timestamp
     pub last_modification_time: Option<NaiveDateTime>,
 
