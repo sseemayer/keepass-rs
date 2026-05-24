@@ -18,6 +18,7 @@
 //! and the correct forms.
 
 #![cfg(feature = "save_kdbx4")]
+#![allow(clippy::expect_used)]
 
 use keepass::{Database, DatabaseKey};
 

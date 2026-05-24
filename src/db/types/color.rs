@@ -4,8 +4,13 @@ use thiserror::Error;
 /// A color value for the Database, or Entry
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Color {
+    /// red component of the color
     pub r: u8,
+
+    /// green component of the color
     pub g: u8,
+
+    /// blue component of the color
     pub b: u8,
 }
 

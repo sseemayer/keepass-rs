@@ -1,3 +1,11 @@
+//! Integration tests for various database examples
+
+#[allow(
+    missing_docs,
+    clippy::indexing_slicing,
+    clippy::expect_used,
+    clippy::unwrap_used
+)]
 mod file_read_tests {
     use keepass::{
         config::DatabaseVersion,
@@ -9,7 +17,7 @@ mod file_read_tests {
 
     use std::{fs::File, path::Path};
 
-    fn explore(parent: GroupRef) -> (usize, usize) {
+    fn explore(parent: GroupRef<'_>) -> (usize, usize) {
         let mut total_entries = 0;
         let mut total_groups = 1;
         for entry in parent.entries() {

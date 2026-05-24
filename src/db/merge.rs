@@ -794,6 +794,7 @@ fn have_entries_diverged(a: &Entry, b: &Entry) -> bool {
     !a.eq(&b)
 }
 
+#[allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod merge_tests {
     use uuid::uuid;

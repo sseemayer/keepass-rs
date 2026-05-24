@@ -54,26 +54,44 @@ pub struct Entry {
     pub(crate) id: EntryId,
     pub(crate) parent: GroupId,
 
+    /// the key-value fields of this entry, such as username and password.
+    ///
+    /// Common field names are available in [crate::db::fields].
     pub fields: HashMap<String, Value<String>>,
+
+    /// AutoType settings for this entry
     pub autotype: Option<AutoType>,
+
+    /// tags associated with this entry
     pub tags: Vec<String>,
 
+    /// timestamps for this entry
     pub times: Times,
 
+    /// custom data items associated with this entry
     pub custom_data: HashMap<String, CustomDataItem>,
 
     pub(crate) icon: Option<Icon>,
 
+    /// foreground color for this entry
     pub foreground_color: Option<Color>,
+
+    /// background color for this entry
     pub background_color: Option<Color>,
 
+    /// URL override for this entry
     pub override_url: Option<String>,
+
+    /// whether to enable password quality check for this entry
     pub quality_check: bool,
 
+    /// attachments associated with this entry, mapped by attachment name to attachment ID
     pub(crate) attachments: HashMap<String, AttachmentId>,
 
+    /// Identifier of the group that the Entry was previously contained in
     pub(crate) previous_parent_group: Option<GroupId>,
 
+    /// history of this entry
     pub history: Option<History>,
 }
 
@@ -117,6 +135,7 @@ impl Entry {
         self.fields.get(key).map(|v| v.as_str())
     }
 
+    /// Set a field's value by name
     pub fn set(&mut self, key: impl Into<String>, value: Value<String>) {
         self.fields.insert(key.into(), value);
     }
@@ -281,6 +300,7 @@ impl Deref for EntryRef<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existance checked on EntryRef creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &entry.history.as_ref().unwrap().entries[n]
         } else {
             entry
@@ -318,16 +338,12 @@ impl EntryMut<'_> {
 
     /// Gets an [EntryMut] to a historical version of the [Entry], if it exists
     pub(crate) fn historical(&mut self, index: usize) -> Option<EntryMut<'_>> {
-        if let Some(h) = &self.history {
-            if index < h.entries.len() {
-                Some(EntryMut {
-                    database: self.database,
-                    id: self.id,
-                    history_index: Some(index),
-                })
-            } else {
-                None
-            }
+        if index < self.history.as_ref()?.entries.len() {
+            Some(EntryMut {
+                database: self.database,
+                id: self.id,
+                history_index: Some(index),
+            })
         } else {
             None
         }
@@ -649,6 +665,7 @@ impl Deref for EntryMut<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existence checked on EntryMut creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &entry.history.as_ref().unwrap().entries[n]
         } else {
             entry
@@ -664,6 +681,7 @@ impl DerefMut for EntryMut<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existence checked on EntryMut creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &mut entry.history.as_mut().unwrap().entries[n]
         } else {
             entry
@@ -681,6 +699,7 @@ pub struct EntryTrack<'a> {
 }
 
 impl EntryTrack<'_> {
+    /// Turn this tracked entry into a normal mutable reference to the entry
     pub fn as_mut(&mut self) -> EntryMut<'_> {
         EntryMut {
             database: self.database,
@@ -822,6 +841,7 @@ impl Drop for EntryTrack<'_> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
 
     use crate::{
@@ -879,8 +899,7 @@ mod tests {
             .entry(entry_id)
             .unwrap()
             .attachments
-            .get("Attachment 1")
-            .is_some());
+            .contains_key("Attachment 1"));
 
         assert_eq!(
             db.entry(entry_id).unwrap().get(fields::TITLE).unwrap(),
