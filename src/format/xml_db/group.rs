@@ -4,13 +4,15 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "save_kdbx4")]
 use crate::crypt::CryptographyError;
+#[cfg(feature = "save_kdbx4")]
+use crate::format::xml_db::tags::join_tags;
 use crate::{
     crypt::ciphers::Cipher,
     db::{EntryId, GroupId},
     format::xml_db::{
         custom_serde::{cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         entry::{Entry, UnprotectError},
-        tags::{join_tags, split_tags},
+        tags::split_tags,
         times::Times,
         UUID,
     },
