@@ -459,10 +459,10 @@ mod file_read_tests {
         assert!(group.previous_parent().is_none());
 
         let entry = root.entry_by_name("entry with no quality check").unwrap();
-        assert_eq!(entry.quality_check, false);
+        assert!(!entry.quality_check);
 
         let entry = root.entry_by_name("entry with named custom icon").unwrap();
-        assert_eq!(entry.quality_check, true);
+        assert!(entry.quality_check);
 
         let icon = entry.custom_icon().unwrap();
         assert_eq!(icon.name, Some("Egg".to_string()));
