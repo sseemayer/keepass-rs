@@ -72,7 +72,7 @@ pub struct Entry {
     pub override_url: Option<String>,
 
     /// whether to enable password quality check for this entry
-    pub quality_check: Option<bool>,
+    pub quality_check: bool,
 
     /// attachments associated with this entry, mapped by attachment name to attachment ID
     pub(crate) attachments: HashMap<String, AttachmentId>,
