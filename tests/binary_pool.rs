@@ -1,3 +1,4 @@
+//! tests for binary attachment reading/writing
 #![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
 

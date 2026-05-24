@@ -1,5 +1,7 @@
+//! tests for round-tripping of generated databases
 #![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
+#![allow(clippy::indexing_slicing, clippy::expect_used, clippy::unwrap_used)]
 
 mod common;
 

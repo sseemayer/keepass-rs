@@ -18,6 +18,7 @@ impl AttachmentId {
         AttachmentId(id)
     }
 
+    /// Get the underlying usize ID of this attachment.
     pub fn id(&self) -> usize {
         self.0
     }
@@ -55,6 +56,7 @@ pub struct Attachment {
 }
 
 impl Attachment {
+    /// Get the ID of this attachment.
     pub fn id(&self) -> AttachmentId {
         self.id
     }
@@ -85,6 +87,7 @@ impl AttachmentRef<'_> {
         AttachmentRef { database, id }
     }
 
+    /// Get an immutable reference to the database that owns this attachment.
     pub fn database(&self) -> &Database {
         self.database
     }
@@ -110,6 +113,7 @@ impl Deref for AttachmentRef<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentRef should only be created with valid AttachmentIds
+        #[allow(clippy::expect_used)]
         self.database
             .attachments
             .get(&self.id)
@@ -195,6 +199,7 @@ impl Deref for AttachmentMut<'_> {
 
     fn deref(&self) -> &Self::Target {
         // UNWRAP safety: AttachmentMut should only be created with valid AttachmentIds
+        #[allow(clippy::expect_used)]
         self.database
             .attachments
             .get(&self.id)
@@ -205,6 +210,7 @@ impl Deref for AttachmentMut<'_> {
 impl DerefMut for AttachmentMut<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // UNWRAP safety: AttachmentMut should only be created with valid AttachmentIds
+        #[allow(clippy::expect_used)]
         self.database
             .attachments
             .get_mut(&self.id)

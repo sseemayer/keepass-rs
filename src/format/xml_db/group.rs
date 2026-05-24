@@ -77,7 +77,7 @@ pub enum GroupOrEntry {
 impl Group {
     pub(crate) fn xml_to_db_handle(
         self,
-        mut target: crate::db::GroupMut,
+        mut target: crate::db::GroupMut<'_>,
         attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
         custom_icons: &HashMap<crate::db::CustomIconId, crate::db::CustomIcon>,
         inner_decryptor: &mut dyn Cipher,
@@ -129,7 +129,7 @@ impl Group {
 
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
-        source: crate::db::GroupRef,
+        source: crate::db::GroupRef<'_>,
         inner_cipher: &mut dyn Cipher,
     ) -> Result<Self, CryptographyError> {
         let mut children = Vec::new();
@@ -174,6 +174,7 @@ impl Group {
     }
 }
 
+#[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,9 +241,9 @@ mod tests {
             group.0.default_auto_type_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
         );
-        assert_eq!(group.0.enable_auto_type.unwrap(), true);
-        assert_eq!(group.0.enable_searching.unwrap(), false);
-        assert_eq!(group.0.custom_data.is_some(), true);
+        assert!(group.0.enable_auto_type.unwrap());
+        assert!(!group.0.enable_searching.unwrap());
+        assert!(group.0.custom_data.is_some());
         assert_eq!(group.0.children.len(), 4);
     }
 }

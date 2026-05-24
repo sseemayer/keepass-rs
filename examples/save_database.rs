@@ -5,6 +5,7 @@ use keepass::{
 };
 use std::fs::File;
 
+#[allow(clippy::unwrap_used)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut db = Database::new();
 

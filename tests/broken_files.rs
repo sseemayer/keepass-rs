@@ -1,5 +1,7 @@
+//! tests for graceful handling of broken databases
 #![cfg(feature = "save_kdbx4")]
 #![forbid(unsafe_code)]
+#![allow(clippy::expect_used, clippy::indexing_slicing)]
 
 mod common;
 
