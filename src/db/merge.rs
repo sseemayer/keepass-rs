@@ -160,7 +160,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
             #[allow(clippy::expect_used)] // id was selected from source_groups.difference(dest_groups)
             let mut dest_group = parent
                 .add_group_with_id(id)
-                .expect("group id was filtered to be absent in dest");
+                .expect("group to be re-added should not exist yet");
             dest_group.times = source.times.clone();
             dest_group.name = source.name.clone();
             dest_group.notes = source.notes.clone();
@@ -401,7 +401,8 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
         #[allow(clippy::expect_used)] // id was selected from source_entries.difference(dest_entries)
         let mut entry = parent
             .add_entry_with_id(id)
-            .expect("entry id was filtered to be absent in dest");
+            .expect("entry to be (re-)added should not exist yet");
+
         *entry = source_entry.deref().clone();
 
         log.events.push(MergeEvent {
