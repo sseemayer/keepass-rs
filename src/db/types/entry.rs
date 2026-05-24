@@ -68,9 +68,11 @@ pub struct Entry {
     pub background_color: Option<Color>,
 
     pub override_url: Option<String>,
-    pub quality_check: Option<bool>,
+    pub quality_check: bool,
 
     pub(crate) attachments: HashMap<String, AttachmentId>,
+
+    pub(crate) previous_parent_group: Option<GroupId>,
 
     pub history: Option<History>,
 }
@@ -93,9 +95,10 @@ impl Entry {
             foreground_color: None,
             background_color: None,
             override_url: None,
-            quality_check: None,
+            quality_check: true,
             attachments: HashMap::new(),
             history: Some(History::default()),
+            previous_parent_group: None,
         }
     }
 
@@ -192,6 +195,12 @@ impl EntryRef<'_> {
     pub fn parent(&self) -> GroupRef<'_> {
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
         self.database.group(self.parent).unwrap()
+    }
+
+    /// Get a reference to the previous parent group, if any
+    pub fn previous_parent(&self) -> Option<GroupRef<'_>> {
+        self.previous_parent_group
+            .and_then(|id| self.database().group(id))
     }
 
     /// Gets an [EntryRef] to a historical version of the [Entry], if it exists
@@ -371,6 +380,12 @@ impl EntryMut<'_> {
         self.database.group_mut(self.parent).unwrap()
     }
 
+    /// Get a mutable reference to the previous parent group, if any
+    pub fn previous_parent_mut(&mut self) -> Option<GroupMut<'_>> {
+        self.previous_parent_group
+            .and_then(move |id| self.database_mut().group_mut(id))
+    }
+
     /// Get a mutable reference to an attachment by id, if it exists.
     pub fn attachment_mut(&mut self, id: AttachmentId) -> Option<AttachmentMut<'_>> {
         self.attachments
@@ -522,6 +537,8 @@ impl EntryMut<'_> {
                 id: custom_icon_id,
                 entries: vec![(id, history_index)].into_iter().collect(),
                 groups: HashSet::new(),
+                name: None,
+                last_modification_time: Some(Times::now()),
                 data,
             },
         );
@@ -550,6 +567,7 @@ impl EntryMut<'_> {
         }
 
         let my_id = self.id;
+        let previous_parent = self.parent;
 
         let mut parent = self.parent_mut();
         parent.entries.remove(&my_id);
@@ -558,6 +576,7 @@ impl EntryMut<'_> {
         let mut new_parent = self.database.group_mut(group_id).unwrap();
         new_parent.entries.insert(my_id);
         self.parent = group_id;
+        self.previous_parent_group = Some(previous_parent);
 
         Ok(())
     }
@@ -571,6 +590,17 @@ impl EntryMut<'_> {
     #[allow(clippy::expect_used, clippy::missing_panics_doc)] // the entry and parent should always be found
     pub fn remove(mut self) {
         let id = self.id;
+
+        // remove this entry's back-reference from its custom icon (if any)
+        self.set_icon_none();
+
+        // also remove back-references for any historical versions that have a custom icon
+        let history_len = self.history.as_ref().map_or(0, |h| h.entries.len());
+        for i in 0..history_len {
+            if let Some(mut hist_entry) = self.historical(i) {
+                hist_entry.set_icon_none();
+            }
+        }
 
         // remove references to this entry from attachments
         self.foreach_attachment_mut(|mut attachment| {
@@ -590,6 +620,17 @@ impl EntryMut<'_> {
             .group_mut(entry.parent)
             .expect("Parent group not found");
         parent.entries.remove(&self.id);
+
+        // Clear any group's last_top_visible_entry that pointed to this entry.
+        // This field is a UI hint and should not hold a dangling EntryId.
+        let group_ids: Vec<GroupId> = self.database.groups.keys().copied().collect();
+        for group_id in group_ids {
+            if let Some(group) = self.database.groups.get_mut(&group_id) {
+                if group.last_top_visible_entry == Some(id) {
+                    group.last_top_visible_entry = None;
+                }
+            }
+        }
     }
 }
 
@@ -701,6 +742,54 @@ impl EntryTrack<'_> {
         let id = this.add_attachment(name, data).id;
 
         AttachmentMut::new(self.database, id)
+    }
+
+    /// Remove the entry's icon, tracking changes.
+    pub fn set_icon_none(&mut self) {
+        let mut this = self.as_mut();
+        this.set_icon_none();
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set a built-in icon for this entry by its ID, tracking changes.
+    pub fn set_icon_builtin(&mut self, icon_id: usize) {
+        let mut this = self.as_mut();
+        this.set_icon_builtin(icon_id);
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set a custom icon for this entry by its ID, tracking changes.
+    pub fn set_icon_custom(&mut self, custom_icon_id: CustomIconId) -> Result<(), CustomIconNotFoundError> {
+        let mut this = self.as_mut();
+        this.set_icon_custom(custom_icon_id)?;
+        this.times.last_modification = Some(Times::now());
+        Ok(())
+    }
+
+    /// Set a custom icon for this entry by providing the raw data, tracking changes. Returns a mutable reference to the newly created custom icon.
+    pub fn set_icon_custom_new(&mut self, data: Vec<u8>) -> CustomIconMut<'_> {
+        self.set_icon_none();
+
+        let custom_icon_id = CustomIconId::new();
+
+        let id = self.id;
+        let history_index = self.as_mut().history_index;
+
+        self.database.custom_icons.insert(
+            custom_icon_id,
+            CustomIcon {
+                id: custom_icon_id,
+                entries: vec![(id, history_index)].into_iter().collect(),
+                groups: HashSet::new(),
+                name: None,
+                last_modification_time: Some(Times::now()),
+                data,
+            },
+        );
+
+        self.icon = Some(Icon::Custom(custom_icon_id));
+
+        CustomIconMut::new(self.database, custom_icon_id)
     }
 }
 

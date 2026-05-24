@@ -67,6 +67,9 @@ pub struct Group {
     /// Notes for the group
     pub notes: Option<String>,
 
+    /// The list of tags for this group
+    pub tags: Vec<String>,
+
     /// Icon for the group
     pub(crate) icon: Option<Icon>,
 
@@ -96,6 +99,8 @@ pub struct Group {
 
     /// UUID for the last top visible entry
     pub(crate) last_top_visible_entry: Option<EntryId>,
+
+    pub(crate) previous_parent_group: Option<GroupId>,
 }
 
 impl Group {
@@ -110,6 +115,7 @@ impl Group {
             parent,
             name: String::new(),
             notes: None,
+            tags: Vec::new(),
             icon: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
@@ -120,6 +126,7 @@ impl Group {
             enable_autotype: None,
             enable_searching: None,
             last_top_visible_entry: None,
+            previous_parent_group: None,
         }
     }
 
@@ -129,6 +136,7 @@ impl Group {
             parent,
             name: String::new(),
             notes: None,
+            tags: Vec::new(),
             icon: None,
             groups: HashSet::new(),
             entries: HashSet::new(),
@@ -139,6 +147,7 @@ impl Group {
             enable_autotype: None,
             enable_searching: None,
             last_top_visible_entry: None,
+            previous_parent_group: None,
         }
     }
 
@@ -238,6 +247,12 @@ impl GroupRef<'_> {
     /// Get a reference to the parent group, if any
     pub fn parent(&self) -> Option<GroupRef<'_>> {
         self.parent.map(|id| GroupRef::new(self.database, id))
+    }
+
+    /// Get a reference to the previous parent group, if any
+    pub fn previous_parent(&self) -> Option<GroupRef<'_>> {
+        self.previous_parent_group
+            .and_then(|id| self.database().group(id))
     }
 
     /// Get a reference to the custom icon of this group, if it has one and it is a custom icon
@@ -405,6 +420,12 @@ impl GroupMut<'_> {
         self.parent.map(move |id| GroupMut::new(self.database, id))
     }
 
+    /// Get a mutable reference to the previous parent group, if any
+    pub fn previous_parent_mut(&mut self) -> Option<GroupMut<'_>> {
+        self.previous_parent_group
+            .and_then(move |id| self.database_mut().group_mut(id))
+    }
+
     /// Find a contained group by name, case-insensitively, and return a mutable reference to it.
     pub fn group_by_name_mut(&mut self, name: &str) -> Option<GroupMut<'_>> {
         let gid = self.as_ref().groups().find_map(|g| {
@@ -502,6 +523,8 @@ impl GroupMut<'_> {
                 id: custom_icon_id,
                 entries: HashSet::new(),
                 groups: vec![id].into_iter().collect(),
+                name: None,
+                last_modification_time: Some(Times::now()),
                 data,
             },
         );
@@ -554,12 +577,17 @@ impl GroupMut<'_> {
 
         // Update parent reference
         self.parent = Some(new_parent_id);
+        self.previous_parent_group = Some(old_parent_id);
 
         Ok(())
     }
 
     /// Deletes this group and all its child groups and entries from the database.
-    pub fn remove(self) {
+    pub fn remove(mut self) {
+        // Remove this group's back-reference from its custom icon (if any) before
+        // the group is erased from db.groups, so the back-ref set stays consistent.
+        self.set_icon_none();
+
         // Remove from parent
         if let Some(parent_id) = self.parent {
             if let Some(mut parent) = self.database.group_mut(parent_id) {
@@ -585,6 +613,23 @@ impl GroupMut<'_> {
 
         // Finally, remove this group from the database
         self.database.groups.remove(&self.id);
+
+        // Clear any Meta UUID fields that referenced this group, so they don't
+        // silently hold stale UUIDs that would be round-tripped back to disk.
+        let uuid = self.id.0;
+        let meta = &mut self.database.meta;
+        if meta.recyclebin_uuid == Some(uuid) {
+            meta.recyclebin_uuid = None;
+        }
+        if meta.entry_templates_group == Some(uuid) {
+            meta.entry_templates_group = None;
+        }
+        if meta.last_selected_group == Some(uuid) {
+            meta.last_selected_group = None;
+        }
+        if meta.last_top_visible_group == Some(uuid) {
+            meta.last_top_visible_group = None;
+        }
     }
 
     /// Convert this mutable group reference into a history-tracking variant that will record
