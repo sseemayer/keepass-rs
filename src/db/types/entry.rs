@@ -26,13 +26,24 @@ impl EntryId {
         Self(Uuid::new_v4())
     }
 
-    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
+    /// Build an `EntryId` from an existing [Uuid].
+    ///
+    /// Useful when an entry's identifier needs to be pinned (e.g. test fixtures or migrations).
+    /// Pair with [Group::add_entry_with_id][crate::db::GroupMut::add_entry_with_id] to insert
+    /// an entry under a chosen identifier.
+    pub const fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 
     /// Get the Uuid contained inside
     pub fn uuid(&self) -> Uuid {
         self.0
+    }
+}
+
+impl From<Uuid> for EntryId {
+    fn from(uuid: Uuid) -> Self {
+        Self::from_uuid(uuid)
     }
 }
 

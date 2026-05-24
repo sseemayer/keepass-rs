@@ -246,6 +246,14 @@ pub enum UnprotectError {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    /// the XML database contains two entries with the same UUID
+    #[error(transparent)]
+    DuplicateEntryId(#[from] crate::db::DuplicateEntryIdError),
+
+    /// the XML database contains two groups with the same UUID
+    #[error(transparent)]
+    DuplicateGroupId(#[from] crate::db::DuplicateGroupIdError),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
