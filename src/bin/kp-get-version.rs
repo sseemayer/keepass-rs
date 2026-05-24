@@ -1,4 +1,4 @@
-/// utility to get the version of a KeePass database.
+//! utility to get the version of a KeePass database.
 use std::fs::File;
 
 use anyhow::Result;
@@ -11,7 +11,7 @@ struct Args {
     in_kdbx: String,
 }
 
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;

@@ -99,6 +99,7 @@ impl Serialize for Timestamp {
     }
 }
 
+#[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,7 +110,7 @@ mod tests {
     #[test]
     fn test_deserialize_timestamp_iso8601() {
         let ts_str = "2023-10-05T12:34:56Z";
-        let ts: Timestamp = quick_xml::de::from_str(&format!("{}", ts_str)).unwrap();
+        let ts: Timestamp = quick_xml::de::from_str(ts_str).unwrap();
         assert_eq!(
             ts.time,
             NaiveDateTime::parse_from_str("2023-10-05T12:34:56", "%Y-%m-%dT%H:%M:%S").unwrap()
@@ -123,7 +124,7 @@ mod tests {
     #[test]
     fn test_deserialize_timestamp_base64() {
         let ts_str = "AQAAAAAAAAA="; // Base64 for 1 second since epoch
-        let ts: Timestamp = quick_xml::de::from_str(&format!("{}", ts_str)).unwrap();
+        let ts: Timestamp = quick_xml::de::from_str(ts_str).unwrap();
         assert_eq!(ts.time, get_epoch_baseline() + chrono::Duration::seconds(1));
         match ts.mode {
             TimestampMode::Base64 => (),
