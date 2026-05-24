@@ -166,22 +166,26 @@ impl KeePassFile {
         let entry_ids: Vec<crate::db::EntryId> = db.entries.keys().copied().collect();
         for entry_id in entry_ids {
             // current version
-            if let Some(crate::db::Icon::Custom(icon_id)) = db.entries[&entry_id].icon {
-                if let Some(icon) = db.custom_icons.get_mut(&icon_id) {
+            if let Some(crate::db::Icon::Custom(icon_id)) =
+                db.entries.get(&entry_id).and_then(|e| e.icon.as_ref())
+            {
+                if let Some(icon) = db.custom_icons.get_mut(icon_id) {
                     icon.entries.insert((entry_id, None));
                 }
             }
+
             // historical versions
-            let history_len = db.entries[&entry_id]
-                .history
-                .as_ref()
-                .map_or(0, |h| h.entries.len());
-            for i in 0..history_len {
-                if let Some(crate::db::Icon::Custom(icon_id)) =
-                    db.entries[&entry_id].history.as_ref().unwrap().entries[i].icon
-                {
-                    if let Some(icon) = db.custom_icons.get_mut(&icon_id) {
-                        icon.entries.insert((entry_id, Some(i)));
+            if let Some(entry) = db.entries.get(&entry_id) {
+                let history_len = entry.history.as_ref().map_or(0, |h| h.entries.len());
+
+                for i in 0..history_len {
+                    #[allow(clippy::indexing_slicing)] // We just checked that the index is in bounds
+                    if let Some(crate::db::Icon::Custom(icon_id)) =
+                        entry.history.as_ref().and_then(|h| h.entries[i].icon.as_ref())
+                    {
+                        if let Some(icon) = db.custom_icons.get_mut(icon_id) {
+                            icon.entries.insert((entry_id, Some(i)));
+                        }
                     }
                 }
             }
@@ -189,8 +193,10 @@ impl KeePassFile {
 
         let group_ids: Vec<crate::db::GroupId> = db.groups.keys().copied().collect();
         for group_id in group_ids {
-            if let Some(crate::db::Icon::Custom(icon_id)) = db.groups[&group_id].icon {
-                if let Some(icon) = db.custom_icons.get_mut(&icon_id) {
+            if let Some(crate::db::Icon::Custom(icon_id)) =
+                db.groups.get(&group_id).and_then(|g| g.icon.as_ref())
+            {
+                if let Some(icon) = db.custom_icons.get_mut(icon_id) {
                     icon.groups.insert(group_id);
                 }
             }
