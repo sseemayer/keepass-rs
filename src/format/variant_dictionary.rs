@@ -172,7 +172,7 @@ impl VariantDictionary {
 
     /// Get a value from the VariantDictionary, returning an error if the key is missing or the
     /// value is of the wrong type
-    pub fn get<'a, T: 'a>(&'a self, key: &str) -> Result<&'a T, VariantDictionaryError>
+    pub fn get_typed<'a, T: 'a>(&'a self, key: &str) -> Result<&'a T, VariantDictionaryError>
     where
         &'a VariantDictionaryValue: Into<Option<&'a T>>,
     {
@@ -388,7 +388,7 @@ mod variant_dictionary_tests {
         //                                        ver t key_len key   val_len value   termination
         //                                        |   | |       |     |       |       |
         let res = VariantDictionary::parse(&hex!("000104030000004142430400000015CD5B0700"))?;
-        assert_eq!(res.get::<u32>("ABC")?, &123456789);
+        assert_eq!(res.get_typed::<u32>("ABC")?, &123456789);
 
         //                                        ver t key_len key val_len termination
         //                                        |   | |       |   |       |
@@ -415,23 +415,23 @@ mod variant_dictionary_tests {
         vd.set("a-string", "Testing".to_string());
         vd.set("a-bytes", "testing".as_bytes().to_vec());
 
-        assert!(vd.get::<bool>("key-not-exist").is_err());
+        assert!(vd.get_typed::<bool>("key-not-exist").is_err());
 
-        assert!(vd.get::<u32>("a-string").is_err());
-        assert!(vd.get::<u64>("a-string").is_err());
-        assert!(vd.get::<i32>("a-string").is_err());
-        assert!(vd.get::<i64>("a-string").is_err());
-        assert!(vd.get::<bool>("a-string").is_err());
-        assert!(vd.get::<String>("a-bytes").is_err());
-        assert!(vd.get::<Vec<u8>>("a-string").is_err());
+        assert!(vd.get_typed::<u32>("a-string").is_err());
+        assert!(vd.get_typed::<u64>("a-string").is_err());
+        assert!(vd.get_typed::<i32>("a-string").is_err());
+        assert!(vd.get_typed::<i64>("a-string").is_err());
+        assert!(vd.get_typed::<bool>("a-string").is_err());
+        assert!(vd.get_typed::<String>("a-bytes").is_err());
+        assert!(vd.get_typed::<Vec<u8>>("a-string").is_err());
 
-        assert_eq!(vd.get::<u32>("a-u32").unwrap(), &42u32);
-        assert_eq!(vd.get::<u64>("a-u64").unwrap(), &1337u64);
-        assert_eq!(vd.get::<i32>("a-i32").unwrap(), &-2i32);
-        assert_eq!(vd.get::<i64>("a-i64").unwrap(), &-31337i64);
-        assert_eq!(vd.get::<bool>("a-bool").unwrap(), &true);
-        assert_eq!(vd.get::<String>("a-string").unwrap(), "Testing");
-        assert_eq!(vd.get::<Vec<u8>>("a-bytes").unwrap(), "testing".as_bytes());
+        assert_eq!(vd.get_typed::<u32>("a-u32").unwrap(), &42u32);
+        assert_eq!(vd.get_typed::<u64>("a-u64").unwrap(), &1337u64);
+        assert_eq!(vd.get_typed::<i32>("a-i32").unwrap(), &-2i32);
+        assert_eq!(vd.get_typed::<i64>("a-i64").unwrap(), &-31337i64);
+        assert_eq!(vd.get_typed::<bool>("a-bool").unwrap(), &true);
+        assert_eq!(vd.get_typed::<String>("a-string").unwrap(), "Testing");
+        assert_eq!(vd.get_typed::<Vec<u8>>("a-bytes").unwrap(), "testing".as_bytes());
 
         let mut vd_data = Vec::new();
         vd.dump(&mut vd_data).unwrap();
