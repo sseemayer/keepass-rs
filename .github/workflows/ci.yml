@@ -120,6 +120,12 @@ jobs:
           printf '#!/bin/sh\nexec mono /usr/local/lib/kpscript/KPScript.exe "$@"\n' | sudo tee /usr/local/bin/kpscript > /dev/null
           sudo chmod +x /usr/local/bin/kpscript
 
+      - name: check that keepassxc and kpscript are installed correctly
+        if: '!matrix.with_cross_compilation'
+        run: |
+          keepassxc-cli --version || exit 1
+          kpscript || exit 1
+
       - name: run cargo test
         if: '!matrix.with_cross_compilation'
         run: cargo test --all-features
