@@ -1,4 +1,4 @@
-/// utility to parse a KeePass database, and then write it out again, to see if anything is lost.
+//! utility to parse a KeePass database, and then write it out again, to see if anything is lost.
 use std::fs::File;
 
 use anyhow::Result;
@@ -24,7 +24,7 @@ struct Args {
     no_password: bool,
 }
 
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut source = File::open(args.in_kdbx)?;

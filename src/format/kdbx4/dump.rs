@@ -28,7 +28,7 @@ pub fn dump_kdbx4(
     db_key: &DatabaseKey,
     writer: &mut dyn Write,
 ) -> Result<(), DatabaseSaveError> {
-    if !matches!(db.config.version, DatabaseVersion::KDB4(_)) {
+    if !matches!(db.config.version, DatabaseVersion::KDB4(1)) {
         return Err(DatabaseSaveError::UnsupportedVersion);
     }
 
@@ -79,6 +79,8 @@ pub fn dump_kdbx4(
     // verify credentials
     let hmac_key = crypt::calculate_sha512(&[&master_seed, &transformed_key, &hmac_block_stream::HMAC_KEY_END]);
     let header_hmac_key = hmac_block_stream::get_hmac_block_key(u64::MAX, &hmac_key);
+
+    #[allow(clippy::expect_used)] // HMAC key is always correctly sized, so this can't fail
     let header_hmac =
         crypt::calculate_hmac(&[&header_data], &header_hmac_key).expect("HMAC key always correctly sized");
 

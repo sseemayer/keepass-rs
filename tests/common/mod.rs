@@ -194,7 +194,7 @@ pub fn fast_combo() -> Combo {
 impl Combo {
     pub fn get_config(&self) -> DatabaseConfig {
         let mut cfg = DatabaseConfig::default();
-        cfg.version = DatabaseVersion::KDB4(0);
+        cfg.version = DatabaseVersion::KDB4(1);
         cfg.outer_cipher_config = self.outer_cipher.clone();
         cfg.compression_config = self.compression.clone();
         cfg.inner_cipher_config = self.inner_cipher.clone();
@@ -203,6 +203,7 @@ impl Combo {
         cfg
     }
 
+    #[allow(clippy::expect_used)]
     pub fn get_key(&self) -> DatabaseKey {
         match &self.master_key {
             MasterKey::Password(p) => DatabaseKey::new().with_password(p),
@@ -230,6 +231,7 @@ impl Combo {
         db
     }
 
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
     pub fn rich_database(&self) -> Database {
         use chrono::NaiveDate;
 
@@ -259,6 +261,7 @@ impl Combo {
             if i % 2 == 0 {
                 e.tags = vec![format!("tag-{i}"), "fixture".to_string()];
                 e.times.expires = Some(true);
+
                 e.times.expiry = Some(
                     NaiveDate::from_ymd_opt(2099, 12, 31)
                         .unwrap()
@@ -309,6 +312,7 @@ impl Combo {
     }
 }
 
+#[allow(clippy::expect_used)]
 #[cfg(feature = "save_kdbx4")]
 pub fn save_to_vec(db: &Database, key: DatabaseKey) -> Vec<u8> {
     let mut buf = Vec::new();

@@ -29,20 +29,30 @@ pub const KEEPASS_LATEST_ID: u32 = 0xb54bfb67;
 pub const KDBX3_MAJOR_VERSION: u16 = 3;
 pub const KDBX4_MAJOR_VERSION: u16 = 4;
 
-pub const KDBX4_CURRENT_MINOR_VERSION: u16 = 0;
+pub const KDBX4_CURRENT_MINOR_VERSION: u16 = 1;
 
 /// Supported KDB database versions, with the associated
 /// minor version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 pub enum DatabaseVersion {
+    /// KeePass 1 format
     KDB(u16),
+
+    /// KeePass 2 pre-release format
     KDB2(u16),
+
+    /// KeePass 2 format, version 3.x
     KDB3(u16),
+
+    /// KeePass 2 format, version 4.x
     KDB4(u16),
 }
 
 impl DatabaseVersion {
+    /// Parses the database version from the given byte slice, which should contain the first 12
+    /// bytes of a KDBX file.
+    #[allow(clippy::indexing_slicing)] // we check slice length at the beginnning
     pub fn parse(data: &[u8]) -> Result<DatabaseVersion, DatabaseVersionParseError> {
         if data.len() < DatabaseVersion::get_version_header_size() {
             return Err(DatabaseVersionParseError::UnexpectedEof);
@@ -108,15 +118,20 @@ impl std::fmt::Display for DatabaseVersion {
     }
 }
 
+/// Errors that can occur during parsing of the database version from a KDBX file
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum DatabaseVersionParseError {
+    /// Encountered an unexpected end of file while reading the database version header, which
+    /// should be at least 12 bytes long.
     #[error("Unexpected end of file while reading database version")]
     UnexpectedEof,
 
+    /// The first 4 bytes of a KDBX file did not match the expected KDBX identifier
     #[error("Invalid KDBX identifier")]
     InvalidKDBXIdentifier,
 
+    /// The version information in the KDBX file did not match any supported database versions
     #[error(
         "Invalid KDBX version: {}.{}.{}",
         version,
@@ -124,8 +139,13 @@ pub enum DatabaseVersionParseError {
         file_minor_version
     )]
     InvalidKDBXVersion {
+        /// The raw version field from the KDBX header
         version: u32,
+
+        /// The major version field from the KDBX header
         file_major_version: u32,
+
+        /// The minor version field from the KDBX header
         file_minor_version: u32,
     },
 }

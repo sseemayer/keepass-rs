@@ -84,15 +84,19 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyFileError> {
     }
 }
 
+/// Errors that can occur when parsing an XML keyfile
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ParseXmlKeyFileError {
+    /// No key data element was found in the XML keyfile
     #[error("The XML keyfile is missing a key data element")]
     EmptyKey,
 
+    /// A tag in the XML keyfile contains text that cannot be decoded as UTF-8
     #[error(transparent)]
     Encoding(#[from] EncodingError),
 
+    /// An error occurred while reading the XML keyfile
     #[error(transparent)]
     Xml(#[from] quick_xml::Error),
 }
@@ -121,17 +125,21 @@ pub struct DatabaseKey {
 }
 
 impl DatabaseKey {
+    /// Modify the database key to include a password
     pub fn with_password(mut self, password: &str) -> Self {
         self.password = Some(password.to_string());
         self
     }
 
+    /// Modify the database key to include a password, which is read from a prompt
     #[cfg(feature = "utilities")]
     pub fn with_password_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
         self.password = Some(rpassword::prompt_password(prompt_message)?);
         Ok(self)
     }
 
+    /// Modify the database key to include a challenge-response key, where the secret is read from
+    /// a prompt
     #[cfg(all(feature = "challenge_response", feature = "utilities"))]
     pub fn with_hmac_sha1_secret_from_prompt(mut self, prompt_message: &str) -> Result<Self, std::io::Error> {
         self.challenge_response_key = Some(ChallengeResponseKey::LocalChallenge(rpassword::prompt_password(
@@ -139,11 +147,12 @@ impl DatabaseKey {
         )?));
         Ok(self)
     }
-    /// Creates a database key with a `keyfile`
+
+    /// Modify the database key to include a keyfile
     ///
-    /// # Errors
-    ///
-    /// Fails if the `keyfile` cannot be read
+    /// The keyfile is only read as raw data but not parsed until the actual key elements are
+    /// requested, so errors with keyfile parsing will only be raised at that point, not when
+    /// calling this method.
     pub fn with_keyfile(mut self, keyfile: &mut dyn Read) -> Result<Self, std::io::Error> {
         let mut buf = Vec::new();
         keyfile.read_to_end(&mut buf)?;
@@ -153,12 +162,15 @@ impl DatabaseKey {
         Ok(self)
     }
 
+    /// Modify the database key to include a challenge-response key
     #[cfg(feature = "challenge_response")]
     pub fn with_challenge_response_key(mut self, challenge_response_key: ChallengeResponseKey) -> Self {
         self.challenge_response_key = Some(challenge_response_key);
         self
     }
 
+    /// Perform the challenge-response operation for the database key, if a challenge-response key
+    /// is present.
     #[cfg(feature = "challenge_response")]
     pub fn perform_challenge(mut self, kdf_seed: &[u8]) -> Result<Self, DatabaseKeyError> {
         if let Some(challenge_response_key) = &self.challenge_response_key {
@@ -169,6 +181,7 @@ impl DatabaseKey {
         Ok(self)
     }
 
+    /// Create a new, empty database key
     pub fn new() -> Self {
         Default::default()
     }
@@ -213,24 +226,31 @@ impl DatabaseKey {
     }
 }
 
+/// Errors that can occur when working with database keys
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum DatabaseKeyError {
+    /// The database key contains no components, i.e. no password, keyfile or challenge-response key
     #[error("The key contains no components")]
     EmptyKey,
 
+    /// The database key is incorrect
     #[error("Incorrect key")]
     IncorrectKey,
 
+    /// An I/O error occurred while reading the keyfile
     #[error("I/O error reading keyfile: {0}")]
     Io(#[from] std::io::Error),
 
+    /// An error occurred while parsing the XML keyfile
     #[error("XML error reading keyfile: {0}")]
     Xml(#[from] quick_xml::Error),
 
+    /// An error occurred while parsing the non-XML keyfile
     #[error("Invalid keyfile format")]
     InvalidKeyFile,
 
+    /// An error occurred during challenge-response authentication
     #[cfg(feature = "challenge_response")]
     #[error("Challenge-response key error: {0}")]
     ChallengeResponse(#[from] crate::key::yubikey::ChallengeResponseKeyError),

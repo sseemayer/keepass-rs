@@ -26,13 +26,24 @@ impl EntryId {
         Self(Uuid::new_v4())
     }
 
-    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
+    /// Build an `EntryId` from an existing [Uuid].
+    ///
+    /// Useful when an entry's identifier needs to be pinned (e.g. test fixtures or migrations).
+    /// Pair with [Group::add_entry_with_id][crate::db::GroupMut::add_entry_with_id] to insert
+    /// an entry under a chosen identifier.
+    pub const fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 
     /// Get the Uuid contained inside
     pub fn uuid(&self) -> Uuid {
         self.0
+    }
+}
+
+impl From<Uuid> for EntryId {
+    fn from(uuid: Uuid) -> Self {
+        Self::from_uuid(uuid)
     }
 }
 
@@ -43,24 +54,44 @@ pub struct Entry {
     pub(crate) id: EntryId,
     pub(crate) parent: GroupId,
 
+    /// the key-value fields of this entry, such as username and password.
+    ///
+    /// Common field names are available in [crate::db::fields].
     pub fields: HashMap<String, Value<String>>,
+
+    /// AutoType settings for this entry
     pub autotype: Option<AutoType>,
+
+    /// tags associated with this entry
     pub tags: Vec<String>,
 
+    /// timestamps for this entry
     pub times: Times,
 
+    /// custom data items associated with this entry
     pub custom_data: HashMap<String, CustomDataItem>,
 
     pub(crate) icon: Option<Icon>,
 
+    /// foreground color for this entry
     pub foreground_color: Option<Color>,
+
+    /// background color for this entry
     pub background_color: Option<Color>,
 
+    /// URL override for this entry
     pub override_url: Option<String>,
-    pub quality_check: Option<bool>,
 
+    /// whether to enable password quality check for this entry
+    pub quality_check: bool,
+
+    /// attachments associated with this entry, mapped by attachment name to attachment ID
     pub(crate) attachments: HashMap<String, AttachmentId>,
 
+    /// Identifier of the group that the Entry was previously contained in
+    pub(crate) previous_parent_group: Option<GroupId>,
+
+    /// history of this entry
     pub history: Option<History>,
 }
 
@@ -82,9 +113,10 @@ impl Entry {
             foreground_color: None,
             background_color: None,
             override_url: None,
-            quality_check: None,
+            quality_check: true,
             attachments: HashMap::new(),
             history: Some(History::default()),
+            previous_parent_group: None,
         }
     }
 
@@ -103,6 +135,7 @@ impl Entry {
         self.fields.get(key).map(|v| v.as_str())
     }
 
+    /// Set a field's value by name
     pub fn set(&mut self, key: impl Into<String>, value: Value<String>) {
         self.fields.insert(key.into(), value);
     }
@@ -183,6 +216,12 @@ impl EntryRef<'_> {
         self.database.group(self.parent).unwrap()
     }
 
+    /// Get a reference to the previous parent group, if any
+    pub fn previous_parent(&self) -> Option<GroupRef<'_>> {
+        self.previous_parent_group
+            .and_then(|id| self.database().group(id))
+    }
+
     /// Gets an [EntryRef] to a historical version of the [Entry], if it exists
     pub fn historical(&self, index: usize) -> Option<EntryRef<'_>> {
         if let Some(h) = &self.history {
@@ -261,6 +300,7 @@ impl Deref for EntryRef<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existance checked on EntryRef creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &entry.history.as_ref().unwrap().entries[n]
         } else {
             entry
@@ -298,16 +338,12 @@ impl EntryMut<'_> {
 
     /// Gets an [EntryMut] to a historical version of the [Entry], if it exists
     pub(crate) fn historical(&mut self, index: usize) -> Option<EntryMut<'_>> {
-        if let Some(h) = &self.history {
-            if index < h.entries.len() {
-                Some(EntryMut {
-                    database: self.database,
-                    id: self.id,
-                    history_index: Some(index),
-                })
-            } else {
-                None
-            }
+        if index < self.history.as_ref()?.entries.len() {
+            Some(EntryMut {
+                database: self.database,
+                id: self.id,
+                history_index: Some(index),
+            })
         } else {
             None
         }
@@ -358,6 +394,12 @@ impl EntryMut<'_> {
     pub fn parent_mut(&mut self) -> GroupMut<'_> {
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
         self.database.group_mut(self.parent).unwrap()
+    }
+
+    /// Get a mutable reference to the previous parent group, if any
+    pub fn previous_parent_mut(&mut self) -> Option<GroupMut<'_>> {
+        self.previous_parent_group
+            .and_then(move |id| self.database_mut().group_mut(id))
     }
 
     /// Get a mutable reference to an attachment by id, if it exists.
@@ -511,6 +553,8 @@ impl EntryMut<'_> {
                 id: custom_icon_id,
                 entries: vec![(id, history_index)].into_iter().collect(),
                 groups: HashSet::new(),
+                name: None,
+                last_modification_time: Some(Times::now()),
                 data,
             },
         );
@@ -539,6 +583,7 @@ impl EntryMut<'_> {
         }
 
         let my_id = self.id;
+        let previous_parent = self.parent;
 
         let mut parent = self.parent_mut();
         parent.entries.remove(&my_id);
@@ -547,6 +592,7 @@ impl EntryMut<'_> {
         let mut new_parent = self.database.group_mut(group_id).unwrap();
         new_parent.entries.insert(my_id);
         self.parent = group_id;
+        self.previous_parent_group = Some(previous_parent);
 
         Ok(())
     }
@@ -619,6 +665,7 @@ impl Deref for EntryMut<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existence checked on EntryMut creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &entry.history.as_ref().unwrap().entries[n]
         } else {
             entry
@@ -634,6 +681,7 @@ impl DerefMut for EntryMut<'_> {
 
         if let Some(n) = self.history_index {
             // UNWRAP safety: history existence checked on EntryMut creation
+            #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
             &mut entry.history.as_mut().unwrap().entries[n]
         } else {
             entry
@@ -651,6 +699,7 @@ pub struct EntryTrack<'a> {
 }
 
 impl EntryTrack<'_> {
+    /// Turn this tracked entry into a normal mutable reference to the entry
     pub fn as_mut(&mut self) -> EntryMut<'_> {
         EntryMut {
             database: self.database,
@@ -713,6 +762,54 @@ impl EntryTrack<'_> {
 
         AttachmentMut::new(self.database, id)
     }
+
+    /// Remove the entry's icon, tracking changes.
+    pub fn set_icon_none(&mut self) {
+        let mut this = self.as_mut();
+        this.set_icon_none();
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set a built-in icon for this entry by its ID, tracking changes.
+    pub fn set_icon_builtin(&mut self, icon_id: usize) {
+        let mut this = self.as_mut();
+        this.set_icon_builtin(icon_id);
+        this.times.last_modification = Some(Times::now());
+    }
+
+    /// Set a custom icon for this entry by its ID, tracking changes.
+    pub fn set_icon_custom(&mut self, custom_icon_id: CustomIconId) -> Result<(), CustomIconNotFoundError> {
+        let mut this = self.as_mut();
+        this.set_icon_custom(custom_icon_id)?;
+        this.times.last_modification = Some(Times::now());
+        Ok(())
+    }
+
+    /// Set a custom icon for this entry by providing the raw data, tracking changes. Returns a mutable reference to the newly created custom icon.
+    pub fn set_icon_custom_new(&mut self, data: Vec<u8>) -> CustomIconMut<'_> {
+        self.set_icon_none();
+
+        let custom_icon_id = CustomIconId::new();
+
+        let id = self.id;
+        let history_index = self.as_mut().history_index;
+
+        self.database.custom_icons.insert(
+            custom_icon_id,
+            CustomIcon {
+                id: custom_icon_id,
+                entries: vec![(id, history_index)].into_iter().collect(),
+                groups: HashSet::new(),
+                name: None,
+                last_modification_time: Some(Times::now()),
+                data,
+            },
+        );
+
+        self.icon = Some(Icon::Custom(custom_icon_id));
+
+        CustomIconMut::new(self.database, custom_icon_id)
+    }
 }
 
 impl Deref for EntryTrack<'_> {
@@ -744,6 +841,7 @@ impl Drop for EntryTrack<'_> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
 
     use crate::{
@@ -801,8 +899,7 @@ mod tests {
             .entry(entry_id)
             .unwrap()
             .attachments
-            .get("Attachment 1")
-            .is_some());
+            .contains_key("Attachment 1"));
 
         assert_eq!(
             db.entry(entry_id).unwrap().get(fields::TITLE).unwrap(),

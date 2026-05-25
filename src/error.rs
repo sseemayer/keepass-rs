@@ -5,7 +5,7 @@ pub use crate::{
     crypt::CryptographyError,
     db::{
         CustomIconNotFoundError, DatabaseFormatError, DatabaseOpenError, DestinationGroupNotFoundError,
-        MoveGroupError, ParseColorError,
+        DuplicateEntryIdError, DuplicateGroupIdError, MoveGroupError, ParseColorError,
     },
     format::{
         hmac_block_stream::BlockStreamError,

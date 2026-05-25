@@ -60,6 +60,7 @@ struct KDBX4InnerHeader {
 
 #[cfg(feature = "save_kdbx4")]
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod kdbx4_tests {
     use super::*;
 
@@ -87,7 +88,7 @@ mod kdbx4_tests {
         password_bytes.resize(40, 0);
         getrandom::fill(&mut password_bytes).unwrap();
         for random_char in password_bytes {
-            password += &std::char::from_u32(random_char as u32).unwrap().to_string();
+            password += &std::char::from_u32(u32::from(random_char)).unwrap().to_string();
         }
 
         let db_key = DatabaseKey::new()
@@ -120,7 +121,7 @@ mod kdbx4_tests {
         password_bytes.resize(40, 0);
         getrandom::fill(&mut password_bytes).unwrap();
         for random_char in password_bytes {
-            password += &std::char::from_u32(random_char as u32).unwrap().to_string();
+            password += &std::char::from_u32(u32::from(random_char)).unwrap().to_string();
         }
 
         let db_key = DatabaseKey::new().with_password(&password);

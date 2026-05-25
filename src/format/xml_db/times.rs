@@ -54,6 +54,7 @@ impl From<crate::db::Times> for Times {
     }
 }
 
+#[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,12 +4,15 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "save_kdbx4")]
 use crate::crypt::CryptographyError;
+#[cfg(feature = "save_kdbx4")]
+use crate::format::xml_db::tags::join_tags;
 use crate::{
     crypt::ciphers::Cipher,
     db::{EntryId, GroupId},
     format::xml_db::{
         custom_serde::{cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         entry::{Entry, UnprotectError},
+        tags::split_tags,
         times::Times,
         UUID,
     },
@@ -25,6 +28,9 @@ pub struct Group {
 
     #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+
+    #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
 
     #[serde(
         default,
@@ -60,6 +66,9 @@ pub struct Group {
 
     #[serde(default, rename = "$value")]
     pub children: Vec<GroupOrEntry>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_parent_group: Option<UUID>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,13 +80,14 @@ pub enum GroupOrEntry {
 impl Group {
     pub(crate) fn xml_to_db_handle(
         self,
-        mut target: crate::db::GroupMut,
+        mut target: crate::db::GroupMut<'_>,
         attachments: &HashMap<crate::db::AttachmentId, crate::db::Attachment>,
         custom_icons: &HashMap<crate::db::CustomIconId, crate::db::CustomIcon>,
         inner_decryptor: &mut dyn Cipher,
     ) -> Result<(), UnprotectError> {
         target.name = self.name;
         target.notes = self.notes;
+        target.tags = self.tags.as_deref().map(split_tags).unwrap_or_default();
 
         target.icon = if let Some(ci) = self.custom_icon_uuid.and_then(|ci| {
             let icon_id = crate::db::CustomIconId::from_uuid(ci.0);
@@ -99,14 +109,16 @@ impl Group {
             target.custom_data = cd.into();
         }
 
+        target.previous_parent_group = self.previous_parent_group.map(|g| GroupId::from_uuid(g.0));
+
         for child in self.children {
             match child {
                 GroupOrEntry::Group(g) => {
-                    let new_group = target.add_group_with_id(GroupId::from_uuid(g.uuid.0));
+                    let new_group = target.add_group_with_id(GroupId::from_uuid(g.uuid.0))?;
                     g.xml_to_db_handle(new_group, attachments, custom_icons, inner_decryptor)?;
                 }
                 GroupOrEntry::Entry(e) => {
-                    let new_entry = target.add_entry_with_id(EntryId::from_uuid(e.uuid.0));
+                    let new_entry = target.add_entry_with_id(EntryId::from_uuid(e.uuid.0))?;
                     e.xml_to_db_handle(new_entry, attachments, custom_icons, inner_decryptor)?;
                 }
             }
@@ -117,7 +129,7 @@ impl Group {
 
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn db_to_xml(
-        source: crate::db::GroupRef,
+        source: crate::db::GroupRef<'_>,
         inner_cipher: &mut dyn Cipher,
     ) -> Result<Self, CryptographyError> {
         let mut children = Vec::new();
@@ -146,6 +158,7 @@ impl Group {
             uuid: UUID(source.id().uuid()),
             name: source.name.clone(),
             notes: source.notes.clone(),
+            tags: join_tags(&source.tags),
             icon_id,
             custom_icon_uuid,
             times: Some(source.times.clone().into()),
@@ -156,10 +169,12 @@ impl Group {
             last_top_visible_entry: source.last_top_visible_entry.map(|eid| UUID(eid.uuid())),
             custom_data,
             children,
+            previous_parent_group: source.previous_parent_group.map(|gid| UUID(gid.uuid())),
         })
     }
 }
 
+#[allow(clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,9 +241,9 @@ mod tests {
             group.0.default_auto_type_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
         );
-        assert_eq!(group.0.enable_auto_type.unwrap(), true);
-        assert_eq!(group.0.enable_searching.unwrap(), false);
-        assert_eq!(group.0.custom_data.is_some(), true);
+        assert!(group.0.enable_auto_type.unwrap());
+        assert!(!group.0.enable_searching.unwrap());
+        assert!(group.0.custom_data.is_some());
         assert_eq!(group.0.children.len(), 4);
     }
 }

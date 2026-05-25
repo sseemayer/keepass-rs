@@ -456,6 +456,12 @@ pub struct Icon {
     #[serde(rename = "UUID")]
     pub uuid: UUID,
 
+    #[serde(default, with = "cs_opt_string")]
+    pub name: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_modification_time: Option<Timestamp>,
+
     #[serde(with = "cs_base64")]
     pub data: Vec<u8>,
 }
@@ -464,6 +470,8 @@ impl From<crate::db::CustomIcon> for Icon {
     fn from(db: crate::db::CustomIcon) -> Self {
         Self {
             uuid: UUID(db.id().uuid()),
+            name: db.name.clone(),
+            last_modification_time: db.last_modification_time.map(|t| t.into()),
             data: db.data.clone(),
         }
     }
@@ -475,11 +483,14 @@ impl From<Icon> for crate::db::CustomIcon {
             id: crate::db::CustomIconId::from_uuid(icon.uuid.0),
             entries: HashSet::new(),
             groups: HashSet::new(),
+            name: icon.name.clone(),
+            last_modification_time: icon.last_modification_time.map(|t| t.into()),
             data: icon.data,
         }
     }
 }
 
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
 #[cfg(test)]
 mod tests {
 
@@ -579,13 +590,15 @@ mod tests {
             uuid: UUID(Uuid::from_bytes([
                 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
             ])),
+            name: Some("my-icon".to_string()),
+            last_modification_time: None,
             data: vec![1, 2, 3, 4, 5],
         };
 
         let serialized = quick_xml::se::to_string(&icon).unwrap();
         assert_eq!(
             serialized,
-            "<Icon><UUID>AAECAwQFBgcICQoLDA0ODw==</UUID><Data>AQIDBAU=</Data></Icon>"
+            "<Icon><UUID>AAECAwQFBgcICQoLDA0ODw==</UUID><Name>my-icon</Name><Data>AQIDBAU=</Data></Icon>"
         );
     }
 
@@ -639,6 +652,8 @@ mod tests {
                         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
                         0x0e, 0x0f,
                     ])),
+                    name: None,
+                    last_modification_time: None,
                     data: vec![1, 2, 3, 4, 5],
                 }],
             }),
@@ -670,13 +685,13 @@ mod tests {
                 binaries: vec![
                     Binary {
                         id: 0,
-                        value: base64_engine::STANDARD.encode(&[1, 2, 3, 4, 5]),
+                        value: base64_engine::STANDARD.encode([1, 2, 3, 4, 5]),
                         compressed: Some(false),
                         protected: Some(false),
                     },
                     Binary {
                         id: 1,
-                        value: base64_engine::STANDARD.encode(&[10, 20, 30, 40, 50]),
+                        value: base64_engine::STANDARD.encode([10, 20, 30, 40, 50]),
                         compressed: Some(true),
                         protected: Some(true),
                     },
@@ -827,7 +842,7 @@ mod tests {
             &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
         );
         assert_eq!(icons.icons[0].data, vec![1, 2, 3, 4, 5]);
-        assert_eq!(meta.recycle_bin_enabled.unwrap(), true);
+        assert!(meta.recycle_bin_enabled.unwrap());
         assert_eq!(
             meta.recycle_bin_uuid.unwrap().0.as_bytes(),
             &[0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f]
@@ -866,14 +881,14 @@ mod tests {
         assert_eq!(binaries.binaries[0].protected, Some(false));
         assert_eq!(
             binaries.binaries[0].value,
-            base64_engine::STANDARD.encode(&[1, 2, 3, 4, 5])
+            base64_engine::STANDARD.encode([1, 2, 3, 4, 5])
         );
         assert_eq!(binaries.binaries[1].id, 1);
         assert_eq!(binaries.binaries[1].compressed, Some(true));
         assert_eq!(binaries.binaries[1].protected, Some(true));
         assert_eq!(
             binaries.binaries[1].value,
-            base64_engine::STANDARD.encode(&[10, 20, 30, 40, 50])
+            base64_engine::STANDARD.encode([10, 20, 30, 40, 50])
         );
 
         let cd = meta.custom_data.unwrap();

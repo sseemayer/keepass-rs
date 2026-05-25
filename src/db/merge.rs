@@ -4,7 +4,7 @@ use chrono::NaiveDateTime;
 use thiserror::Error;
 
 use crate::{
-    db::{Entry, EntryId, Group, GroupId, GroupRef, History, MoveGroupError, Times},
+    db::{CustomIconId, Entry, EntryId, Group, GroupId, GroupRef, History, MoveGroupError, Times},
     Database,
 };
 
@@ -22,6 +22,7 @@ pub enum MergeEventType {
 pub enum MergeEventTarget {
     Entry(EntryId),
     Group(GroupId),
+    Icon(CustomIconId),
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +60,7 @@ impl Database {
     /// This function will use the UUIDs to detect what entries and groups are the same.
     pub fn merge(&mut self, other: &Database) -> Result<MergeLog, MergeError> {
         let mut log = MergeLog::default();
+        merge_icons(self, other, &mut log)?;
         merge_groups(self, other, &mut log)?;
 
         Ok(log)
@@ -155,7 +157,10 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
         // does the parent exist in dest?
         if let Some(mut parent) = dest_db.group_mut(parent_id) {
             // yes - re-add the group
-            let mut dest_group = parent.add_group_with_id(id);
+            #[allow(clippy::expect_used)] // id was selected from source_groups.difference(dest_groups)
+            let mut dest_group = parent
+                .add_group_with_id(id)
+                .expect("group to be re-added should not exist yet");
             dest_group.times = source.times.clone();
             dest_group.name = source.name.clone();
             dest_group.notes = source.notes.clone();
@@ -393,7 +398,11 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
             continue;
         };
 
-        let mut entry = parent.add_entry_with_id(id);
+        #[allow(clippy::expect_used)] // id was selected from source_entries.difference(dest_entries)
+        let mut entry = parent
+            .add_entry_with_id(id)
+            .expect("entry to be (re-)added should not exist yet");
+
         *entry = source_entry.deref().clone();
 
         log.events.push(MergeEvent {
@@ -636,6 +645,122 @@ fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result
     Ok(History { entries })
 }
 
+/// Merge custom icons, returning the merged history
+fn merge_icons(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
+    let dest_icons = dest_db.custom_icons.keys().cloned().collect::<HashSet<_>>();
+    let source_icons = source_db.custom_icons.keys().cloned().collect::<HashSet<_>>();
+
+    // Handle icons that exist only in source and might need to be added.
+    for &id in source_icons.difference(&dest_icons) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let source_icon = source_db.custom_icons.get(&id).unwrap();
+
+        if let Some(deletion_time) = dest_db.deleted_objects.get(&id.uuid()) {
+            let source_last_modification = source_icon.last_modification_time;
+
+            if let (Some(deletion_time), Some(source_last_modification)) =
+                (deletion_time, source_last_modification)
+            {
+                // if the icon was deleted after its last modification time in source,
+                // do not re-add it
+                if *deletion_time >= source_last_modification {
+                    continue;
+                }
+            } else if deletion_time.is_some() && source_last_modification.is_none() {
+                // blank last modification time in source - do not re-add the icon
+                continue;
+            } else if deletion_time.is_none() && source_last_modification.is_some() {
+                // blank deletion time is probably older than concrete update time - re-add the icon
+            } else {
+                // both times are blank - do not re-add the icon
+                continue;
+            }
+        }
+
+        dest_db.custom_icons.insert(id, source_icon.clone());
+
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::Icon(id),
+            event_type: MergeEventType::Created,
+        });
+    }
+
+    // Handle icons that exist only in destination. These icons might need to be deleted.
+    for &id in dest_icons.difference(&source_icons) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let dest_icon = dest_db.custom_icons.get(&id).unwrap();
+
+        if let Some(deletion_time) = source_db.deleted_objects.get(&id.uuid()) {
+            let dest_last_modification = dest_icon.last_modification_time;
+
+            if let (Some(deletion_time), Some(dest_last_modification)) = (deletion_time, dest_last_modification)
+            {
+                // if the icon was deleted and then later modified in dest, do not delete it
+                if *deletion_time < dest_last_modification {
+                    continue;
+                }
+            }
+
+            dest_db.custom_icons.remove(&id);
+            dest_db.deleted_objects.insert(id.uuid(), *deletion_time);
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Icon(id),
+                event_type: MergeEventType::Deleted,
+            });
+        }
+    }
+
+    for &id in dest_icons.intersection(&source_icons) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let dest_icon = dest_db.custom_icons.get(&id).unwrap();
+
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let source_icon = source_db.custom_icons.get(&id).unwrap();
+
+        let dest_last_modification = dest_icon.last_modification_time.unwrap_or_else(|| {
+            log.warnings.push(format!(
+                "Destination custom icon {} did not have a last modification timestamp",
+                id
+            ));
+            Times::epoch()
+        });
+
+        let source_last_modification = source_icon.last_modification_time.unwrap_or_else(|| {
+            log.warnings.push(format!(
+                "Source custom icon {} did not have a last modification timestamp",
+                id
+            ));
+            Times::epoch()
+        });
+
+        if dest_last_modification == source_last_modification {
+            if dest_icon != source_icon {
+                log.warnings.push(format!(
+                    "Custom icons with UUID {} have the same modification time but have diverged.",
+                    id,
+                ));
+            }
+            continue;
+        }
+
+        if dest_last_modification > source_last_modification {
+            // The destination icon is more recent than the source icon. Nothing to do.
+            continue;
+        }
+
+        // The source icon is more recent than the destination icon. Update dest with source.
+        dest_db.custom_icons.insert(id, source_icon.clone());
+
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::Icon(id),
+            event_type: MergeEventType::Updated,
+        });
+    }
+
+    Ok(())
+}
+
 fn have_groups_diverged(a: &Group, b: &Group) -> bool {
     let new_times = Times::default();
 
@@ -669,6 +794,7 @@ fn have_entries_diverged(a: &Entry, b: &Entry) -> bool {
     !a.eq(&b)
 }
 
+#[allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod merge_tests {
     use uuid::uuid;
@@ -702,22 +828,28 @@ mod merge_tests {
         // build up root -> group1 -> subgroup1 -> entry2
         db.root_mut()
             .add_group_with_id(GROUP1_ID)
+            .unwrap()
             .edit(|g| g.name = "group1".to_string())
             .add_group_with_id(SUBGROUP1_ID)
+            .unwrap()
             .edit(|sg| sg.name = "subgroup1".to_string())
             .add_entry_with_id(ENTRY2_ID)
+            .unwrap()
             .edit(|e| e.set_unprotected("Title", "entry2"));
 
         // build up root -> group2 -> subgroup2
         db.root_mut()
             .add_group_with_id(GROUP2_ID)
+            .unwrap()
             .edit(|g| g.name = "group2".to_string())
             .add_group_with_id(SUBGROUP2_ID)
+            .unwrap()
             .edit(|sg| sg.name = "subgroup2".to_string());
 
         // Placing the first entry in the root group
         db.root_mut()
             .add_entry_with_id(ENTRY1_ID)
+            .unwrap()
             .edit(|e| e.set_unprotected("Title", "entry1"));
 
         db
@@ -2171,5 +2303,92 @@ mod merge_tests {
         let merge_result = destination_db.merge(&source_db).unwrap();
         assert_eq!(merge_result.warnings.len(), 3);
         assert_eq!(merge_result.events.len(), 0);
+    }
+
+    #[test]
+    fn test_icon_added_in_source() {
+        let mut destination_db = create_test_database();
+        let mut source_db = destination_db.clone();
+
+        sleep();
+
+        // add a new icon in source
+        let new_icon_id = {
+            let mut source_entry = source_db.entry_mut(ENTRY1_ID).unwrap();
+            let mut source_track = source_entry.track_changes();
+            let new_icon_id = source_track.set_icon_custom_new(vec![1, 2, 3, 4]).id();
+
+            new_icon_id
+        };
+
+        // perform the merge - this should add the new icon to destination and update the entry's icon reference
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 2);
+
+        assert!(destination_db.custom_icon(new_icon_id).is_some());
+    }
+
+    #[test]
+    fn test_icon_updated_in_source() {
+        let mut destination_db = create_test_database();
+
+        // add a new icon in destination
+        let icon_id = destination_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .as_mut()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let mut source_db = destination_db.clone();
+
+        sleep();
+
+        // update the icon in source
+        let mut source_entry = source_db.entry_mut(ENTRY1_ID).unwrap();
+        let mut source_icon = source_entry.custom_icon_mut().unwrap();
+        source_icon.data = vec![5, 6, 7, 8];
+        source_icon.last_modification_time = Some(Times::now());
+
+        // perform the merge - this should update the icon in destination
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 1);
+
+        let icon = destination_db.custom_icon(icon_id).unwrap();
+        assert_eq!(icon.data, vec![5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn test_icon_updated_in_destination() {
+        let mut destination_db = create_test_database();
+
+        // add a new icon in destination
+        let icon_id = destination_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .as_mut()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let source_db = destination_db.clone();
+
+        sleep();
+
+        // update the icon in destination
+        let mut destination_icon = destination_db.custom_icon_mut(icon_id).unwrap();
+        destination_icon.data = vec![5, 6, 7, 8];
+        destination_icon.last_modification_time = Some(Times::now());
+
+        // perform the merge - this should keep the icon update in destination since it's newer
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 0);
+
+        let icon = destination_db.custom_icon(icon_id).unwrap();
+        assert_eq!(icon.data, vec![5, 6, 7, 8]);
     }
 }

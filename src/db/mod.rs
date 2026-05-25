@@ -71,6 +71,7 @@ pub use crate::db::{
 pub use crate::db::otp::{TOTPAlgorithm, TOTPError, TOTP};
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod database_tests {
     use std::fs::File;
 
