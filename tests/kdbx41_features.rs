@@ -1,14 +1,18 @@
-#![cfg(feature = "save_kdbx4")]
-#![forbid(unsafe_code)]
-
 //! Programmatic round-trip coverage for KDBX 4.1-specific surface.
 //! Each test builds a database via the public API, saves it, reopens it,
 //! and asserts the 4.1 fields survive intact.
 
+#![cfg(feature = "save_kdbx4")]
+#![forbid(unsafe_code)]
+#![allow(missing_docs)]
+
 use chrono::NaiveDate;
 use keepass::{
     config::{DatabaseConfig, KdfConfig},
-    db::{AutoType, AutoTypeAssociation, Color, CustomDataItem, CustomDataValue, Database, EntryId, Value},
+    db::{
+        AutoType, AutoTypeAssociation, Color, CustomDataItem, CustomDataValue, CustomIconId, Database, EntryId,
+        GroupId, Value,
+    },
     DatabaseKey,
 };
 
@@ -67,6 +71,7 @@ fn build_kdbx41_rich_database() -> (Database, EntryId) {
         let mut root = db.root_mut();
         root.name = "Root".to_string();
         root.notes = Some("notes on root".to_string());
+        root.tags = vec!["root-tag".to_string(), "shared".to_string()];
         root.is_expanded = true;
         root.default_autotype_sequence = Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string());
         root.enable_autotype = Some(false);
@@ -85,6 +90,7 @@ fn build_kdbx41_rich_database() -> (Database, EntryId) {
         entry.set_protected("Password", "hunter2");
 
         entry.tags = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        entry.quality_check = false;
         entry.foreground_color = Some(Color {
             r: 0x12,
             g: 0x34,
@@ -295,4 +301,76 @@ fn protected_password_round_trips_and_decrypts() {
     let pw = entry.fields.get("Password").expect("password field present");
     assert!(matches!(pw, Value::Protected(_)));
     assert_eq!(entry.get("Password"), Some("hunter2"));
+}
+
+#[test]
+fn group_tags_round_trip() {
+    let (db, _) = build_kdbx41_rich_database();
+    let parsed = save_then_open(&db);
+    let root = parsed.root();
+    assert_eq!(root.tags, vec!["root-tag", "shared"]);
+}
+
+#[test]
+fn entry_quality_check_disabled_round_trips() {
+    let (db, id) = build_kdbx41_rich_database();
+    let parsed = save_then_open(&db);
+    let root = parsed.root();
+    let entry = root.entry(id).expect("entry survives");
+    assert!(
+        !entry.quality_check,
+        "quality_check=false must survive round-trip"
+    );
+}
+
+#[test]
+fn entry_previous_parent_group_round_trips() {
+    let mut db = Database::with_config(fast_kdbx41_config());
+
+    let (source_id, entry_id): (GroupId, EntryId) = {
+        let mut root = db.root_mut();
+        let mut source = root.add_group();
+        source.name = "Source".to_string();
+        let source_id = source.id();
+        let mut entry = source.add_entry();
+        entry.set_unprotected("Title", "movable");
+        (source_id, entry.id())
+    };
+
+    let dest_id: GroupId = {
+        let mut root = db.root_mut();
+        let mut dest = root.add_group();
+        dest.name = "Dest".to_string();
+        dest.id()
+    };
+
+    db.entry_mut(entry_id).unwrap().move_to(dest_id).unwrap();
+
+    let parsed = save_then_open(&db);
+    let entry = parsed.entry(entry_id).expect("entry survives");
+    let prev = entry
+        .previous_parent()
+        .expect("previous_parent_group survives round-trip");
+    assert_eq!(prev.id(), source_id);
+}
+
+#[test]
+fn custom_icon_name_and_modification_time_round_trip() {
+    let mut db = Database::with_config(fast_kdbx41_config());
+
+    let icon_id: CustomIconId = {
+        let mut root = db.root_mut();
+        let icon = root.set_icon_custom_new(vec![0xFF, 0xD8, 0xFF]);
+        icon.id()
+    };
+    {
+        let mut icon = db.custom_icon_mut(icon_id).expect("icon exists");
+        icon.name = Some("my-icon".to_string());
+        icon.last_modification_time = Some(fixed_time());
+    }
+
+    let parsed = save_then_open(&db);
+    let icon = parsed.custom_icon(icon_id).expect("icon survives round-trip");
+    assert_eq!(icon.name.as_deref(), Some("my-icon"));
+    assert_eq!(icon.last_modification_time, Some(fixed_time()));
 }
