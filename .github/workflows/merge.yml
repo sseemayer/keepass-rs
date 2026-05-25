@@ -21,6 +21,9 @@ jobs:
           sudo apt-get install -y keepassxc mono-complete unzip
           curl -fsSL "https://sourceforge.net/projects/keepass/files/KeePass%202.x/2.61.1/KeePass-2.61.1.zip/download" -o /tmp/KeePass.zip
           curl -fsSL "https://keepass.info/extensions/v2/kpscript/KPScript-2.61.1.zip" -o /tmp/KPScript.zip
+          # Verify sha256 checksums before extracting
+          echo "3952354db9b117e906f7cd4f9f5591065b95186472370da47f46f3e246fea864  /tmp/KeePass.zip" | sha256sum -c - || (echo 'KeePass zip sha256 mismatch' && exit 1)
+          echo "06c9d95332fe7b2730e4e7fd0aba846c5fa9a1b0cd3119defea9875727a3bffb  /tmp/KPScript.zip" | sha256sum -c - || (echo 'KPScript zip sha256 mismatch' && exit 1)
           sudo mkdir -p /usr/local/lib/kpscript
           sudo unzip -o /tmp/KeePass.zip -d /usr/local/lib/kpscript
           sudo unzip -o /tmp/KPScript.zip -d /usr/local/lib/kpscript
