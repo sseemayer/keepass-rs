@@ -10,8 +10,8 @@ use chrono::NaiveDate;
 use keepass::{
     config::{DatabaseConfig, KdfConfig},
     db::{
-        AutoType, AutoTypeAssociation, Color, CustomDataItem, CustomDataValue, CustomIconId, Database, EntryId,
-        GroupId, Value,
+        fields, AutoType, AutoTypeAssociation, Color, CustomDataItem, CustomDataValue, CustomIconId, Database,
+        EntryId, GroupId, Value,
     },
     DatabaseKey,
 };
@@ -85,9 +85,9 @@ fn build_kdbx41_rich_database() -> (Database, EntryId) {
         );
 
         let mut entry = root.add_entry();
-        entry.set_unprotected("Title", "feature-bag");
-        entry.set_unprotected("UserName", "alice");
-        entry.set_protected("Password", "hunter2");
+        entry.set_unprotected(fields::TITLE, "feature-bag");
+        entry.set_unprotected(fields::USERNAME, "alice");
+        entry.set_protected(fields::PASSWORD, "hunter2");
 
         entry.tags = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         entry.quality_check = false;
@@ -143,7 +143,7 @@ fn build_kdbx41_rich_database() -> (Database, EntryId) {
         bin.name = "Recycle Bin".to_string();
         let bin_uuid = bin.id().uuid();
         let mut deleted = bin.add_entry();
-        deleted.set_unprotected("Title", "tombstone");
+        deleted.set_unprotected(fields::TITLE, "tombstone");
         db.meta.recyclebin_enabled = Some(true);
         db.meta.recyclebin_uuid = Some(bin_uuid);
     }
@@ -298,9 +298,12 @@ fn protected_password_round_trips_and_decrypts() {
     let parsed = save_then_open(&db);
     let root = parsed.root();
     let entry = root.entry(id).expect("entry survives");
-    let pw = entry.fields.get("Password").expect("password field present");
+    let pw = entry
+        .fields
+        .get(fields::PASSWORD)
+        .expect("password field present");
     assert!(matches!(pw, Value::Protected(_)));
-    assert_eq!(entry.get("Password"), Some("hunter2"));
+    assert_eq!(entry.get(fields::PASSWORD), Some("hunter2"));
 }
 
 #[test]
@@ -333,7 +336,7 @@ fn entry_previous_parent_group_round_trips() {
         source.name = "Source".to_string();
         let source_id = source.id();
         let mut entry = source.add_entry();
-        entry.set_unprotected("Title", "movable");
+        entry.set_unprotected(fields::TITLE, "movable");
         (source_id, entry.id())
     };
 
