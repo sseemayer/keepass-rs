@@ -9,6 +9,7 @@ pub mod custom_serde;
 pub mod entry;
 pub mod group;
 pub mod meta;
+pub mod tags;
 pub mod times;
 pub mod timestamp;
 
