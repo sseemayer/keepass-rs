@@ -1,7 +1,7 @@
 //! Shared (de)serialization of the `<Tags>` element used by both entry and group XML.
 //!
 //! KeePass stores tags as a delimited string. The canonical delimiter used by KeePass
-//! when writing the XML is `;`, but both KeePass and KeePassXC also accept `,` on
+//! when writing the XML is `;`, but readers should also accept `,` and tab on
 //! read. Centralizing this here keeps entry and group behavior in lockstep.
 
 /// Canonical tag delimiter used when writing tags into the KeePass XML.
@@ -9,11 +9,11 @@
 pub const TAG_DELIMITER: &str = ";";
 
 /// Delimiters accepted when parsing a `<Tags>` element value.
-pub const TAG_DELIMITERS: &str = ";,";
+pub const TAG_DELIMITERS: &str = ";,\t";
 
 /// Parse a `<Tags>` element value into a list of tags.
 ///
-/// Splits on either `;` or `,` and trims surrounding whitespace.
+/// Splits on either `;`, `,`, or tab and trims surrounding whitespace.
 pub fn split_tags(raw: &str) -> Vec<String> {
     raw.split(|c| TAG_DELIMITERS.contains(c))
         .map(str::trim)
@@ -51,8 +51,13 @@ mod tests {
     }
 
     #[test]
+    fn split_on_tabs() {
+        assert_eq!(split_tags("tag1\ttag2\ttag3"), vec!["tag1", "tag2", "tag3"]);
+    }
+
+    #[test]
     fn split_accepts_mixed_delimiters() {
-        assert_eq!(split_tags("a;b,c"), vec!["a", "b", "c"]);
+        assert_eq!(split_tags("a;b,c\td"), vec!["a", "b", "c", "d"]);
     }
 
     #[test]
