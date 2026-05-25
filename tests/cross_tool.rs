@@ -10,6 +10,39 @@ use std::process::{Command, Stdio};
 
 use common::{baseline_combo, DEMO_PASSWORD};
 
+#[test_with::executable(kpscript)]
+fn kpscript_lists_our_vault() {
+    let combo = baseline_combo();
+    let db = combo.rich_database();
+    let bytes = common::save_to_vec(&db, combo.get_key());
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("fixture.kdbx");
+    std::fs::write(&path, &bytes).expect("write vault");
+
+    let out = std::process::Command::new("kpscript")
+        .arg("-c:ListEntries")
+        .arg(&path)
+        .arg(format!("-pw:{DEMO_PASSWORD}"))
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .expect("spawn KPScript");
+    if !out.status.success() {
+        panic!(
+            "KPScript ListEntries failed: {} stderr={}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("entry-"),
+        "KPScript output didn't list our entries: {:?}",
+        stdout
+    );
+}
+
 #[test_with::executable(keepassxc-cli)]
 fn keepassxc_cli_lists_our_vault() {
     let combo = baseline_combo();
