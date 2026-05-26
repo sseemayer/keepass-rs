@@ -2612,4 +2612,106 @@ mod merge_tests {
             Some("entry1_updated_in_other"),
         );
     }
+
+    /// Test that when both sides move an entry to different groups, the side with the more
+    /// recent modification wins both the location and the content.
+    ///
+    /// Scenario:
+    ///   ancestor: entry1 in root
+    ///   self:     moves entry1 → group1, updates content  (earlier)
+    ///   other:    moves entry1 → group2, updates content  (later)
+    /// Expected: entry1 ends up in group2 with other's content; one conflict warning.
+    #[test]
+    fn test_ancestor_entry_moved_to_different_groups_other_wins() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        // self moves entry1 to group1 and updates content
+        self_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP1_ID)
+            .expect("move to group1");
+        self_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "entry1_moved_to_group1_by_self");
+        });
+
+        sleep();
+
+        // other moves entry1 to group2 and updates content (newer)
+        other_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("move to group2");
+        other_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "entry1_moved_to_group2_by_other");
+        });
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        // true conflict: both sides changed since ancestor — our warning must be present
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("modified in both databases since the common ancestor")),
+            "expected a conflict warning, got: {:?}",
+            result.warnings,
+        );
+
+        let entry = self_db.entry(ENTRY1_ID).unwrap();
+
+        // other is newer, so its location wins
+        assert_eq!(entry.parent().id(), GROUP2_ID);
+
+        // other is newer, so its content wins
+        assert_eq!(entry.get(fields::TITLE), Some("entry1_moved_to_group2_by_other"));
+    }
+
+    /// Test that when only other moves an entry (self unchanged since ancestor), the move is
+    /// taken silently with no conflict warning.
+    ///
+    /// Scenario:
+    ///   ancestor: entry1 in root
+    ///   self:     unchanged
+    ///   other:    moves entry1 → group1, updates content
+    /// Expected: entry1 ends up in group1 with other's content; no warning.
+    #[test]
+    fn test_ancestor_entry_moved_in_other_only_no_conflict() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        // only other moves entry1 to group1 and updates content
+        other_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP1_ID)
+            .expect("move to group1");
+        other_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "entry1_moved_to_group1_by_other");
+        });
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        // one-sided change: no conflict warning
+        assert_eq!(result.warnings.len(), 0);
+
+        let entry = self_db.entry(ENTRY1_ID).unwrap();
+
+        // other's location is taken
+        assert_eq!(entry.parent().id(), GROUP1_ID);
+
+        // other's content is taken
+        assert_eq!(entry.get(fields::TITLE), Some("entry1_moved_to_group1_by_other"));
+    }
 }
