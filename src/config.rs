@@ -14,11 +14,10 @@ use crate::{
         ciphers::{self},
         kdf, CryptographyError,
     },
-    format::{
-        variant_dictionary::{VariantDictionary, VariantDictionaryError},
-        KDBX4_CURRENT_MINOR_VERSION,
-    },
+    format::{variant_dictionary::VariantDictionaryError, KDBX4_CURRENT_MINOR_VERSION},
 };
+
+pub use crate::format::variant_dictionary::{VariantDictionary, VariantDictionaryValue};
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
 const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
@@ -398,14 +397,14 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
     type Error = KdfConfigError;
 
     fn try_from(vd: VariantDictionary) -> Result<(KdfConfig, Vec<u8>), Self::Error> {
-        let uuid = vd.get::<Vec<u8>>(KDF_ID)?;
+        let uuid = vd.get_typed::<Vec<u8>>(KDF_ID)?;
 
         if uuid == &KDF_ARGON2ID {
-            let memory: u64 = *vd.get(KDF_MEMORY)?;
-            let salt: Vec<u8> = vd.get::<Vec<u8>>(KDF_SALT)?.clone();
-            let iterations: u64 = *vd.get(KDF_ITERATIONS)?;
-            let parallelism: u32 = *vd.get(KDF_PARALLELISM)?;
-            let version: u32 = *vd.get(KDF_VERSION)?;
+            let memory: u64 = *vd.get_typed(KDF_MEMORY)?;
+            let salt: Vec<u8> = vd.get_typed::<Vec<u8>>(KDF_SALT)?.clone();
+            let iterations: u64 = *vd.get_typed(KDF_ITERATIONS)?;
+            let parallelism: u32 = *vd.get_typed(KDF_PARALLELISM)?;
+            let version: u32 = *vd.get_typed(KDF_VERSION)?;
 
             let version = match version {
                 0x10 => argon2::Version::Version10,
@@ -423,11 +422,11 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
                 salt,
             ))
         } else if uuid == &KDF_ARGON2 {
-            let memory: u64 = *vd.get(KDF_MEMORY)?;
-            let salt: Vec<u8> = vd.get::<Vec<u8>>(KDF_SALT)?.clone();
-            let iterations: u64 = *vd.get(KDF_ITERATIONS)?;
-            let parallelism: u32 = *vd.get(KDF_PARALLELISM)?;
-            let version: u32 = *vd.get(KDF_VERSION)?;
+            let memory: u64 = *vd.get_typed(KDF_MEMORY)?;
+            let salt: Vec<u8> = vd.get_typed::<Vec<u8>>(KDF_SALT)?.clone();
+            let iterations: u64 = *vd.get_typed(KDF_ITERATIONS)?;
+            let parallelism: u32 = *vd.get_typed(KDF_PARALLELISM)?;
+            let version: u32 = *vd.get_typed(KDF_VERSION)?;
 
             let version = match version {
                 0x10 => argon2::Version::Version10,
@@ -445,8 +444,8 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
                 salt,
             ))
         } else if uuid == &KDF_AES_KDBX4 || uuid == &KDF_AES_KDBX3 {
-            let rounds: u64 = *vd.get(KDF_ROUNDS)?;
-            let seed: Vec<u8> = vd.get::<Vec<u8>>(KDF_SEED)?.clone();
+            let rounds: u64 = *vd.get_typed(KDF_ROUNDS)?;
+            let seed: Vec<u8> = vd.get_typed::<Vec<u8>>(KDF_SEED)?.clone();
 
             Ok((KdfConfig::Aes { rounds }, seed))
         } else {

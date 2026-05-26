@@ -1,9 +1,12 @@
 #[cfg(feature = "save_kdbx4")]
 use byteorder::WriteBytesExt;
 use byteorder::{ByteOrder, LittleEndian};
-use std::collections::HashMap;
 #[cfg(feature = "save_kdbx4")]
 use std::io::Write;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+};
 use thiserror::Error;
 
 #[cfg(feature = "save_kdbx4")]
@@ -20,16 +23,29 @@ pub const I64_TYPE_ID: u8 = 0x0d;
 pub const STR_TYPE_ID: u8 = 0x18;
 pub const BYTES_TYPE_ID: u8 = 0x42;
 
+/// A dictionary of key-value pairs, with typed values
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
-pub struct VariantDictionary {
-    pub data: HashMap<String, VariantDictionaryValue>,
+pub struct VariantDictionary(HashMap<String, VariantDictionaryValue>);
+
+impl Deref for VariantDictionary {
+    type Target = HashMap<String, VariantDictionaryValue>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for VariantDictionary {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
 
 impl VariantDictionary {
-    #[cfg(feature = "save_kdbx4")]
-    pub(crate) fn new() -> Self {
-        Self { data: HashMap::new() }
+    /// Create a new, empty VariantDictionary
+    pub fn new() -> Self {
+        Self(HashMap::new())
     }
 
     pub(crate) fn parse(buffer: &[u8]) -> Result<VariantDictionary, VariantDictionaryError> {
@@ -97,14 +113,14 @@ impl VariantDictionary {
             return Err(VariantDictionaryError::NotTerminated);
         }
 
-        Ok(VariantDictionary { data })
+        Ok(VariantDictionary(data))
     }
 
     #[cfg(feature = "save_kdbx4")]
     pub(crate) fn dump(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
         writer.write_u16::<LittleEndian>(VARIANT_DICTIONARY_VERSION)?;
 
-        for (field_name, field_value) in &self.data {
+        for (field_name, field_value) in &self.0 {
             match field_value {
                 VariantDictionaryValue::UInt32(value) => {
                     writer.write_u8(U32_TYPE_ID)?;
@@ -154,12 +170,14 @@ impl VariantDictionary {
         Ok(())
     }
 
-    pub(crate) fn get<'a, T: 'a>(&'a self, key: &str) -> Result<&'a T, VariantDictionaryError>
+    /// Get a value from the VariantDictionary, returning an error if the key is missing or the
+    /// value is of the wrong type
+    pub fn get_typed<'a, T: 'a>(&'a self, key: &str) -> Result<&'a T, VariantDictionaryError>
     where
         &'a VariantDictionaryValue: Into<Option<&'a T>>,
     {
         let vdv = self
-            .data
+            .0
             .get(key)
             .ok_or_else(|| VariantDictionaryError::MissingKey { key: key.to_owned() })?;
 
@@ -167,25 +185,39 @@ impl VariantDictionary {
             .ok_or_else(|| VariantDictionaryError::Mistyped { key: key.to_owned() })
     }
 
-    #[cfg(feature = "save_kdbx4")]
-    pub(crate) fn set<T>(&mut self, key: &str, value: T)
+    /// Set a value in the VariantDictionary
+    pub fn set<T>(&mut self, key: &str, value: T)
     where
         T: Into<VariantDictionaryValue>,
     {
-        self.data.insert(key.to_string(), value.into());
+        self.insert(key.to_string(), value.into());
     }
 }
 
+/// A value in a VariantDictionary, which can be one of several types
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize))]
 #[non_exhaustive]
 pub enum VariantDictionaryValue {
+    /// An unsigned 32-bit integer value
     UInt32(u32),
+
+    /// An unsigned 64-bit integer value
     UInt64(u64),
+
+    /// A boolean value
     Bool(bool),
+
+    /// A signed 32-bit integer value
     Int32(i32),
+
+    /// A signed 64-bit integer value
     Int64(i64),
+
+    /// A UTF-8 encoded string value
     String(String),
+
+    /// A byte array value
     ByteArray(Vec<u8>),
 }
 
@@ -356,7 +388,7 @@ mod variant_dictionary_tests {
         //                                        ver t key_len key   val_len value   termination
         //                                        |   | |       |     |       |       |
         let res = VariantDictionary::parse(&hex!("000104030000004142430400000015CD5B0700"))?;
-        assert_eq!(res.get::<u32>("ABC")?, &123456789);
+        assert_eq!(res.get_typed::<u32>("ABC")?, &123456789);
 
         //                                        ver t key_len key val_len termination
         //                                        |   | |       |   |       |
@@ -383,23 +415,23 @@ mod variant_dictionary_tests {
         vd.set("a-string", "Testing".to_string());
         vd.set("a-bytes", "testing".as_bytes().to_vec());
 
-        assert!(vd.get::<bool>("key-not-exist").is_err());
+        assert!(vd.get_typed::<bool>("key-not-exist").is_err());
 
-        assert!(vd.get::<u32>("a-string").is_err());
-        assert!(vd.get::<u64>("a-string").is_err());
-        assert!(vd.get::<i32>("a-string").is_err());
-        assert!(vd.get::<i64>("a-string").is_err());
-        assert!(vd.get::<bool>("a-string").is_err());
-        assert!(vd.get::<String>("a-bytes").is_err());
-        assert!(vd.get::<Vec<u8>>("a-string").is_err());
+        assert!(vd.get_typed::<u32>("a-string").is_err());
+        assert!(vd.get_typed::<u64>("a-string").is_err());
+        assert!(vd.get_typed::<i32>("a-string").is_err());
+        assert!(vd.get_typed::<i64>("a-string").is_err());
+        assert!(vd.get_typed::<bool>("a-string").is_err());
+        assert!(vd.get_typed::<String>("a-bytes").is_err());
+        assert!(vd.get_typed::<Vec<u8>>("a-string").is_err());
 
-        assert_eq!(vd.get::<u32>("a-u32").unwrap(), &42u32);
-        assert_eq!(vd.get::<u64>("a-u64").unwrap(), &1337u64);
-        assert_eq!(vd.get::<i32>("a-i32").unwrap(), &-2i32);
-        assert_eq!(vd.get::<i64>("a-i64").unwrap(), &-31337i64);
-        assert_eq!(vd.get::<bool>("a-bool").unwrap(), &true);
-        assert_eq!(vd.get::<String>("a-string").unwrap(), "Testing");
-        assert_eq!(vd.get::<Vec<u8>>("a-bytes").unwrap(), "testing".as_bytes());
+        assert_eq!(vd.get_typed::<u32>("a-u32").unwrap(), &42u32);
+        assert_eq!(vd.get_typed::<u64>("a-u64").unwrap(), &1337u64);
+        assert_eq!(vd.get_typed::<i32>("a-i32").unwrap(), &-2i32);
+        assert_eq!(vd.get_typed::<i64>("a-i64").unwrap(), &-31337i64);
+        assert_eq!(vd.get_typed::<bool>("a-bool").unwrap(), &true);
+        assert_eq!(vd.get_typed::<String>("a-string").unwrap(), "Testing");
+        assert_eq!(vd.get_typed::<Vec<u8>>("a-bytes").unwrap(), "testing".as_bytes());
 
         let mut vd_data = Vec::new();
         vd.dump(&mut vd_data).unwrap();
