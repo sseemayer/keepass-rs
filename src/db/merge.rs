@@ -74,7 +74,7 @@ impl Database {
         ancestor: &Database,
     ) -> Result<MergeLog, MergeError> {
         let mut log = MergeLog::default();
-        merge_icons(self, other, &mut log)?;
+        merge_icons(self, other, ancestor, &mut log)?;
         merge_groups(self, other, ancestor, &mut log)?;
         Ok(log)
     }
@@ -717,7 +717,12 @@ fn merge_history(dest: &History, source: &History, log: &mut MergeLog) -> Result
 }
 
 /// Merge custom icons, returning the merged history
-fn merge_icons(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
+fn merge_icons(
+    dest_db: &mut Database,
+    source_db: &Database,
+    base_db: &Database,
+    log: &mut MergeLog,
+) -> Result<(), MergeError> {
     let dest_icons = dest_db.custom_icons.keys().cloned().collect::<HashSet<_>>();
     let source_icons = source_db.custom_icons.keys().cloned().collect::<HashSet<_>>();
 
@@ -815,6 +820,29 @@ fn merge_icons(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog)
             continue;
         }
 
+        // Three-way check: compare both sides against the common ancestor to distinguish
+        // one-sided changes (auto-resolved) from true conflicts (warned and newest-wins).
+        let base_last_modification = base_db
+            .custom_icons
+            .get(&id)
+            .and_then(|i| i.last_modification_time)
+            .unwrap_or(Times::epoch());
+        let dest_changed = dest_last_modification > base_last_modification;
+        let source_changed = source_last_modification > base_last_modification;
+
+        if !source_changed {
+            // source did not change since the common ancestor; keep dest
+            continue;
+        }
+
+        if dest_changed && dest_icon != source_icon && base_db.custom_icons.contains_key(&id) {
+            // both sides changed since the ancestor and content diverged — real conflict
+            log.warnings.push(format!(
+                "Custom icon {id} was modified in both databases since the common ancestor. \
+                 Resolving by keeping the most recently modified version.",
+            ));
+        }
+
         if dest_last_modification > source_last_modification {
             // The destination icon is more recent than the source icon. Nothing to do.
             continue;
@@ -840,12 +868,15 @@ fn have_groups_diverged(a: &Group, b: &Group) -> bool {
     a.entries.clear();
     a.groups.clear();
     a.parent = None;
+    // previous_parent_group tracks location history, not content; exclude from divergence check
+    a.previous_parent_group = None;
 
     let mut b = b.clone();
     b.times = new_times.clone();
     b.entries.clear();
     b.groups.clear();
     b.parent = None;
+    b.previous_parent_group = None;
 
     !a.eq(&b)
 }
@@ -2713,5 +2744,282 @@ mod merge_tests {
 
         // other's content is taken
         assert_eq!(entry.get(fields::TITLE), Some("entry1_moved_to_group1_by_other"));
+    }
+
+    /// Both sides edited an entry to the same content at different times — no conflict warning.
+    #[test]
+    fn test_ancestor_both_changed_identically() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        self_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "entry1_same_update");
+        });
+
+        sleep();
+
+        other_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "entry1_same_update");
+        });
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert_eq!(
+            result.warnings.len(),
+            0,
+            "identical concurrent changes must not warn"
+        );
+        assert_eq!(
+            self_db.entry(ENTRY1_ID).unwrap().get(fields::TITLE),
+            Some("entry1_same_update"),
+        );
+    }
+
+    /// Only other changed a group since ancestor — taken silently, no warning.
+    #[test]
+    fn test_ancestor_group_one_sided_change_in_other() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        other_db.group_mut(GROUP1_ID).unwrap().edit_tracking(|g| {
+            g.name = "group1_updated_by_other".to_string();
+        });
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert_eq!(result.warnings.len(), 0, "one-sided group change must not warn");
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(self_db.group(GROUP1_ID).unwrap().name, "group1_updated_by_other");
+    }
+
+    /// Only self changed a group since ancestor — kept silently, no warning.
+    #[test]
+    fn test_ancestor_group_one_sided_change_in_self() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let other_db = ancestor_db.clone();
+
+        sleep();
+
+        self_db.group_mut(GROUP1_ID).unwrap().edit_tracking(|g| {
+            g.name = "group1_updated_by_self".to_string();
+        });
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert_eq!(result.warnings.len(), 0, "one-sided group change must not warn");
+        assert_eq!(result.events.len(), 0);
+        assert_eq!(self_db.group(GROUP1_ID).unwrap().name, "group1_updated_by_self");
+    }
+
+    /// Both sides changed a group differently — warning emitted, newest wins.
+    #[test]
+    fn test_ancestor_group_both_changed_conflict() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        self_db.group_mut(GROUP1_ID).unwrap().edit_tracking(|g| {
+            g.name = "group1_updated_by_self".to_string();
+        });
+
+        sleep();
+
+        other_db.group_mut(GROUP1_ID).unwrap().edit_tracking(|g| {
+            g.name = "group1_updated_by_other".to_string();
+        });
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("modified in both databases since the common ancestor")),
+            "true group conflict must produce a warning, got: {:?}",
+            result.warnings,
+        );
+        // other is newer, so its name wins
+        assert_eq!(self_db.group(GROUP1_ID).unwrap().name, "group1_updated_by_other");
+    }
+
+    /// Only other moved a group since ancestor — taken silently, no warning.
+    #[test]
+    fn test_ancestor_group_moved_in_other_only() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        other_db
+            .group_mut(SUBGROUP1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("move successful");
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert_eq!(result.warnings.len(), 0, "one-sided group move must not warn");
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(
+            self_db.group(SUBGROUP1_ID).unwrap().parent().unwrap().id(),
+            GROUP2_ID,
+        );
+    }
+
+    /// Both sides moved the same group to different parents — newer move wins.
+    #[test]
+    fn test_ancestor_group_moved_in_both_other_wins() {
+        let ancestor_db = create_test_database();
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        // self moves subgroup1 to root
+        self_db
+            .group_mut(SUBGROUP1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(ROOT_GROUP_ID)
+            .expect("self move successful");
+
+        sleep();
+
+        // other moves subgroup1 to group2 (later, so wins)
+        other_db
+            .group_mut(SUBGROUP1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .expect("other move successful");
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        // group relocation conflicts surface as a location event, not a warning
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(
+            self_db.group(SUBGROUP1_ID).unwrap().parent().unwrap().id(),
+            GROUP2_ID,
+            "other's (newer) location must win",
+        );
+    }
+
+    /// Only other updated a custom icon since ancestor — taken silently, no warning.
+    #[test]
+    fn test_ancestor_icon_one_sided_change_in_other() {
+        let mut ancestor_db = create_test_database();
+
+        let icon_id = ancestor_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .as_mut()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        {
+            let mut icon = other_db.custom_icon_mut(icon_id).unwrap();
+            icon.data = vec![5, 6, 7, 8];
+            icon.last_modification_time = Some(Times::now());
+        }
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert_eq!(result.warnings.len(), 0, "one-sided icon change must not warn");
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(self_db.custom_icon(icon_id).unwrap().data, vec![5, 6, 7, 8]);
+    }
+
+    /// Only self updated a custom icon since ancestor — kept silently, no warning.
+    #[test]
+    fn test_ancestor_icon_one_sided_change_in_self() {
+        let mut ancestor_db = create_test_database();
+
+        let icon_id = ancestor_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .as_mut()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let mut self_db = ancestor_db.clone();
+        let other_db = ancestor_db.clone();
+
+        sleep();
+
+        {
+            let mut icon = self_db.custom_icon_mut(icon_id).unwrap();
+            icon.data = vec![5, 6, 7, 8];
+            icon.last_modification_time = Some(Times::now());
+        }
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert_eq!(result.warnings.len(), 0, "one-sided icon change must not warn");
+        assert_eq!(result.events.len(), 0);
+        assert_eq!(self_db.custom_icon(icon_id).unwrap().data, vec![5, 6, 7, 8]);
+    }
+
+    /// Both sides updated the same icon differently — warning emitted, newest wins.
+    #[test]
+    fn test_ancestor_icon_both_changed_conflict() {
+        let mut ancestor_db = create_test_database();
+
+        let icon_id = ancestor_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .as_mut()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let mut self_db = ancestor_db.clone();
+        let mut other_db = ancestor_db.clone();
+
+        sleep();
+
+        {
+            let mut icon = self_db.custom_icon_mut(icon_id).unwrap();
+            icon.data = vec![10, 20, 30, 40];
+            icon.last_modification_time = Some(Times::now());
+        }
+
+        sleep();
+
+        {
+            let mut icon = other_db.custom_icon_mut(icon_id).unwrap();
+            icon.data = vec![50, 60, 70, 80];
+            icon.last_modification_time = Some(Times::now());
+        }
+
+        let result = self_db.merge_with_ancestor(&other_db, &ancestor_db).unwrap();
+
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("modified in both databases since the common ancestor")),
+            "true icon conflict must produce a warning, got: {:?}",
+            result.warnings,
+        );
+        // other is newer, so its data wins
+        assert_eq!(self_db.custom_icon(icon_id).unwrap().data, vec![50, 60, 70, 80]);
     }
 }
