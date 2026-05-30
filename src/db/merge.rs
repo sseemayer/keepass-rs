@@ -1,3 +1,9 @@
+//! Merging two versions of the same database.
+//!
+//! See [`Database::merge`][crate::Database::merge] for the entry point. The
+//! types in this module describe what a merge changed, via the returned
+//! [`MergeLog`].
+
 use std::{collections::HashSet, ops::Deref};
 
 use chrono::NaiveDateTime;
@@ -8,26 +14,38 @@ use crate::{
     Database,
 };
 
+/// The kind of change a merge applied to an object.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum MergeEventType {
+    /// The object existed only in the source and was created in the destination.
     Created,
+    /// The object was deleted as a result of the merge.
     Deleted,
+    /// The object was moved to a different location (parent group).
     LocationUpdated,
+    /// The object's contents were updated from the source.
     Updated,
 }
 
+/// The object a [`MergeEvent`] applies to.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum MergeEventTarget {
+    /// An entry, identified by its UUID.
     Entry(EntryId),
+    /// A group, identified by its UUID.
     Group(GroupId),
+    /// A custom icon, identified by its UUID.
     Icon(CustomIconId),
 }
 
+/// A single change applied to the destination database during a merge.
 #[derive(Debug, Clone)]
 pub struct MergeEvent {
+    /// The object that was changed.
     pub target: MergeEventTarget,
+    /// The kind of change that was applied.
     pub event_type: MergeEventType,
 }
 
@@ -35,22 +53,29 @@ pub struct MergeEvent {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum MergeError {
+    /// Two entries with the same UUID have the same modification time but different contents.
     #[error("Entries with UUID {0} have the same modification time but have diverged.")]
     EntryModificationTimeNotUpdated(EntryId),
 
+    /// Two groups with the same UUID have the same modification time but different contents.
     #[error("Groups with UUID {0} have the same modification time but have diverged.")]
     GroupModificationTimeNotUpdated(GroupId),
 
+    /// An entry has two history items sharing the same timestamp, so their order is ambiguous.
     #[error("Found history entries with the same timestamp ({0}) for entry {1}.")]
     DuplicateHistoryEntries(NaiveDateTime, EntryId),
 
+    /// A group could not be moved to its merged location.
     #[error(transparent)]
     MoveGroupError(#[from] MoveGroupError),
 }
 
+/// Record of everything a merge changed, returned by [`Database::merge`].
 #[derive(Debug, Default, Clone)]
 pub struct MergeLog {
+    /// Non-fatal issues encountered during the merge.
     pub warnings: Vec<String>,
+    /// The changes that were applied to the destination database.
     pub events: Vec<MergeEvent>,
 }
 
