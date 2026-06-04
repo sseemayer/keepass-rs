@@ -13,7 +13,7 @@ pub(crate) mod value;
 use std::collections::HashMap;
 
 pub use attachment::{Attachment, AttachmentId, AttachmentMut, AttachmentRef};
-pub use autotype::{AutoType, AutoTypeAssociation};
+pub use autotype::{AutoType, AutoTypeAssociation, DataTransferObfuscation};
 pub use color::{Color, ParseColorError};
 pub use custom_data::{CustomDataItem, CustomDataValue};
 pub use entry::{DestinationGroupNotFoundError, Entry, EntryId, EntryMut, EntryRef, EntryTrack};

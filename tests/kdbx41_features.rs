@@ -10,8 +10,8 @@ use chrono::NaiveDate;
 use keepass::{
     config::{DatabaseConfig, KdfConfig},
     db::{
-        fields, AutoType, AutoTypeAssociation, Color, CustomDataItem, CustomDataValue, CustomIconId, Database,
-        EntryId, GroupId, Value,
+        fields, AutoType, AutoTypeAssociation, Color, CustomDataItem, CustomDataValue, CustomIconId,
+        DataTransferObfuscation, Database, EntryId, GroupId, Value,
     },
     DatabaseKey,
 };
@@ -106,7 +106,7 @@ fn build_kdbx41_rich_database() -> (Database, EntryId) {
         entry.autotype = Some(AutoType {
             enabled: true,
             default_sequence: Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string()),
-            data_transfer_obfuscation: Some(true),
+            data_transfer_obfuscation: DataTransferObfuscation::UseClipboard,
             associations: vec![
                 AutoTypeAssociation {
                     window: "Login - *".to_string(),
@@ -208,7 +208,10 @@ fn entry_autotype_with_obfuscation_round_trips() {
     let entry = root.entry(id).expect("entry survives");
     let at = entry.autotype.as_ref().expect("autotype present");
     assert!(at.enabled);
-    assert_eq!(at.data_transfer_obfuscation, Some(true));
+    assert_eq!(
+        at.data_transfer_obfuscation,
+        DataTransferObfuscation::UseClipboard
+    );
     assert_eq!(at.associations.len(), 2);
     assert_eq!(at.associations[0].window, "Login - *");
 }
