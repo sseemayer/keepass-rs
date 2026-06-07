@@ -42,6 +42,8 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    permissions:
+      code-quality: write
     steps:
       - uses: actions/checkout@v6
       - name: Get Nix version
@@ -59,6 +61,13 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Post to native GitHub coverage
+        uses: actions/upload-code-coverage@v1
+        continue-on-error: true
+        with:
+          file: cobertura.xml
+          language: rust
+          label: rust-coverage
 
   get-next-version:
     name: Get the next version
