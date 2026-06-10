@@ -171,3 +171,7 @@ cargo = { level = "warn", priority = -1 }
 [[example]]
 name = "save_database"
 required-features = ["save_kdbx4"]
+
+[[example]]
+name = "merge_databases"
+required-features = ["_merge"]
