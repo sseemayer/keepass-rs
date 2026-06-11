@@ -70,7 +70,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: paulhatch/semantic-version@f29500c9d60a99ed5168e39ee367e0976884c46e # v6.0.1
+      - uses: paulhatch/semantic-version@9f72830310d5ed81233b641ee59253644cd8a8fc # v6.0.2
         id: semantic-version
         with:
           tag_prefix: "v"
@@ -117,7 +117,7 @@ jobs:
         with:
           install_url: https://releases.nixos.org/nix/nix-${{ steps.nix-version.outputs.version }}/install
 
-      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
 
       - name: Publish new Cargo version
