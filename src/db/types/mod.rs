@@ -77,7 +77,8 @@ impl Database {
         Self::with_data(config, GroupId::new())
     }
 
-    pub(crate) fn new_with_root_id(root_id: GroupId) -> Self {
+    /// Create a new database with the given group UUID
+    pub fn new_with_root_id(root_id: GroupId) -> Self {
         let root = Group::with_id(root_id, None);
 
         let mut groups = HashMap::new();
