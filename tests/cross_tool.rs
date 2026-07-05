@@ -18,7 +18,7 @@ fn kpscript_lists_our_vault() {
     // filter out twofish since KeePass does not support it
     let combos: Vec<_> = round_trip_combos()
         .into_iter()
-        .filter(|c| !c.label.contains("twofish") && !c.label.contains("aeskdf"))
+        .filter(|c| !c.label.contains("twofish"))
         .collect();
 
     for combo in combos {
