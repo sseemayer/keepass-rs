@@ -193,6 +193,12 @@ jobs:
       - name: Generate code coverage
         run: |
           nix develop --command cargo tarpaulin --verbose --timeout 120
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   wasm32-tests:
     name: WASM32 Tests (Node)
