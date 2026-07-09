@@ -3,7 +3,8 @@
 
 mod compression;
 pub mod config;
-pub(crate) mod crypt;
+/// Cryptographic functions and Key Derivation Functions
+pub mod crypt;
 pub mod db;
 pub mod error;
 pub(crate) mod format;
