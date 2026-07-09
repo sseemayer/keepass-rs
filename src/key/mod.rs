@@ -104,13 +104,23 @@ pub enum ParseXmlKeyFileError {
 fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     // try to parse the buffer as XML, if successful, use that data instead of full file
     if let Ok(v) = parse_xml_keyfile(buffer) {
-        Ok(v)
-    } else if buffer.len() == 32 {
-        // legacy binary key format
-        Ok(buffer.to_vec())
-    } else {
-        Ok(calculate_sha256(&[buffer]).as_slice().to_vec())
+        return Ok(v);
     }
+
+    // legacy binary key format
+    if buffer.len() == 32 {
+        return Ok(buffer.to_vec());
+    }
+
+    // legacy hex key format
+    if buffer.len() == 64 {
+        if let Ok(key_bytes) = hex::decode(buffer) {
+            return Ok(key_bytes);
+        }
+    }
+
+    // interpret as a "bare" keyfile and hash the entire file contents
+    Ok(calculate_sha256(&[buffer]).as_slice().to_vec())
 }
 
 /// A KeePass key, which might consist of a password and/or a keyfile
