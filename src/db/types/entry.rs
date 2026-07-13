@@ -22,7 +22,8 @@ use crate::{
 pub struct EntryId(Uuid);
 
 impl EntryId {
-    pub(crate) fn new() -> Self {
+    /// Generate a new random `EntryId`.
+    pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
@@ -844,10 +845,16 @@ impl Drop for EntryTrack<'_> {
 #[allow(clippy::unwrap_used)]
 mod tests {
 
+    use super::EntryId;
     use crate::{
         db::{fields, Value},
         Database,
     };
+
+    #[test]
+    fn entry_id_new_generates_distinct_ids() {
+        assert_ne!(EntryId::new(), EntryId::new());
+    }
 
     #[test]
     fn test_entry() {
