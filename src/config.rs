@@ -358,7 +358,8 @@ impl KdfConfig {
 
         match self {
             KdfConfig::Aes { rounds } => {
-                vd.set(KDF_ID, KDF_AES_KDBX4.to_vec());
+                // always use the KDBX3 AES KDF UUID for compatibility with other libraries
+                vd.set(KDF_ID, KDF_AES_KDBX3.to_vec());
                 vd.set(KDF_ROUNDS, *rounds);
                 vd.set(KDF_SEED, seed.to_vec());
             }
