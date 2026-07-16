@@ -252,7 +252,10 @@ pub enum KdfConfig {
         /// The number of iterations to perform when deriving keys
         iterations: u64,
 
-        /// The amount of memory (in KiB) to use when deriving keys
+        /// The amount of memory (in bytes) to use when deriving keys
+        ///
+        /// KDBX stores this value in bytes, while the underlying Argon2 implementation
+        /// expects KiB and converts internally when deriving keys.
         memory: u64,
 
         /// The degree of parallelism to use when deriving keys
@@ -268,7 +271,10 @@ pub enum KdfConfig {
         /// The number of iterations to perform when deriving keys
         iterations: u64,
 
-        /// The amount of memory (in KiB) to use when deriving keys
+        /// The amount of memory (in bytes) to use when deriving keys
+        ///
+        /// KDBX stores this value in bytes, while the underlying Argon2 implementation
+        /// expects KiB and converts internally when deriving keys.
         memory: u64,
 
         /// The degree of parallelism to use when deriving keys
