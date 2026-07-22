@@ -21,7 +21,8 @@ use crate::{
 pub struct GroupId(Uuid);
 
 impl GroupId {
-    pub(crate) fn new() -> Self {
+    /// Generate a new random `GroupId`.
+    pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
@@ -943,6 +944,13 @@ mod group_tests {
             db.root_mut().add_group_with_id(pinned),
             Err(DuplicateGroupIdError(gid)) if gid == pinned
         ));
+    }
+
+    #[test]
+    fn group_id_new_generates_distinct_ids() {
+        use crate::db::GroupId;
+
+        assert_ne!(GroupId::new(), GroupId::new());
     }
 
     #[test]
