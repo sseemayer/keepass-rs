@@ -52,7 +52,7 @@ mod entry_tests {
         assert_eq!(e.get_title(), Some("test entry"));
         assert_eq!(e.get_username(), Some("jdoe"));
         assert_eq!(e.get_password(), Some("nWuu5AtqsxqNhnYgLwoB"));
-        assert_eq!(e.get_url(), None);
+        assert_eq!(e.get_url(), Some(""));
         assert_eq!(e.times.expires, Some(false));
 
         if let Some(t) = e.times.expiry {

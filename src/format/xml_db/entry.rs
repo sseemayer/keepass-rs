@@ -103,18 +103,17 @@ impl Entry {
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
 
         for field in self.string_fields {
-            if let Some(fval) = &field.value.value {
-                let value = if field.value.protected {
-                    let fval = base64_engine::STANDARD.decode(fval)?;
-                    let fval = inner_decryptor.decrypt(&fval)?;
-                    let fval = String::from_utf8_lossy(&fval).to_string();
+            let fval = field.value.value.unwrap_or_default();
+            let value = if field.value.protected {
+                let fval = base64_engine::STANDARD.decode(fval)?;
+                let fval = inner_decryptor.decrypt(&fval)?;
+                let fval = String::from_utf8_lossy(&fval).to_string();
 
-                    crate::db::Value::protected(fval)
-                } else {
-                    crate::db::Value::unprotected(fval)
-                };
-                target.fields.insert(field.key, value);
-            }
+                crate::db::Value::protected(fval)
+            } else {
+                crate::db::Value::unprotected(fval)
+            };
+            target.fields.insert(field.key, value);
         }
 
         for field in self.binary_fields {
