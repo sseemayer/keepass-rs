@@ -293,7 +293,12 @@ pub struct DeletedObject {
     #[serde(rename = "UUID")]
     uuid: UUID,
 
-    #[serde(default, with = "cs_opt_string")]
+    #[serde(
+        default,
+        rename = "DeletionTime",
+        alias = "deletion_time",
+        with = "cs_opt_string"
+    )]
     deletion_time: Option<Timestamp>,
 }
 
@@ -323,5 +328,30 @@ mod tests {
         ]));
         let serialized = quick_xml::se::to_string(&Test(uuid)).unwrap();
         assert_eq!(serialized, "<Test>AAECAwQFBgcICQoLDA0ODw==</Test>");
+    }
+
+    #[test]
+    fn test_serialize_deleted_object_deletion_time() {
+        let deleted_object = DeletedObject {
+            uuid: UUID(Uuid::nil()),
+            deletion_time: Some(Timestamp::new_iso8601(
+                chrono::NaiveDateTime::parse_from_str("2026-08-15T12:34:56", "%Y-%m-%dT%H:%M:%S").unwrap(),
+            )),
+        };
+
+        let serialized = quick_xml::se::to_string_with_root("DeletedObject", &deleted_object).unwrap();
+
+        assert!(serialized.contains("<DeletionTime>"));
+        assert!(!serialized.contains("<deletion_time>"));
+    }
+
+    #[test]
+    fn test_deserialize_legacy_deleted_object_deletion_time() {
+        let deleted_object: DeletedObject = quick_xml::de::from_str(
+            "<DeletedObject><UUID>AAAAAAAAAAAAAAAAAAAAAA==</UUID><deletion_time>2026-08-15T12:34:56Z</deletion_time></DeletedObject>",
+        )
+        .unwrap();
+
+        assert!(deleted_object.deletion_time.is_some());
     }
 }

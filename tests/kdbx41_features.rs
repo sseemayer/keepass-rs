@@ -296,6 +296,20 @@ fn deleted_objects_round_trip() {
 }
 
 #[test]
+fn deleted_object_uses_canonical_xml_tag() {
+    let (db, _) = build_kdbx41_rich_database();
+    let key = DatabaseKey::new().with_password(PASSWORD);
+    let mut saved = Vec::new();
+    db.save(&mut saved, key.clone()).expect("save");
+
+    let xml = Database::get_xml(&mut saved.as_slice(), key).expect("extract XML");
+    let xml = String::from_utf8(xml).expect("XML is UTF-8");
+
+    assert!(xml.contains("<DeletionTime>"));
+    assert!(!xml.contains("<deletion_time>"));
+}
+
+#[test]
 fn protected_password_round_trips_and_decrypts() {
     let (db, id) = build_kdbx41_rich_database();
     let parsed = save_then_open(&db);
