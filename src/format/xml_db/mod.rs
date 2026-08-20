@@ -226,7 +226,7 @@ impl KeePassFile {
                     .iter()
                     .map(|(uuid, deletion_time)| DeletedObject {
                         uuid: UUID(*uuid),
-                        deletion_time: deletion_time.map(Timestamp::new_iso8601),
+                        deletion_time: deletion_time.map(Timestamp::from),
                     })
                     .collect(),
             })
