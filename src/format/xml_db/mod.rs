@@ -226,7 +226,7 @@ impl KeePassFile {
                     .iter()
                     .map(|(uuid, deletion_time)| DeletedObject {
                         uuid: UUID(*uuid),
-                        deletion_time: deletion_time.map(Timestamp::new_iso8601),
+                        deletion_time: deletion_time.map(Timestamp::from),
                     })
                     .collect(),
             })
@@ -353,5 +353,27 @@ mod tests {
         .unwrap();
 
         assert!(deleted_object.deletion_time.is_some());
+    }
+
+    #[cfg(feature = "save_kdbx4")]
+    #[test]
+    fn test_serialize_deletion_time_mode() {
+        let xml = r#"<KeePassFile>
+            <Meta></Meta>
+            <Root>
+               <Group><UUID>tP/vJ/3uSHyomfPZ4dXVlg==</UUID><Name></Name></Group>
+               <DeletedObjects>
+                   <DeletedObject>
+                       <UUID>30lsaI9KSYefuJb0PHSRiw==</UUID>
+                       <DeletionTime>io8Y4g4AAAA=</DeletionTime>
+                   </DeletedObject>
+               </DeletedObjects>
+            </Root>
+        </KeePassFile>"#;
+        let mut cipher = crate::config::InnerCipherConfig::Plain.get_cipher(&[]).unwrap();
+        let db = parse_xml(xml.as_bytes(), &[], &mut *cipher).unwrap();
+        let kdbx = KeePassFile::db_to_xml(&db, &mut *cipher).unwrap();
+        let xml = quick_xml::se::to_string_with_root("DeletedObjects", &kdbx.root.deleted_objects).unwrap();
+        assert!(xml.contains("<DeletionTime>io8Y4g4AAAA=</DeletionTime>"));
     }
 }
