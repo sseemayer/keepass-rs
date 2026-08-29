@@ -11,7 +11,7 @@ use keepass::{
     DatabaseKey,
 };
 
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 use sha2::{Digest, Sha256};
 
