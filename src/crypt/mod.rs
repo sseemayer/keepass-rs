@@ -12,8 +12,10 @@ use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
 use thiserror::Error;
 
+/// Implementation of cryptographic primitives used in the KDBX format.
 pub(crate) mod ciphers;
-pub(crate) mod kdf;
+/// Key Derivation Functions
+pub mod kdf;
 
 pub(crate) fn calculate_hmac(elements: &[&[u8]], key: &[u8]) -> Result<GenericArray<u8, U32>, InvalidLength> {
     type HmacSha256 = Hmac<Sha256>;
@@ -78,4 +80,8 @@ pub enum CryptographyError {
     /// Errors related to the Argon2 key derivation function
     #[error(transparent)]
     Argon2(#[from] argon2::Error),
+
+    /// The benchmark could not be completed
+    #[error("Benchmark failed")]
+    BenchmarkError,
 }
