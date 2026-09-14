@@ -5,7 +5,7 @@ keywords = ["keepass", "kdbx", "kdb", "password"]
 categories = ["parser-implementations", "security"]
 
 edition = "2018"
-rust-version = "1.85.1"
+rust-version = "1.86"
 
 homepage = "https://github.com/sseemayer/keepass-rs"
 repository = "https://github.com/sseemayer/keepass-rs"
@@ -41,7 +41,7 @@ byteorder = "1"
 flate2 = "1"
 base64 = "0.23"
 serde = { version = "1",  features = ["derive"] }
-quick-xml = { version = "0.41", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 hex-literal = "1"
 secrecy = "0.10.3"
 chrono = { version = "0.4.23", default-features = false, features = [
