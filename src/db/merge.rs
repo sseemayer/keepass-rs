@@ -329,10 +329,13 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
 
         if dest_last_modification == source_last_modification {
             if have_groups_diverged(&dest, &source) {
-                // This should never happen.
-                //
-                // A group was updated without updating the last modification timestamp.
-                return Err(MergeError::GroupModificationTimeNotUpdated(id));
+                // Both sides changed the group within the same second (timestamps have no
+                // finer resolution), or one side changed it without updating the timestamp.
+                // There is no telling which change is newer: keep the destination's.
+                log.warnings.push(format!(
+                    "Group {} was changed on both sides at the same time {}; kept the destination's version.",
+                    id, dest_last_modification,
+                ));
             }
             continue;
         }
@@ -525,13 +528,17 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
         });
 
         if dest_last_modification == source_last_modification {
-            if have_entries_diverged(&dest_entry, &source_entry) {
-                // This should never happen.
-                //
-                // An entry was updated without updating the last modification timestamp.
-                return Err(MergeError::EntryModificationTimeNotUpdated(id));
+            if !have_entry_contents_diverged(&dest_entry, &source_entry) {
+                continue;
             }
-            continue;
+            // Both sides changed the entry within the same second (timestamps have no finer
+            // resolution), or one side changed it without updating the timestamp. There is
+            // no telling which change is newer: keep the destination's, and file the
+            // source's in the history below so it is not lost.
+            log.warnings.push(format!(
+                "Entry {} was changed on both sides at the same time {}; kept the destination's version.",
+                id, dest_last_modification,
+            ));
         }
 
         let source_history = source_entry.history.clone().unwrap_or_else(|| {
@@ -2359,9 +2366,13 @@ mod merge_tests {
             source_db.group(GROUP1_ID).unwrap().times
         );
 
-        // there will be an error during merge since the edit in source_db is not tracked and has
-        // the same timestamp as the group in destination_db
-        assert!(destination_db.merge(&source_db).is_err());
+        // the edit in source_db is not tracked and has the same timestamp as the group in
+        // destination_db, so there is no telling which is newer: the destination's is kept
+        let mut merged_db = destination_db.clone();
+        let merge_result = merged_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 1);
+        assert_eq!(merge_result.events.len(), 0);
+        assert_eq!(merged_db.group(GROUP1_ID).unwrap().name, "group1");
 
         // remove the timestamps to test warnings
         destination_db
@@ -2402,9 +2413,24 @@ mod merge_tests {
             source_db.entry(ENTRY1_ID).unwrap().times
         );
 
-        // there will be an error during merge since the edit in source_db is not tracked and has
-        // the same timestamp as the entry in destination_db
-        assert!(destination_db.merge(&source_db).is_err());
+        // the edit in source_db is not tracked and has the same timestamp as the entry in
+        // destination_db, so there is no telling which is newer: the destination's is kept and
+        // the source's is filed in the history
+        let mut merged_db = destination_db.clone();
+        let merge_result = merged_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 1);
+        assert_eq!(merge_result.events.len(), 1);
+        let entry = merged_db.entry(ENTRY1_ID).unwrap();
+        assert_eq!(entry.get(fields::TITLE), Some("entry1"));
+        let history = entry.history.clone().unwrap();
+        assert_eq!(
+            history.entries[0].get(fields::TITLE),
+            Some("entry1_updated_title")
+        );
+
+        // merging the same source again changes nothing more
+        let merge_result = merged_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.events.len(), 0);
 
         // remove the timestamps to test warnings
         destination_db
