@@ -4,13 +4,19 @@
 //! types in this module describe what a merge changed, via the returned
 //! [`MergeLog`].
 
-use std::{collections::HashSet, ops::Deref};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
 use chrono::NaiveDateTime;
 use thiserror::Error;
 
 use crate::{
-    db::{CustomIconId, Entry, EntryId, Group, GroupId, GroupRef, History, MoveGroupError, Times},
+    db::{
+        Attachment, AttachmentId, CustomIconId, Entry, EntryId, Group, GroupId, GroupRef, History,
+        MoveGroupError, Times,
+    },
     Database,
 };
 
@@ -370,10 +376,90 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
     Ok(())
 }
 
+/// Attachment IDs belong to one database, so an entry taken from the source database has to
+/// be pointed at attachments in the destination before it goes there.
+///
+/// Each source attachment is brought over once per merge: to an attachment in the destination
+/// that holds the same data, or else to a copy of it. Data several source entries share stays
+/// shared.
+struct AttachmentImport<'a> {
+    source_db: &'a Database,
+    imported: HashMap<AttachmentId, AttachmentId>,
+    /// Copies made in the destination, so the ones nothing ends up using can go again.
+    copied: Vec<AttachmentId>,
+}
+
+impl<'a> AttachmentImport<'a> {
+    fn new(source_db: &'a Database) -> Self {
+        AttachmentImport {
+            source_db,
+            imported: HashMap::new(),
+            copied: Vec::new(),
+        }
+    }
+
+    fn import_id(&mut self, dest_db: &mut Database, source_id: AttachmentId) -> Option<AttachmentId> {
+        if let Some(&dest_id) = self.imported.get(&source_id) {
+            return Some(dest_id);
+        }
+        let source = self.source_db.attachments.get(&source_id)?;
+        let dest_id = match dest_db.attachments.values().find(|a| a.data == source.data) {
+            Some(existing) => existing.id,
+            None => {
+                let id = AttachmentId::next_free(dest_db);
+                dest_db.attachments.insert(
+                    id,
+                    Attachment {
+                        id,
+                        entries: HashSet::new(),
+                        data: source.data.clone(),
+                    },
+                );
+                self.copied.push(id);
+                id
+            }
+        };
+        self.imported.insert(source_id, dest_id);
+        Some(dest_id)
+    }
+
+    /// A copy of a source entry, and of its history, pointing at attachments in the destination.
+    fn import_entry(&mut self, dest_db: &mut Database, source: &Entry) -> Entry {
+        let mut entry = source.clone();
+        self.import_attachments(dest_db, &mut entry);
+        if let Some(history) = entry.history.as_mut() {
+            for version in &mut history.entries {
+                self.import_attachments(dest_db, version);
+            }
+        }
+        entry
+    }
+
+    fn import_attachments(&mut self, dest_db: &mut Database, entry: &mut Entry) {
+        let names: Vec<(String, AttachmentId)> = entry.attachments.drain().collect();
+        for (name, source_id) in names {
+            // an attachment missing from the source database has no data to bring over
+            if let Some(dest_id) = self.import_id(dest_db, source_id) {
+                entry.attachments.insert(name, dest_id);
+            }
+        }
+    }
+
+    /// Remove the copies that no entry ended up using.
+    fn drop_unused(&self, dest_db: &mut Database) {
+        for id in &self.copied {
+            if dest_db.attachments.get(id).is_some_and(|a| a.entries.is_empty()) {
+                dest_db.attachments.remove(id);
+            }
+        }
+    }
+}
+
 /// Merge entries from `source` into `dest`, appending to a log of the merge process.
 fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) -> Result<(), MergeError> {
     let dest_entries = dest_db.entries.keys().cloned().collect::<HashSet<_>>();
     let source_entries = source_db.entries.keys().cloned().collect::<HashSet<_>>();
+    let mut attachments = AttachmentImport::new(source_db);
 
     // Handle entries that exist only in source and might need to be added.
     for &id in source_entries.difference(&dest_entries) {
@@ -415,20 +501,28 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
 
         let parent_id = source_entry.parent().id();
 
-        let Some(mut parent) = dest_db.group_mut(parent_id) else {
+        if !dest_db.groups.contains_key(&parent_id) {
             log.warnings.push(format!(
                 "Cannot add entry {} because its parent group {} does not exist in the destination database.",
                 id, parent_id,
             ));
             continue;
-        };
+        }
+
+        let imported = attachments.import_entry(dest_db, &source_entry);
+
+        #[allow(clippy::expect_used)] // the parent group exists, checked above
+        let mut parent = dest_db.group_mut(parent_id).expect("parent group exists");
 
         #[allow(clippy::expect_used)] // id was selected from source_entries.difference(dest_entries)
         let mut entry = parent
             .add_entry_with_id(id)
             .expect("entry to be (re-)added should not exist yet");
 
-        *entry = source_entry.deref().clone();
+        *entry = imported;
+
+        let attachment_ids = dest_db.entry_attachment_ids(id);
+        dest_db.sync_attachment_refs(id, attachment_ids);
 
         log.events.push(MergeEvent {
             target: MergeEventTarget::Entry(id),
@@ -468,13 +562,16 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
     // Handle entries that exist in both source and destination.
     for &id in dest_entries.intersection(&source_entries) {
         #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
-        let mut dest_entry = dest_db.entry_mut(id).unwrap();
+        let source_entry = attachments.import_entry(dest_db, &source_db.entry(id).unwrap());
+
+        // what the entry refers to before the merge, to let go of what it no longer uses
+        let mut attachment_ids = dest_db.entry_attachment_ids(id);
 
         #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
-        let source_entry = source_db.entry(id).unwrap();
+        let mut dest_entry = dest_db.entry_mut(id).unwrap();
 
         let dest_parent_id = dest_entry.as_ref().parent().id();
-        let source_parent_id = source_entry.parent().id();
+        let source_parent_id = source_entry.parent;
 
         // has the entry moved?
         if dest_parent_id != source_parent_id {
@@ -572,8 +669,9 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
             dest_entry.background_color = source_entry.background_color.clone();
             dest_entry.override_url = source_entry.override_url.clone();
             dest_entry.quality_check = source_entry.quality_check;
+            dest_entry.attachments = source_entry.attachments.clone();
 
-            // TODO: attachments and custom_icons_id
+            // TODO: custom_icons_id
 
             log.events.push(MergeEvent {
                 target: MergeEventTarget::Entry(id),
@@ -583,7 +681,12 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
 
         dest_entry.history = Some(merged_history);
         dest_entry.times.location_changed = merged_location_timestamp;
+
+        attachment_ids.extend(dest_db.entry_attachment_ids(id));
+        dest_db.sync_attachment_refs(id, attachment_ids);
     }
+
+    attachments.drop_unused(dest_db);
 
     Ok(())
 }
