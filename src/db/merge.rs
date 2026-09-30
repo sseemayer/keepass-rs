@@ -8,6 +8,7 @@ use std::{collections::HashSet, ops::Deref};
 
 use chrono::NaiveDateTime;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::{
     db::{CustomIconId, Entry, EntryId, Group, GroupId, GroupRef, History, MoveGroupError, Times},
@@ -38,6 +39,30 @@ pub enum MergeEventTarget {
     Group(GroupId),
     /// A custom icon, identified by its UUID.
     Icon(CustomIconId),
+    /// A piece of database metadata.
+    Meta(MetaField),
+    /// The record of a deleted object, identified by the UUID of the deleted object.
+    DeletedObject(Uuid),
+}
+
+/// A piece of database metadata that a merge can change, see [`MergeEventTarget::Meta`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MetaField {
+    /// The database name.
+    DatabaseName,
+    /// The database description.
+    DatabaseDescription,
+    /// The default username for new entries.
+    DefaultUsername,
+    /// The database color.
+    Color,
+    /// The recycle bin group and whether the recycle bin is enabled.
+    RecycleBin,
+    /// The group containing entry templates.
+    EntryTemplatesGroup,
+    /// A database-wide custom data item, identified by its key.
+    CustomData(String),
 }
 
 /// A single change applied to the destination database during a merge.
@@ -87,6 +112,8 @@ impl Database {
         let mut log = MergeLog::default();
         merge_icons(self, other, &mut log)?;
         merge_groups(self, other, &mut log)?;
+        merge_meta(self, other, &mut log);
+        merge_deleted_objects(self, other, &mut log);
 
         Ok(log)
     }
@@ -786,6 +813,180 @@ fn merge_icons(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog)
     Ok(())
 }
 
+/// Merge the database metadata from `source` into `dest`.
+///
+/// Every value that has its own change timestamp is taken from `source` when that timestamp is
+/// newer. The color only has the settings timestamp. Custom data items are merged one by one, by
+/// their own modification times where available. Custom icons are handled by `merge_icons`.
+fn merge_meta(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) {
+    let source = &source_db.meta;
+    let mut updated = Vec::new();
+
+    let dest = &mut dest_db.meta;
+    let source_settings_newer = source.settings_changed > dest.settings_changed;
+
+    if source_settings_newer {
+        if dest.color != source.color {
+            dest.color = source.color.clone();
+            updated.push(MetaField::Color);
+        }
+        dest.settings_changed = source.settings_changed;
+    }
+
+    if source.database_name_changed > dest.database_name_changed {
+        if dest.database_name != source.database_name {
+            dest.database_name = source.database_name.clone();
+            updated.push(MetaField::DatabaseName);
+        }
+        dest.database_name_changed = source.database_name_changed;
+    }
+
+    if source.database_description_changed > dest.database_description_changed {
+        if dest.database_description != source.database_description {
+            dest.database_description = source.database_description.clone();
+            updated.push(MetaField::DatabaseDescription);
+        }
+        dest.database_description_changed = source.database_description_changed;
+    }
+
+    if source.default_username_changed > dest.default_username_changed {
+        if dest.default_username != source.default_username {
+            dest.default_username = source.default_username.clone();
+            updated.push(MetaField::DefaultUsername);
+        }
+        dest.default_username_changed = source.default_username_changed;
+    }
+
+    // Only point at a group that exists after the merge, preferring the newer side's choice.
+    let dest_groups = &dest_db.groups;
+    let pick_group = |preferred: Option<Uuid>, alternative: Option<Uuid>| {
+        let exists =
+            |uuid: Option<Uuid>| uuid.is_some_and(|uuid| dest_groups.contains_key(&GroupId::from_uuid(uuid)));
+        if !exists(preferred) && exists(alternative) {
+            alternative
+        } else {
+            preferred
+        }
+    };
+
+    let dest = &mut dest_db.meta;
+
+    if source.recyclebin_changed > dest.recyclebin_changed {
+        let recyclebin_uuid = pick_group(source.recyclebin_uuid, dest.recyclebin_uuid);
+        if dest.recyclebin_uuid != recyclebin_uuid || dest.recyclebin_enabled != source.recyclebin_enabled {
+            dest.recyclebin_uuid = recyclebin_uuid;
+            dest.recyclebin_enabled = source.recyclebin_enabled;
+            updated.push(MetaField::RecycleBin);
+        }
+        dest.recyclebin_changed = source.recyclebin_changed;
+    }
+
+    if source.entry_templates_group_changed > dest.entry_templates_group_changed {
+        let entry_templates_group = pick_group(source.entry_templates_group, dest.entry_templates_group);
+        if dest.entry_templates_group != entry_templates_group {
+            dest.entry_templates_group = entry_templates_group;
+            updated.push(MetaField::EntryTemplatesGroup);
+        }
+        dest.entry_templates_group_changed = source.entry_templates_group_changed;
+    }
+
+    let mut keys: Vec<&String> = source.custom_data.keys().collect();
+    keys.sort();
+    for key in keys {
+        #[allow(clippy::unwrap_used)] // key was taken from source.custom_data
+        let source_item = source.custom_data.get(key).unwrap();
+
+        let take_source = match dest.custom_data.get(key) {
+            None => true,
+            Some(dest_item) if dest_item == source_item => false,
+            Some(dest_item) => match (
+                dest_item.last_modification_time,
+                source_item.last_modification_time,
+            ) {
+                (Some(dest_time), Some(source_time)) => source_time > dest_time,
+                // a destination item with a timestamp was written by a newer program - keep it
+                (Some(_), None) => false,
+                (None, Some(_)) => true,
+                (None, None) => source_settings_newer,
+            },
+        };
+
+        if take_source {
+            dest.custom_data.insert(key.clone(), source_item.clone());
+            updated.push(MetaField::CustomData(key.clone()));
+        }
+    }
+
+    log.events.extend(updated.into_iter().map(|field| MergeEvent {
+        target: MergeEventTarget::Meta(field),
+        event_type: MergeEventType::Updated,
+    }));
+}
+
+/// Merge the records of deleted objects from `source` into `dest`.
+///
+/// This runs after everything else was merged. Records are kept for objects that are not in the
+/// merged database, so that a later merge with a third copy still knows about the deletion. For an
+/// object deleted on both sides, the earlier deletion time is kept, like KeePassXC does. Records for
+/// objects that are still in the merged database, because they were changed after being deleted,
+/// are dropped.
+fn merge_deleted_objects(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog) {
+    let present: HashSet<Uuid> = dest_db
+        .entries
+        .keys()
+        .map(|id| id.uuid())
+        .chain(dest_db.groups.keys().map(|id| id.uuid()))
+        .chain(dest_db.custom_icons.keys().map(|id| id.uuid()))
+        .collect();
+
+    let mut dropped: Vec<Uuid> = dest_db
+        .deleted_objects
+        .keys()
+        .filter(|uuid| present.contains(uuid))
+        .copied()
+        .collect();
+    dropped.sort();
+    for uuid in dropped {
+        dest_db.deleted_objects.remove(&uuid);
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::DeletedObject(uuid),
+            event_type: MergeEventType::Deleted,
+        });
+    }
+
+    let mut uuids: Vec<&Uuid> = source_db.deleted_objects.keys().collect();
+    uuids.sort();
+    for uuid in uuids {
+        if present.contains(uuid) {
+            continue;
+        }
+
+        #[allow(clippy::unwrap_used)] // uuid was taken from source_db.deleted_objects
+        let source_time = *source_db.deleted_objects.get(uuid).unwrap();
+
+        let event_type = match dest_db.deleted_objects.get(uuid) {
+            None => MergeEventType::Created,
+            Some(dest_time) if is_earlier(source_time, *dest_time) => MergeEventType::Updated,
+            Some(_) => continue,
+        };
+
+        dest_db.deleted_objects.insert(*uuid, source_time);
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::DeletedObject(*uuid),
+            event_type,
+        });
+    }
+}
+
+/// Whether deletion time `a` is known and earlier than `b`, or `b` is unknown.
+fn is_earlier(a: Option<NaiveDateTime>, b: Option<NaiveDateTime>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a < b,
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
+}
+
 fn have_groups_diverged(a: &Group, b: &Group) -> bool {
     let new_times = Times::default();
 
@@ -824,7 +1025,8 @@ fn have_entries_diverged(a: &Entry, b: &Entry) -> bool {
 mod merge_tests {
     use uuid::uuid;
 
-    use crate::db::{fields, EntryId, GroupId, History, Times};
+    use super::{MergeEventTarget, MergeEventType, MergeLog, MetaField};
+    use crate::db::{fields, CustomDataItem, CustomDataValue, EntryId, GroupId, History, Times};
     use crate::Database;
 
     const ROOT_GROUP_ID: GroupId = GroupId::from_uuid(uuid!("00000000-0000-0000-0000-000000000001"));
@@ -2415,5 +2617,268 @@ mod merge_tests {
 
         let icon = destination_db.custom_icon(icon_id).unwrap();
         assert_eq!(icon.data, vec![5, 6, 7, 8]);
+    }
+
+    /// A fixed point in time, `secs` seconds after the epoch.
+    fn at(secs: i64) -> chrono::NaiveDateTime {
+        chrono::DateTime::from_timestamp(secs, 0).unwrap().naive_utc()
+    }
+
+    fn meta_events(log: &MergeLog) -> Vec<MetaField> {
+        log.events
+            .iter()
+            .filter_map(|e| match &e.target {
+                MergeEventTarget::Meta(field) => Some(field.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn custom_data_item(value: &str, last_modification_time: Option<chrono::NaiveDateTime>) -> CustomDataItem {
+        CustomDataItem {
+            value: Some(CustomDataValue::String(value.to_string())),
+            last_modification_time,
+        }
+    }
+
+    /// Metadata that was changed more recently in source is taken, and merging again changes
+    /// nothing.
+    #[test]
+    fn test_meta_newer_in_source() {
+        let mut destination_db = create_test_database();
+        destination_db.meta.database_name = Some("old name".to_string());
+        destination_db.meta.database_name_changed = Some(at(1_000));
+        destination_db.meta.database_description_changed = Some(at(1_000));
+        destination_db.meta.default_username_changed = Some(at(1_000));
+        destination_db.meta.settings_changed = Some(at(1_000));
+
+        let mut source_db = destination_db.clone();
+        source_db.meta.database_name = Some("new name".to_string());
+        source_db.meta.database_name_changed = Some(at(2_000));
+        source_db.meta.database_description = Some("new description".to_string());
+        source_db.meta.database_description_changed = Some(at(2_000));
+        source_db.meta.default_username = Some("jdoe".to_string());
+        source_db.meta.default_username_changed = Some(at(2_000));
+        source_db.meta.color = Some("#FF0000".parse().unwrap());
+        source_db.meta.settings_changed = Some(at(2_000));
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(
+            meta_events(&merge_result),
+            vec![
+                MetaField::Color,
+                MetaField::DatabaseName,
+                MetaField::DatabaseDescription,
+                MetaField::DefaultUsername,
+            ]
+        );
+        assert_eq!(destination_db.meta, source_db.meta);
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.events.len(), 0);
+        assert_eq!(destination_db.meta, source_db.meta);
+    }
+
+    /// Metadata that was changed more recently in destination is kept.
+    #[test]
+    fn test_meta_newer_in_destination() {
+        let mut destination_db = create_test_database();
+        destination_db.meta.database_name = Some("new name".to_string());
+        destination_db.meta.database_name_changed = Some(at(2_000));
+        destination_db.meta.color = Some("#00FF00".parse().unwrap());
+        destination_db.meta.settings_changed = Some(at(2_000));
+
+        let mut source_db = destination_db.clone();
+        source_db.meta.database_name = Some("old name".to_string());
+        source_db.meta.database_name_changed = Some(at(1_000));
+        source_db.meta.color = Some("#FF0000".parse().unwrap());
+        source_db.meta.settings_changed = Some(at(1_000));
+
+        let expected_meta = destination_db.meta.clone();
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(merge_result.events.len(), 0);
+        assert_eq!(destination_db.meta, expected_meta);
+    }
+
+    /// A newer recycle bin setting is taken, unless the group it points to is not in the merged
+    /// database.
+    #[test]
+    fn test_meta_recycle_bin() {
+        let mut destination_db = create_test_database();
+        destination_db.meta.recyclebin_enabled = Some(true);
+        destination_db.meta.recyclebin_uuid = Some(GROUP1_ID.uuid());
+        destination_db.meta.recyclebin_changed = Some(at(1_000));
+
+        let mut source_db = destination_db.clone();
+        let bin_id = source_db
+            .root_mut()
+            .add_group()
+            .edit(|g| g.name = "Recycle Bin".to_string())
+            .id();
+        source_db.meta.recyclebin_uuid = Some(bin_id.uuid());
+        source_db.meta.recyclebin_changed = Some(at(2_000));
+
+        // the new recycle bin group is created by the merge, so it can be used
+        let mut merged_db = destination_db.clone();
+        let merge_result = merged_db.merge(&source_db).unwrap();
+        assert_eq!(meta_events(&merge_result), vec![MetaField::RecycleBin]);
+        assert_eq!(merged_db.meta.recyclebin_uuid, Some(bin_id.uuid()));
+        assert_eq!(merged_db.meta.recyclebin_changed, Some(at(2_000)));
+
+        // the new recycle bin group was deleted in destination later on, so keep the old one
+        destination_db
+            .deleted_objects
+            .insert(bin_id.uuid(), Some(Times::now()));
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(meta_events(&merge_result), vec![]);
+        assert!(destination_db.group(bin_id).is_none());
+        assert_eq!(destination_db.meta.recyclebin_uuid, Some(GROUP1_ID.uuid()));
+        assert_eq!(destination_db.meta.recyclebin_changed, Some(at(2_000)));
+    }
+
+    /// Database-wide custom data items are merged one by one.
+    #[test]
+    fn test_meta_custom_data() {
+        let mut destination_db = create_test_database();
+        let custom_data = &mut destination_db.meta.custom_data;
+        custom_data.insert(
+            "newer_in_source".into(),
+            custom_data_item("dest", Some(at(1_000))),
+        );
+        custom_data.insert("newer_in_dest".into(), custom_data_item("dest", Some(at(2_000))));
+        custom_data.insert("only_in_dest".into(), custom_data_item("dest", Some(at(1_000))));
+        custom_data.insert("untimed".into(), custom_data_item("dest", None));
+
+        let mut source_db = destination_db.clone();
+        let custom_data = &mut source_db.meta.custom_data;
+        custom_data.insert(
+            "newer_in_source".into(),
+            custom_data_item("source", Some(at(2_000))),
+        );
+        custom_data.insert(
+            "newer_in_dest".into(),
+            custom_data_item("source", Some(at(1_000))),
+        );
+        custom_data.remove("only_in_dest");
+        custom_data.insert("only_in_source".into(), custom_data_item("source", None));
+        custom_data.insert("untimed".into(), custom_data_item("source", None));
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        assert_eq!(
+            meta_events(&merge_result),
+            vec![
+                MetaField::CustomData("newer_in_source".into()),
+                MetaField::CustomData("only_in_source".into()),
+            ]
+        );
+
+        let value = |key: &str| destination_db.meta.custom_data.get(key).unwrap().value.clone();
+        let text = |s: &str| Some(CustomDataValue::String(s.to_string()));
+        assert_eq!(value("newer_in_source"), text("source"));
+        assert_eq!(value("newer_in_dest"), text("dest"));
+        assert_eq!(value("only_in_dest"), text("dest"));
+        assert_eq!(value("only_in_source"), text("source"));
+        // neither item has a timestamp and the source settings are not newer
+        assert_eq!(value("untimed"), text("dest"));
+
+        // with newer source settings, an item without timestamps is taken from source
+        source_db.meta.settings_changed = Some(Times::now());
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(
+            meta_events(&merge_result),
+            vec![MetaField::CustomData("untimed".into())]
+        );
+        assert_eq!(
+            destination_db.meta.custom_data.get("untimed").unwrap().value,
+            text("source")
+        );
+    }
+
+    /// Deletion records are copied for objects that the destination never had, keeping the earlier
+    /// deletion time for objects deleted on both sides.
+    #[test]
+    fn test_deleted_objects_are_merged() {
+        let mut destination_db = create_test_database();
+        let mut source_db = destination_db.clone();
+
+        let never_in_dest = uuid!("00000000-0000-0000-0000-0000000000a1");
+        let deleted_later_in_source = uuid!("00000000-0000-0000-0000-0000000000a2");
+        let deleted_earlier_in_source = uuid!("00000000-0000-0000-0000-0000000000a3");
+
+        destination_db
+            .deleted_objects
+            .insert(deleted_later_in_source, Some(at(1_000)));
+        destination_db
+            .deleted_objects
+            .insert(deleted_earlier_in_source, Some(at(2_000)));
+
+        source_db.deleted_objects.insert(never_in_dest, Some(at(1_000)));
+        source_db
+            .deleted_objects
+            .insert(deleted_later_in_source, Some(at(2_000)));
+        source_db
+            .deleted_objects
+            .insert(deleted_earlier_in_source, Some(at(1_000)));
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        let events: Vec<_> = merge_result
+            .events
+            .iter()
+            .map(|e| match (&e.target, &e.event_type) {
+                (MergeEventTarget::DeletedObject(uuid), MergeEventType::Created) => (*uuid, "created"),
+                (MergeEventTarget::DeletedObject(uuid), MergeEventType::Updated) => (*uuid, "updated"),
+                _ => panic!("unexpected event {:?}", e),
+            })
+            .collect();
+        assert_eq!(
+            events,
+            vec![(never_in_dest, "created"), (deleted_earlier_in_source, "updated")]
+        );
+
+        let deleted = &destination_db.deleted_objects;
+        assert_eq!(deleted.get(&never_in_dest), Some(&Some(at(1_000))));
+        assert_eq!(deleted.get(&deleted_later_in_source), Some(&Some(at(1_000))));
+        assert_eq!(deleted.get(&deleted_earlier_in_source), Some(&Some(at(1_000))));
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.events.len(), 0);
+    }
+
+    /// An entry deleted in destination but changed later in source comes back, and its deletion
+    /// record is dropped.
+    #[test]
+    fn test_deleted_object_record_dropped_when_restored() {
+        let mut destination_db = create_test_database();
+        let mut source_db = destination_db.clone();
+
+        destination_db.entry_mut(ENTRY1_ID).unwrap().remove();
+        destination_db
+            .deleted_objects
+            .insert(ENTRY1_ID.uuid(), Some(at(1_000)));
+
+        source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .edit_tracking(|e| e.set_unprotected(fields::TITLE, "changed after deletion"));
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+        let deleted_object_events: Vec<_> = merge_result
+            .events
+            .iter()
+            .filter(|e| matches!(e.target, MergeEventTarget::DeletedObject(_)))
+            .collect();
+        assert_eq!(deleted_object_events.len(), 1);
+        assert!(matches!(
+            (&deleted_object_events[0].target, &deleted_object_events[0].event_type),
+            (MergeEventTarget::DeletedObject(uuid), MergeEventType::Deleted) if *uuid == ENTRY1_ID.uuid()
+        ));
+        assert!(destination_db.entry(ENTRY1_ID).is_some());
+        assert!(!destination_db.deleted_objects.contains_key(&ENTRY1_ID.uuid()));
     }
 }
