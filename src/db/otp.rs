@@ -1,7 +1,7 @@
 use base32;
 use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
 use thiserror::Error;
-use totp_lite::{totp_custom, Sha1, Sha256, Sha512};
+use totp_rfc6238::{high_level::TotpGenerator, low_level::HashAlgorithm};
 use url::Url;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -169,12 +169,22 @@ impl std::str::FromStr for TOTP {
 impl TOTP {
     /// Get the one-time code for a specific unix timestamp
     pub fn value_at(&self, time: u64) -> OTPCode {
-        let code = match self.algorithm {
-            TOTPAlgorithm::Sha1 => totp_custom::<Sha1>(self.period, self.digits, &self.secret, time),
-            TOTPAlgorithm::Sha256 => totp_custom::<Sha256>(self.period, self.digits, &self.secret, time),
-            TOTPAlgorithm::Sha512 => totp_custom::<Sha512>(self.period, self.digits, &self.secret, time),
+        let totp: TotpGenerator = match self.algorithm {
+            TOTPAlgorithm::Sha1 => TotpGenerator::new()
+                .set_step(self.period).unwrap()
+                .set_digit(self.digits as usize).unwrap()
+                .set_hash_algorithm(HashAlgorithm::SHA1).build(),
+            TOTPAlgorithm::Sha256 => TotpGenerator::new()
+                .set_step(self.period).unwrap()
+                .set_digit(self.digits as usize).unwrap()
+                .set_hash_algorithm(HashAlgorithm::SHA256).build(),
+            TOTPAlgorithm::Sha512 => TotpGenerator::new()
+                .set_step(self.period).unwrap()
+                .set_digit(self.digits as usize).unwrap()
+                .set_hash_algorithm(HashAlgorithm::SHA512).build(),
         };
 
+        let code = totp.get_code_with(&self.secret, || time);
         let valid_for = Duration::from_secs(self.period - (time % self.period));
 
         OTPCode {
