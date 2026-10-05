@@ -171,17 +171,26 @@ impl TOTP {
     pub fn value_at(&self, time: u64) -> OTPCode {
         let totp: TotpGenerator = match self.algorithm {
             TOTPAlgorithm::Sha1 => TotpGenerator::new()
-                .set_step(self.period).unwrap()
-                .set_digit(self.digits as usize).unwrap()
-                .set_hash_algorithm(HashAlgorithm::SHA1).build(),
+                .set_step(self.period)
+                .unwrap()
+                .set_digit(self.digits as usize)
+                .unwrap()
+                .set_hash_algorithm(HashAlgorithm::SHA1)
+                .build(),
             TOTPAlgorithm::Sha256 => TotpGenerator::new()
-                .set_step(self.period).unwrap()
-                .set_digit(self.digits as usize).unwrap()
-                .set_hash_algorithm(HashAlgorithm::SHA256).build(),
+                .set_step(self.period)
+                .unwrap()
+                .set_digit(self.digits as usize)
+                .unwrap()
+                .set_hash_algorithm(HashAlgorithm::SHA256)
+                .build(),
             TOTPAlgorithm::Sha512 => TotpGenerator::new()
-                .set_step(self.period).unwrap()
-                .set_digit(self.digits as usize).unwrap()
-                .set_hash_algorithm(HashAlgorithm::SHA512).build(),
+                .set_step(self.period)
+                .unwrap()
+                .set_digit(self.digits as usize)
+                .unwrap()
+                .set_hash_algorithm(HashAlgorithm::SHA512)
+                .build(),
         };
 
         let code = totp.get_code_with(&self.secret, || time);
