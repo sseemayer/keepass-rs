@@ -62,6 +62,48 @@ mod file_read_tests {
         Ok(())
     }
 
+    /// KeePassXC 2.7 wrote this KDBX 3.1 file: four pooled binaries, one of
+    /// them empty (a self-closing `<Binary ID="2" Compressed="True"/>`), shared
+    /// out over two entries.
+    #[test]
+    fn open_kdbx3_with_attachments() -> Result<(), DatabaseOpenError> {
+        let path = Path::new("tests/resources/test_db_kdbx3_with_attachments.kdbx");
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("demopass"),
+        )?;
+        assert_eq!(db.config.version, DatabaseVersion::KDB3(1));
+
+        let root = db.root();
+        let attachments = |title: &str| -> Vec<(String, Vec<u8>)> {
+            let entry = root
+                .entries()
+                .find(|e| e.get_title() == Some(title))
+                .expect("entry exists");
+            let mut named: Vec<_> = entry
+                .attachments_named()
+                .map(|(name, a)| (name.to_string(), a.data.get().clone()))
+                .collect();
+            named.sort();
+            named
+        };
+
+        assert_eq!(
+            attachments("first"),
+            vec![
+                ("a.txt".to_string(), b"alpha".to_vec()),
+                ("b.txt".to_string(), b"bravo".to_vec()),
+                ("empty.txt".to_string(), Vec::new()),
+            ]
+        );
+        assert_eq!(
+            attachments("second"),
+            vec![("c.txt".to_string(), b"charlie".to_vec())]
+        );
+
+        Ok(())
+    }
+
     #[test]
     fn open_kdbx3_with_keyfile() -> Result<(), DatabaseOpenError> {
         let path = Path::new("tests/resources/test_db_with_keyfile.kdbx");
