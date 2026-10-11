@@ -199,7 +199,8 @@ pub struct Binaries {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Binary {
-    #[serde(rename = "$value")]
+    // KeePassXC writes an empty attachment as a self-closing element.
+    #[serde(rename = "$value", default)]
     pub value: String,
 
     #[serde(rename = "@ID")]
@@ -224,7 +225,8 @@ impl Binary {
             data = inner_decryptor.decrypt(&data)?;
         }
 
-        if self.compressed.unwrap_or(false) {
+        // A self-closing element carries no gzip stream even when marked Compressed.
+        if self.compressed.unwrap_or(false) && !data.is_empty() {
             data = crate::compression::GZipCompression.decompress(&data)?;
         }
 
