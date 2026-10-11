@@ -117,7 +117,9 @@ impl KeePassFile {
         // convert XML attachments (KDBX3-style) to database attachments
         if let Some(binaries) = self.meta.binaries.take() {
             for binary in binaries.binaries {
-                let id = crate::db::AttachmentId::next_free(&db);
+                // Entries point at the pool by the ID attribute (`<Value Ref="N"/>`),
+                // so the attachment has to keep that ID.
+                let id = crate::db::AttachmentId::new(binary.id);
                 let data = binary.xml_to_db(inner_decryptor)?;
 
                 attachments.insert(
