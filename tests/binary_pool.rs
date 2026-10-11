@@ -87,3 +87,52 @@ fn binary_pool_byte_patterns() {
         ],
     );
 }
+
+/// Removing an attachment leaves a gap in the attachment IDs; the file refers
+/// to attachments by position, so every later attachment must still read back
+/// as its own data — in entries and in their history.
+#[test]
+fn attachments_after_a_removed_one_keep_their_data() {
+    let combo = combo_by_label("aes256+none+inner-chacha20+argon2d");
+    let mut db = Database::with_config(combo.get_config());
+
+    let (first, second, third) = {
+        let mut root = db.root_mut();
+        let mut add = |title: &str, data: &[u8]| {
+            let mut e = root.add_entry();
+            e.set_unprotected("Title", title);
+            e.add_attachment("file.bin", Value::Unprotected(data.to_vec()));
+            e.id()
+        };
+        (
+            add("first", b"one"),
+            add("second", b"two"),
+            add("third", b"three"),
+        )
+    };
+    // The third entry also keeps an older version with an attachment of its own.
+    db.entry_mut(third).unwrap().edit_tracking(|e| {
+        e.add_attachment("new.bin", Value::Unprotected(b"four".to_vec()));
+    });
+
+    // The first attachment goes: ID 0 is free, 1..3 remain.
+    db.entry_mut(first).unwrap().remove_attachment_by_name("file.bin");
+    assert_eq!(db.num_attachments(), 3);
+
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let parsed = Database::open(&mut bytes.as_slice(), combo.get_key()).expect("reopen");
+
+    let data = |entry: &keepass::db::EntryRef<'_>, name: &str| {
+        entry.attachment_by_name(name).map(|a| a.data.get().clone())
+    };
+    assert_eq!(data(&parsed.entry(first).unwrap(), "file.bin"), None);
+    assert_eq!(
+        data(&parsed.entry(second).unwrap(), "file.bin"),
+        Some(b"two".to_vec())
+    );
+    let third = parsed.entry(third).unwrap();
+    assert_eq!(data(&third, "file.bin"), Some(b"three".to_vec()));
+    assert_eq!(data(&third, "new.bin"), Some(b"four".to_vec()));
+    let old = third.historical(0).expect("the older version");
+    assert_eq!(data(&old, "file.bin"), Some(b"three".to_vec()));
+}

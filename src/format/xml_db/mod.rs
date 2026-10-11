@@ -59,6 +59,15 @@ pub fn to_xml(
     db: &crate::db::Database,
     inner_encryptor: &mut dyn Cipher,
 ) -> Result<(Vec<u8>, Vec<crate::db::Value<Vec<u8>>>), DatabaseSaveError> {
+    // The file refers to attachments by their position in the inner header,
+    // so the IDs must run 0..n; removing an attachment leaves a gap.
+    let renumbered;
+    let db = if db.has_dense_attachment_ids() {
+        db
+    } else {
+        renumbered = db.with_dense_attachment_ids();
+        &renumbered
+    };
     let kdbx = KeePassFile::db_to_xml(db, inner_encryptor)?;
     let xml = quick_xml::se::to_string_with_root("KeePassFile", &kdbx)?
         .as_bytes()
