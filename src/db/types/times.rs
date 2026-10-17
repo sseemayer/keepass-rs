@@ -73,7 +73,7 @@ impl Times {
             creation: Some(now),
             last_modification: Some(now),
             last_access: Some(now),
-            expiry: None,
+            expiry: Some(now),
             location_changed: Some(now),
             expires: Some(false),
             usage_count: Some(0),
