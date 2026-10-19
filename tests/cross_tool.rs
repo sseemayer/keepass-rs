@@ -199,7 +199,7 @@ fn new_objects_have_all_timestamps() {
         assert!(times.creation.is_some());
         assert!(times.last_modification.is_some());
         assert!(times.last_access.is_some());
-        assert!(times.expiry.is_some());
+        assert_eq!(times.expiry, times.creation.expect("creation time"));
         assert!(times.location_changed.is_some());
     }
 }
