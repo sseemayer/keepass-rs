@@ -136,6 +136,54 @@ impl Database {
         self.group_mut(recyclebin_id)
     }
 
+    /// True when the attachment IDs are exactly 0..n, as a file stores them.
+    #[cfg(feature = "save_kdbx4")]
+    pub(crate) fn has_dense_attachment_ids(&self) -> bool {
+        (0..self.attachments.len()).all(|i| self.attachments.contains_key(&AttachmentId::new(i)))
+    }
+
+    /// A copy of the database whose attachment IDs run 0..n in their current
+    /// order, with every reference to them (entries and their history)
+    /// updated. Removing an attachment leaves a gap in the IDs, while a file
+    /// refers to attachments by their position in the inner header: without
+    /// this, every attachment after the gap would be read back as the next
+    /// one's data.
+    #[cfg(feature = "save_kdbx4")]
+    pub(crate) fn with_dense_attachment_ids(&self) -> Database {
+        let mut ids: Vec<AttachmentId> = self.attachments.keys().copied().collect();
+        ids.sort_by_key(|id| id.id());
+        let renumbered: HashMap<AttachmentId, AttachmentId> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (*id, AttachmentId::new(i)))
+            .collect();
+        let new_id = |id: &AttachmentId| renumbered.get(id).copied().unwrap_or(*id);
+
+        let mut db = self.clone();
+        db.attachments = self
+            .attachments
+            .values()
+            .map(|attachment| {
+                let mut attachment = attachment.clone();
+                attachment.id = new_id(&attachment.id);
+                (attachment.id, attachment)
+            })
+            .collect();
+        for entry in db.entries.values_mut() {
+            for id in entry.attachments.values_mut() {
+                *id = new_id(id);
+            }
+            if let Some(history) = entry.history.as_mut() {
+                for version in history.entries.iter_mut() {
+                    for id in version.attachments.values_mut() {
+                        *id = new_id(id);
+                    }
+                }
+            }
+        }
+        db
+    }
+
     /// Get the number of attachments in the database
     pub fn num_attachments(&self) -> usize {
         self.attachments.len()
