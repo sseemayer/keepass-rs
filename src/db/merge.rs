@@ -53,14 +53,6 @@ pub struct MergeEvent {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum MergeError {
-    /// Two entries with the same UUID have the same modification time but different contents.
-    #[error("Entries with UUID {0} have the same modification time but have diverged.")]
-    EntryModificationTimeNotUpdated(EntryId),
-
-    /// Two groups with the same UUID have the same modification time but different contents.
-    #[error("Groups with UUID {0} have the same modification time but have diverged.")]
-    GroupModificationTimeNotUpdated(GroupId),
-
     /// An entry has two history items sharing the same timestamp, so their order is ambiguous.
     #[error("Found history entries with the same timestamp ({0}) for entry {1}.")]
     DuplicateHistoryEntries(NaiveDateTime, EntryId),
