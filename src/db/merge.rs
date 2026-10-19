@@ -2148,11 +2148,11 @@ mod merge_tests {
         let expiry = Times::now();
         source_db.group_mut(GROUP1_ID).unwrap().edit_tracking(|g| {
             g.tags = vec!["important".to_string()];
-            g.times.expiry = Some(expiry);
+            g.times.expiry = expiry;
             g.times.expires = Some(true);
         });
         source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
-            e.times.expiry = Some(expiry);
+            e.times.expiry = expiry;
             e.times.expires = Some(true);
             e.times.last_modification = Some(Times::now());
         });
@@ -2170,11 +2170,11 @@ mod merge_tests {
 
         let group = destination_db.group(GROUP1_ID).unwrap();
         assert_eq!(group.tags, vec!["important".to_string()]);
-        assert_eq!(group.times.expiry, Some(expiry));
+        assert_eq!(group.times.expiry, expiry);
         assert_eq!(group.times.expires, Some(true));
 
         let entry = destination_db.entry(ENTRY1_ID).unwrap();
-        assert_eq!(entry.times.expiry, Some(expiry));
+        assert_eq!(entry.times.expiry, expiry);
         assert_eq!(entry.times.expires, Some(true));
 
         let tagged = destination_db

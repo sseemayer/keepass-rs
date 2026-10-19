@@ -14,8 +14,8 @@ pub struct Times {
     pub last_modification_time: Option<Timestamp>,
     #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub last_access_time: Option<Timestamp>,
-    #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
-    pub expiry_time: Option<Timestamp>,
+    #[serde(default)]
+    pub expiry_time: Timestamp,
 
     #[serde(default, with = "cs_opt_bool", skip_serializing_if = "Option::is_none")]
     pub expires: Option<bool>,
@@ -32,7 +32,7 @@ impl From<Times> for crate::db::Times {
             creation: t.creation_time.as_ref().map(|ts| ts.time),
             last_modification: t.last_modification_time.as_ref().map(|ts| ts.time),
             last_access: t.last_access_time.as_ref().map(|ts| ts.time),
-            expiry: t.expiry_time.as_ref().map(|ts| ts.time),
+            expiry: t.expiry_time.time,
             location_changed: t.location_changed.as_ref().map(|ts| ts.time),
             expires: t.expires,
             usage_count: t.usage_count,
@@ -46,7 +46,7 @@ impl From<crate::db::Times> for Times {
             creation_time: t.creation.map(|time| time.into()),
             last_modification_time: t.last_modification.map(|time| time.into()),
             last_access_time: t.last_access.map(|time| time.into()),
-            expiry_time: t.expiry.map(|time| time.into()),
+            expiry_time: t.expiry.into(),
             location_changed: t.location_changed.map(|time| time.into()),
             expires: t.expires,
             usage_count: t.usage_count,
@@ -90,7 +90,7 @@ mod tests {
         );
 
         assert_eq!(
-            times.expiry_time.unwrap().time,
+            times.expiry_time.time,
             chrono::NaiveDateTime::parse_from_str("2023-12-31T23:59:59", "%Y-%m-%dT%H:%M:%S").unwrap()
         );
 
