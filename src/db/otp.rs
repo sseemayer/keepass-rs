@@ -29,10 +29,20 @@ impl std::str::FromStr for TOTPAlgorithm {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "SHA1" => Ok(TOTPAlgorithm::Sha1),
-            "SHA256" => Ok(TOTPAlgorithm::Sha256),
-            "SHA512" => Ok(TOTPAlgorithm::Sha512),
+            "SHA1" => Ok(Self::Sha1),
+            "SHA256" => Ok(Self::Sha256),
+            "SHA512" => Ok(Self::Sha512),
             _ => Err(TOTPError::BadAlgorithm(s.to_string())),
+        }
+    }
+}
+
+impl TOTPAlgorithm {
+    fn to_hash_algorithm(&self) -> HashAlgorithm {
+        match self {
+            Self::Sha1 => HashAlgorithm::SHA1,
+            Self::Sha256 => HashAlgorithm::SHA256,
+            Self::Sha512 => HashAlgorithm::SHA512,
         }
     }
 }
@@ -129,33 +139,32 @@ impl std::str::FromStr for TOTP {
         if parsed.scheme() != "otpauth" {
             return Err(TOTPError::BadScheme(parsed.scheme().to_string()));
         }
-        let query_pairs = parsed.query_pairs();
 
-        let label: String = parsed.path().trim_start_matches("/").to_string();
+        // Preserve the existing behavior: retain percent-encoding in the label.
+        let label = parsed.path().trim_start_matches('/').to_string();
+
         let mut secret: Option<String> = None;
         let mut issuer: Option<String> = None;
-        let mut period: u64 = DEFAULT_PERIOD;
-        let mut digits: u32 = DEFAULT_DIGITS;
-        let mut algorithm: TOTPAlgorithm = TOTPAlgorithm::Sha1;
+        let mut period = DEFAULT_PERIOD;
+        let mut digits = DEFAULT_DIGITS;
+        let mut algorithm = TOTPAlgorithm::Sha1;
 
-        for pair in query_pairs {
-            let (k, v) = pair;
-            match k.as_ref() {
-                "secret" => secret = Some(v.to_string()),
-                "issuer" => issuer = Some(v.to_string()),
-                "period" => period = v.parse()?,
-                "digits" => digits = v.parse()?,
-                "algorithm" => algorithm = v.parse()?,
+        for (key, value) in parsed.query_pairs() {
+            match key.as_ref() {
+                "secret" => secret = Some(value.to_string()),
+                "issuer" => issuer = Some(value.to_string()),
+                "period" => period = value.parse()?,
+                "digits" => digits = value.parse()?,
+                "algorithm" => algorithm = value.parse()?,
                 _ => {}
             }
         }
 
         let secret = secret.ok_or(TOTPError::MissingField("secret"))?;
+        let secret = base32::decode(base32::Alphabet::Rfc4648 { padding: true }, &secret)
+            .ok_or(TOTPError::Base32)?;
 
-        let secret =
-            base32::decode(base32::Alphabet::Rfc4648 { padding: true }, &secret).ok_or(TOTPError::Base32)?;
-
-        Ok(TOTP {
+        Ok(Self {
             label,
             secret,
             issuer,
@@ -167,45 +176,43 @@ impl std::str::FromStr for TOTP {
 }
 
 impl TOTP {
+    fn generator(&self) -> TotpGenerator {
+        TotpGenerator::new()
+            .set_step(self.period)
+            .unwrap_or_else(|builder| builder)
+            .set_digit((self.digits as usize).min(10))
+            .unwrap_or_else(|builder| builder)
+            .set_hash_algorithm(self.algorithm.to_hash_algorithm())
+            .build()
+    }
+
     /// Get the one-time code for a specific unix timestamp
     pub fn value_at(&self, time: u64) -> OTPCode {
-        let totp: TotpGenerator = match self.algorithm {
-            TOTPAlgorithm::Sha1 => TotpGenerator::new()
-                .set_step(self.period)
-                .unwrap()
-                .set_digit(self.digits as usize)
-                .unwrap()
-                .set_hash_algorithm(HashAlgorithm::SHA1)
-                .build(),
-            TOTPAlgorithm::Sha256 => TotpGenerator::new()
-                .set_step(self.period)
-                .unwrap()
-                .set_digit(self.digits as usize)
-                .unwrap()
-                .set_hash_algorithm(HashAlgorithm::SHA256)
-                .build(),
-            TOTPAlgorithm::Sha512 => TotpGenerator::new()
-                .set_step(self.period)
-                .unwrap()
-                .set_digit(self.digits as usize)
-                .unwrap()
-                .set_hash_algorithm(HashAlgorithm::SHA512)
-                .build(),
+        let period = Duration::from_secs(self.period);
+        let (code, valid_for) = if self.period == 0 {
+            (String::new(), Duration::ZERO)
+        } else if self.digits == 0 {
+            (
+                "0".to_string(),
+                Duration::from_secs(self.period - (time % self.period)),
+            )
+        } else {
+            let code = self.generator().get_code_with(&self.secret, || time);
+            let valid_for = Duration::from_secs(self.period - (time % self.period));
+            (code, valid_for)
         };
-
-        let code = totp.get_code_with(&self.secret, || time);
-        let valid_for = Duration::from_secs(self.period - (time % self.period));
 
         OTPCode {
             code,
             valid_for,
-            period: Duration::from_secs(self.period),
+            period,
         }
     }
 
     /// Get the current one-time code
     pub fn value_now(&self) -> Result<OTPCode, SystemTimeError> {
-        let time: u64 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+
         Ok(self.value_at(time))
     }
 
@@ -232,7 +239,10 @@ mod kdbx4_otp_tests {
     fn kdbx4_entry() -> Result<(), Box<dyn std::error::Error>> {
         // KDBX4 database format Base64 encodes ExpiryTime (and all other XML timestamps)
         let path = Path::new("tests/resources/test_db_kdbx4_with_totp_entry.kdbx");
-        let db = Database::open(&mut File::open(path)?, DatabaseKey::new().with_password("test"))?;
+        let db = Database::open(
+            &mut File::open(path)?,
+            DatabaseKey::new().with_password("test"),
+        )?;
 
         let otp_str =
             "otpauth://totp/KeePassXC:none?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=KeePassXC";
@@ -241,6 +251,7 @@ mod kdbx4_otp_tests {
         let entry = root
             .entry_by_name("this entry has totp")
             .ok_or("Entry not found")?;
+
         assert_eq!(entry.get_title(), Some("this entry has totp"));
         assert_eq!(entry.get_raw_otp_value(), Some(otp_str));
 
@@ -307,7 +318,49 @@ mod kdbx4_otp_tests {
             algorithm: TOTPAlgorithm::Sha1,
         };
 
-        assert_eq!(totp.value_at(1234).code, "806863")
+        assert_eq!(totp.value_at(1234).code, "806863");
+    }
+
+    #[test]
+    fn totp_zero_period() {
+        let totp = TOTP {
+            label: "KeePassXC:none".to_string(),
+            secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
+            issuer: Some("KeePassXC".to_string()),
+            period: 0,
+            digits: 6,
+            algorithm: TOTPAlgorithm::Sha1,
+        };
+
+        assert_eq!(totp.value_at(1234).code, "");
+    }
+
+    #[test]
+    fn totp_zero_digits() {
+        let totp = TOTP {
+            label: "KeePassXC:none".to_string(),
+            secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
+            issuer: Some("KeePassXC".to_string()),
+            period: 30,
+            digits: 0,
+            algorithm: TOTPAlgorithm::Sha1,
+        };
+
+        assert_eq!(totp.value_at(1234).code, "0");
+    }
+
+    #[test]
+    fn totp_eleven_digits() {
+        let totp = TOTP {
+            label: "KeePassXC:none".to_string(),
+            secret: b"Hello!\xDE\xAD\xBE\xEF".to_vec(),
+            issuer: Some("KeePassXC".to_string()),
+            period: 30,
+            digits: 11,
+            algorithm: TOTPAlgorithm::Sha1,
+        };
+
+        assert_eq!(totp.value_at(1234).code, "0638806863");
     }
 
     #[test]
