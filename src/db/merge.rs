@@ -181,6 +181,7 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
             dest_group.times = source.times.clone();
             dest_group.name = source.name.clone();
             dest_group.notes = source.notes.clone();
+            dest_group.tags = source.tags.clone();
             dest_group.icon = source.icon.clone();
             dest_group.custom_data = source.custom_data.clone();
             dest_group.is_expanded = source.is_expanded;
@@ -340,9 +341,12 @@ fn merge_groups(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog
         // The source group is more recent than the destination group. Update dest with source.
         dest.name = source.name.clone();
         dest.notes = source.notes.clone();
+        dest.tags = source.tags.clone();
         dest.icon = source.icon.clone();
         dest.custom_data = source.custom_data.clone();
         dest.times.last_modification = source.times.last_modification.or(dest.times.last_modification);
+        dest.times.expiry = source.times.expiry;
+        dest.times.expires = source.times.expires;
         dest.is_expanded = source.is_expanded;
         dest.default_autotype_sequence = source.default_autotype_sequence.clone();
         dest.enable_autotype = source.enable_autotype;
@@ -562,6 +566,8 @@ fn merge_entries(dest_db: &mut Database, source_db: &Database, log: &mut MergeLo
 
             // The source entry is more recent than the destination entry. Replace dest with source.
             dest_entry.times.last_modification = source_entry.times.last_modification;
+            dest_entry.times.expiry = source_entry.times.expiry;
+            dest_entry.times.expires = source_entry.times.expires;
             dest_entry.fields = source_entry.fields.clone();
             dest_entry.autotype = source_entry.autotype.clone();
             dest_entry.tags = source_entry.tags.clone();
@@ -2130,6 +2136,54 @@ mod merge_tests {
     }
 
     /// Test that a group updated in source is merged into destination when merging.
+    /// Test that a group's tags and expiry, and an entry's expiry, come over from a newer
+    /// source, and a new group arrives with its tags.
+    #[test]
+    fn test_tags_and_expiry_from_source() {
+        let mut destination_db = create_test_database();
+        let mut source_db = destination_db.clone();
+
+        sleep();
+
+        let expiry = Times::now();
+        source_db.group_mut(GROUP1_ID).unwrap().edit_tracking(|g| {
+            g.tags = vec!["important".to_string()];
+            g.times.expiry = Some(expiry);
+            g.times.expires = Some(true);
+        });
+        source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.times.expiry = Some(expiry);
+            e.times.expires = Some(true);
+            e.times.last_modification = Some(Times::now());
+        });
+        source_db
+            .group_mut(GROUP2_ID)
+            .unwrap()
+            .add_group()
+            .edit_tracking(|g| {
+                g.name = "tagged".to_string();
+                g.tags = vec!["new".to_string()];
+            });
+
+        let merge_result = destination_db.merge(&source_db).unwrap();
+        assert_eq!(merge_result.warnings.len(), 0);
+
+        let group = destination_db.group(GROUP1_ID).unwrap();
+        assert_eq!(group.tags, vec!["important".to_string()]);
+        assert_eq!(group.times.expiry, Some(expiry));
+        assert_eq!(group.times.expires, Some(true));
+
+        let entry = destination_db.entry(ENTRY1_ID).unwrap();
+        assert_eq!(entry.times.expiry, Some(expiry));
+        assert_eq!(entry.times.expires, Some(true));
+
+        let tagged = destination_db
+            .iter_all_groups()
+            .find(|g| g.name == "tagged")
+            .unwrap();
+        assert_eq!(tagged.tags, vec!["new".to_string()]);
+    }
+
     #[test]
     fn test_group_update_in_source() {
         let mut destination_db = create_test_database();

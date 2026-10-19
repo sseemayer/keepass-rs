@@ -619,15 +619,26 @@ impl EntryMut<'_> {
             }
         }
 
-        // remove references to this entry from attachments
-        self.foreach_attachment_mut(|mut attachment| {
-            attachment.entries.retain(|&(entry_id, _)| entry_id != id);
-
-            // if this was the last entry referencing the attachment, remove it from the database
-            if attachment.entries.is_empty() {
-                attachment.remove();
+        // remove references to this entry from the attachments of every version of it:
+        // a file only an older version used would otherwise stay in the database
+        let mut attachment_ids: Vec<AttachmentId> = self.attachments.values().copied().collect();
+        if let Some(history) = &self.history {
+            for version in &history.entries {
+                attachment_ids.extend(version.attachments.values().copied());
             }
-        });
+        }
+        attachment_ids.sort_by_key(|attachment_id| attachment_id.id());
+        attachment_ids.dedup();
+        for attachment_id in attachment_ids {
+            if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
+                attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+                // if this was the last entry referencing the attachment, remove it from the database
+                if attachment.entries.is_empty() {
+                    attachment.remove();
+                }
+            }
+        }
 
         let entry = self.database.entries.remove(&self.id).expect("Entry not found");
 
