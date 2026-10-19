@@ -87,3 +87,113 @@ fn binary_pool_byte_patterns() {
         ],
     );
 }
+
+/// Removing an attachment leaves a gap in the attachment IDs; the file refers
+/// to attachments by position, so every later attachment must still read back
+/// as its own data — in entries and in their history.
+#[test]
+fn attachments_after_a_removed_one_keep_their_data() {
+    let combo = combo_by_label("aes256+none+inner-chacha20+argon2d");
+    let mut db = Database::with_config(combo.get_config());
+
+    let (first, second, third) = {
+        let mut root = db.root_mut();
+        let mut add = |title: &str, data: &[u8]| {
+            let mut e = root.add_entry();
+            e.set_unprotected("Title", title);
+            e.add_attachment("file.bin", Value::Unprotected(data.to_vec()));
+            e.id()
+        };
+        (
+            add("first", b"one"),
+            add("second", b"two"),
+            add("third", b"three"),
+        )
+    };
+    // The third entry also keeps an older version with an attachment of its own.
+    db.entry_mut(third).unwrap().edit_tracking(|e| {
+        e.add_attachment("new.bin", Value::Unprotected(b"four".to_vec()));
+    });
+
+    // The first attachment goes: ID 0 is free, 1..3 remain.
+    db.entry_mut(first).unwrap().remove_attachment_by_name("file.bin");
+    assert_eq!(db.num_attachments(), 3);
+
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let parsed = Database::open(&mut bytes.as_slice(), combo.get_key()).expect("reopen");
+
+    let data = |entry: &keepass::db::EntryRef<'_>, name: &str| {
+        entry.attachment_by_name(name).map(|a| a.data.get().clone())
+    };
+    assert_eq!(data(&parsed.entry(first).unwrap(), "file.bin"), None);
+    assert_eq!(
+        data(&parsed.entry(second).unwrap(), "file.bin"),
+        Some(b"two".to_vec())
+    );
+    let third = parsed.entry(third).unwrap();
+    assert_eq!(data(&third, "file.bin"), Some(b"three".to_vec()));
+    assert_eq!(data(&third, "new.bin"), Some(b"four".to_vec()));
+    let old = third.historical(0).expect("the older version");
+    assert_eq!(data(&old, "file.bin"), Some(b"three".to_vec()));
+}
+
+/// Removing an entry lets go of the files its older versions used too: a file
+/// only the history refers to must leave the database and the saved file,
+/// while other entries keep theirs.
+#[test]
+fn removing_an_entry_drops_the_files_only_its_history_used() {
+    let combo = combo_by_label("aes256+none+inner-chacha20+argon2d");
+    let mut db = Database::with_config(combo.get_config());
+
+    // The kept file comes first, so removing the other leaves no gap in the IDs.
+    let (gone, kept) = {
+        let mut root = db.root_mut();
+        let mut k = root.add_entry();
+        k.add_attachment("kept.bin", Value::Unprotected(b"kept".to_vec()));
+        let kept = k.id();
+        let mut e = root.add_entry();
+        e.add_attachment("old.bin", Value::Unprotected(b"old".to_vec()));
+        (e.id(), kept)
+    };
+    // An older version keeps the file; the current one no longer has it (as
+    // a file saved by another client can be).
+    db.entry_mut(gone)
+        .unwrap()
+        .edit_tracking(|e| e.set_unprotected("Title", "newer"));
+    let mut without = db.clone();
+    without
+        .entry_mut(gone)
+        .unwrap()
+        .remove_attachment_by_name("old.bin");
+    let current = (*without.entry(gone).unwrap()).clone();
+    *db.entry_mut(gone).unwrap() = current;
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let mut db = Database::open(&mut bytes.as_slice(), combo.get_key()).expect("reopen");
+    assert_eq!(db.entry(gone).unwrap().attachments().count(), 0);
+    assert_eq!(
+        db.entry(gone)
+            .unwrap()
+            .historical(0)
+            .unwrap()
+            .attachments()
+            .count(),
+        1
+    );
+    assert_eq!(db.num_attachments(), 2);
+
+    db.entry_mut(gone).unwrap().track_changes().remove();
+    assert_eq!(
+        db.num_attachments(),
+        1,
+        "the file only the removed history used is gone"
+    );
+
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let parsed = Database::open(&mut bytes.as_slice(), combo.get_key()).expect("reopen");
+    assert_eq!(parsed.num_attachments(), 1);
+    let kept = parsed.entry(kept).unwrap();
+    assert_eq!(
+        kept.attachment_by_name("kept.bin").map(|a| a.data.get().clone()),
+        Some(b"kept".to_vec())
+    );
+}
