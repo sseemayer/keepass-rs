@@ -82,6 +82,26 @@ impl Database {
 
         Ok(log)
     }
+
+    /// Merge another version of the database into self, using a common ancestor.
+    ///
+    /// The ancestor lets the merge distinguish changes made on only one side from true
+    /// conflicts. A change made on only one side is applied without a warning. If both sides
+    /// changed the same object differently, the merge keeps the version with the most recent
+    /// modification time and records a warning.
+    ///
+    /// Objects are matched by UUID, just like [`Database::merge`].
+    pub fn merge_with_ancestor(
+        &mut self,
+        other: &Database,
+        ancestor: &Database,
+    ) -> Result<MergeLog, MergeError> {
+        let mut log = MergeLog::default();
+        merge_icons_with_ancestor(self, other, ancestor, &mut log)?;
+        merge_groups_with_ancestor(self, other, ancestor, &mut log)?;
+
+        Ok(log)
+    }
 }
 
 /// Get the last update time (modification or location change) of a group, considering its entries and subgroups.
@@ -816,6 +836,743 @@ fn merge_icons(dest_db: &mut Database, source_db: &Database, log: &mut MergeLog)
     }
 
     Ok(())
+}
+
+/// Merge custom icons using a common ancestor.
+fn merge_icons_with_ancestor(
+    dest_db: &mut Database,
+    source_db: &Database,
+    base_db: &Database,
+    log: &mut MergeLog,
+) -> Result<(), MergeError> {
+    let dest_icons = dest_db.custom_icons.keys().cloned().collect::<HashSet<_>>();
+    let source_icons = source_db.custom_icons.keys().cloned().collect::<HashSet<_>>();
+
+    // Icons that exist only in the source.
+    for &id in source_icons.difference(&dest_icons) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let source_icon = source_db.custom_icons.get(&id).unwrap();
+        let deletion = dest_db.deleted_objects.get(&id.uuid()).copied().flatten();
+
+        let source_changed = match base_db.custom_icons.get(&id) {
+            Some(base_icon) => icon_contents_changed(base_icon, source_icon),
+            None => true,
+        };
+
+        if !source_changed {
+            // The source still has the version from the ancestor, so the deletion in the
+            // destination wins.
+            continue;
+        }
+
+        if deletion_wins(deletion, source_icon.last_modification_time) {
+            log.warnings.push(format!(
+                "Custom icon {} was deleted in the destination but modified in the source since the common ancestor; kept the deletion.",
+                id,
+            ));
+            continue;
+        }
+
+        if base_db.custom_icons.contains_key(&id) {
+            log.warnings.push(format!(
+                "Custom icon {} was deleted in the destination but modified in the source since the common ancestor; restored the source's version.",
+                id,
+            ));
+        }
+
+        dest_db.custom_icons.insert(id, source_icon.clone());
+        dest_db.deleted_objects.remove(&id.uuid());
+
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::Icon(id),
+            event_type: MergeEventType::Created,
+        });
+    }
+
+    // Icons that exist only in the destination.
+    for &id in dest_icons.difference(&source_icons) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let dest_icon = dest_db.custom_icons.get(&id).unwrap();
+        let deletion = source_db.deleted_objects.get(&id.uuid()).copied().flatten();
+
+        let Some(base_icon) = base_db.custom_icons.get(&id) else {
+            // The icon was added in the destination only.
+            continue;
+        };
+
+        if !icon_contents_changed(base_icon, dest_icon) {
+            dest_db.custom_icons.remove(&id);
+            dest_db.deleted_objects.insert(id.uuid(), deletion);
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Icon(id),
+                event_type: MergeEventType::Deleted,
+            });
+            continue;
+        }
+
+        if deletion_wins(deletion, dest_icon.last_modification_time) {
+            log.warnings.push(format!(
+                "Custom icon {} was modified in the destination but deleted in the source since the common ancestor; kept the deletion.",
+                id,
+            ));
+            dest_db.custom_icons.remove(&id);
+            dest_db.deleted_objects.insert(id.uuid(), deletion);
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Icon(id),
+                event_type: MergeEventType::Deleted,
+            });
+        } else {
+            log.warnings.push(format!(
+                "Custom icon {} was modified in the destination but deleted in the source since the common ancestor; kept the modified version.",
+                id,
+            ));
+        }
+    }
+
+    // Icons that exist in both databases.
+    for &id in dest_icons.intersection(&source_icons) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let dest_icon = dest_db.custom_icons.get(&id).unwrap();
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let source_icon = source_db.custom_icons.get(&id).unwrap();
+
+        let source_changed = match base_db.custom_icons.get(&id) {
+            Some(base_icon) => icon_contents_changed(base_icon, source_icon),
+            None => true,
+        };
+        let dest_changed = match base_db.custom_icons.get(&id) {
+            Some(base_icon) => icon_contents_changed(base_icon, dest_icon),
+            None => true,
+        };
+
+        if !source_changed {
+            continue;
+        }
+
+        if dest_changed && icon_contents_changed(dest_icon, source_icon) {
+            log.warnings.push(format!(
+                "Custom icon {} was modified differently in both databases since the common ancestor; kept the most recently modified version.",
+                id,
+            ));
+
+            if !newer(
+                dest_icon.last_modification_time,
+                source_icon.last_modification_time,
+            ) {
+                continue;
+            }
+        }
+
+        if !dest_changed || icon_contents_changed(dest_icon, source_icon) {
+            let mut merged_icon = source_icon.clone();
+            merged_icon.entries.extend(dest_icon.entries.iter().copied());
+            merged_icon.groups.extend(dest_icon.groups.iter().copied());
+            dest_db.custom_icons.insert(id, merged_icon);
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Icon(id),
+                event_type: MergeEventType::Updated,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Merge groups using a common ancestor.
+#[allow(clippy::unwrap_used, clippy::expect_used)] // IDs are taken from the source and destination maps.
+fn merge_groups_with_ancestor(
+    dest_db: &mut Database,
+    source_db: &Database,
+    base_db: &Database,
+    log: &mut MergeLog,
+) -> Result<(), MergeError> {
+    let dest_groups = dest_db.groups.keys().cloned().collect::<HashSet<_>>();
+    let source_groups = source_db.groups.keys().cloned().collect::<HashSet<_>>();
+
+    // Groups that exist only in the source might need to be added.
+    let mut groups_to_add = HashSet::new();
+    for &id in source_groups.difference(&dest_groups) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let source = source_db.group(id).unwrap();
+        let deletion = dest_db.deleted_objects.get(&id.uuid()).copied().flatten();
+
+        let source_changed = match base_db.group(id) {
+            Some(_) => group_tree_changed_from_base(base_db, source_db, id),
+            None => true,
+        };
+
+        if !source_changed {
+            // The source still has the ancestor's version, so the deletion wins.
+            continue;
+        }
+
+        if deletion_wins(deletion, get_last_update(source)) {
+            if base_db.group(id).is_some() {
+                log.warnings.push(format!(
+                    "Group {} was deleted in the destination but modified in the source since the common ancestor; kept the deletion.",
+                    id,
+                ));
+            }
+            continue;
+        }
+
+        if base_db.group(id).is_some() {
+            log.warnings.push(format!(
+                "Group {} was deleted in the destination but modified in the source since the common ancestor; restored the source's version.",
+                id,
+            ));
+        }
+
+        groups_to_add.insert(id);
+    }
+
+    // Add groups before entries and nested groups, so their parents exist.
+    let mut add_stack = Vec::new();
+    loop {
+        if add_stack.is_empty() {
+            if let Some(&next) = groups_to_add.iter().next() {
+                add_stack.push(next);
+                groups_to_add.remove(&next);
+            } else {
+                break;
+            }
+        }
+
+        #[allow(clippy::expect_used)] // stack is guaranteed to be non-empty
+        let &id = add_stack.last().expect("non-empty queue");
+        #[allow(clippy::expect_used)] // id is guaranteed to exist in source
+        let source = source_db.group(id).expect("source group exists");
+        let parent_id = source.parent().expect("cannot re-add root").id();
+
+        if let Some(mut parent) = dest_db.group_mut(parent_id) {
+            #[allow(clippy::expect_used)] // id was selected from source_groups.difference(dest_groups)
+            let mut dest_group = parent
+                .add_group_with_id(id)
+                .expect("group to be re-added should not exist yet");
+
+            dest_group.times = source.times.clone();
+            copy_group_contents(&mut dest_group, &source);
+            dest_db.deleted_objects.remove(&id.uuid());
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Group(id),
+                event_type: MergeEventType::Created,
+            });
+
+            add_stack.pop();
+        } else if groups_to_add.remove(&parent_id) {
+            add_stack.push(parent_id);
+        } else {
+            log.warnings.push(format!(
+                "Cannot restore group {} because its parent group {} does not exist in the destination database.",
+                id, parent_id,
+            ));
+            add_stack.pop();
+        }
+    }
+
+    // Groups that exist only in the destination might need to be deleted.
+    let mut to_delete = Vec::new();
+    for &id in dest_groups.difference(&source_groups) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let dest = dest_db.group(id).unwrap();
+        let deletion = source_db.deleted_objects.get(&id.uuid()).copied().flatten();
+
+        let Some(_) = base_db.group(id) else {
+            // The group was added in the destination only.
+            continue;
+        };
+
+        let dest_changed = group_tree_changed_from_base(base_db, dest_db, id);
+
+        if !dest_changed || deletion_wins(deletion, get_last_update(dest)) {
+            if dest_changed {
+                log.warnings.push(format!(
+                    "Group {} was deleted in the source but modified in the destination since the common ancestor; kept the deletion.",
+                    id,
+                ));
+            }
+
+            to_delete.push(id);
+            dest_db.deleted_objects.insert(id.uuid(), deletion);
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Group(id),
+                event_type: MergeEventType::Deleted,
+            });
+        } else {
+            log.warnings.push(format!(
+                "Group {} was deleted in the source but modified in the destination since the common ancestor; kept the modified version.",
+                id,
+            ));
+        }
+    }
+
+    // Merge entries while the groups that will be deleted still exist, so their entries can
+    // still be read and produce their own merge events.
+    merge_entries_with_ancestor(dest_db, source_db, base_db, log)?;
+
+    while let Some(id) = to_delete.pop() {
+        if let Some(group) = dest_db.group_mut(id) {
+            group.remove();
+        }
+    }
+
+    let dest_groups = dest_db.groups.keys().cloned().collect::<HashSet<_>>();
+
+    // Groups that exist in both databases.
+    for &id in dest_groups.intersection(&source_groups) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let dest = dest_db.group(id).unwrap();
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let source = source_db.group(id).unwrap();
+
+        let source_content_changed = match base_db.group(id) {
+            Some(base) => have_groups_diverged(&base, &source),
+            None => true,
+        };
+        let dest_content_changed = match base_db.group(id) {
+            Some(base) => have_groups_diverged(&base, &dest),
+            None => true,
+        };
+        let source_moved = match base_db.group(id) {
+            Some(base) => base.parent().map(|p| p.id()) != source.parent().map(|p| p.id()),
+            None => true,
+        };
+        let dest_moved = match base_db.group(id) {
+            Some(base) => base.parent().map(|p| p.id()) != dest.parent().map(|p| p.id()),
+            None => true,
+        };
+
+        let mut apply_source_content = false;
+        if source_content_changed {
+            if !dest_content_changed {
+                apply_source_content = true;
+            } else if have_groups_diverged(&dest, &source) {
+                log.warnings.push(format!(
+                    "Group {} was modified differently in both databases since the common ancestor; kept the most recently modified version.",
+                    id,
+                ));
+                apply_source_content = newer(dest.times.last_modification, source.times.last_modification);
+            }
+        }
+
+        let mut apply_source_location = false;
+        if source_moved {
+            if !dest_moved {
+                apply_source_location = true;
+            } else if source.parent().map(|p| p.id()) != dest.parent().map(|p| p.id()) {
+                log.warnings.push(format!(
+                    "Group {} was moved to different groups in both databases since the common ancestor; kept the most recent move.",
+                    id,
+                ));
+                apply_source_location = newer(dest.times.location_changed, source.times.location_changed);
+            }
+        }
+
+        if apply_source_location {
+            if let Some(parent_id) = source.parent().map(|p| p.id()) {
+                if dest_groups.contains(&parent_id) {
+                    let mut dest = dest_db.group_mut(id).unwrap();
+                    dest.move_to(parent_id)?;
+                    dest.times.location_changed = source.times.location_changed;
+
+                    log.events.push(MergeEvent {
+                        target: MergeEventTarget::Group(id),
+                        event_type: MergeEventType::LocationUpdated,
+                    });
+                } else {
+                    log.warnings.push(format!(
+                        "Cannot move group {} to group {} because the group does not exist in the destination database.",
+                        id, parent_id,
+                    ));
+                }
+            } else {
+                log.warnings.push(format!("Cannot move root group {}", id));
+            }
+        }
+
+        if apply_source_content {
+            let mut dest = dest_db.group_mut(id).unwrap();
+            copy_group_contents(&mut dest, &source);
+            dest.times.last_modification = source.times.last_modification.or(dest.times.last_modification);
+            dest.times.expiry = source.times.expiry;
+            dest.times.expires = source.times.expires;
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Group(id),
+                event_type: MergeEventType::Updated,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Merge entries using a common ancestor.
+#[allow(clippy::unwrap_used, clippy::expect_used)] // IDs are taken from the source and destination maps.
+fn merge_entries_with_ancestor(
+    dest_db: &mut Database,
+    source_db: &Database,
+    base_db: &Database,
+    log: &mut MergeLog,
+) -> Result<(), MergeError> {
+    let dest_entries = dest_db.entries.keys().cloned().collect::<HashSet<_>>();
+    let source_entries = source_db.entries.keys().cloned().collect::<HashSet<_>>();
+
+    // Entries that exist only in the source might need to be added.
+    for &id in source_entries.difference(&dest_entries) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let source_entry = source_db.entry(id).unwrap();
+        let deletion = dest_db.deleted_objects.get(&id.uuid()).copied().flatten();
+
+        let source_changed = match base_db.entry(id) {
+            Some(base_entry) => entry_changed_from_base(&base_entry, &source_entry),
+            None => true,
+        };
+
+        if !source_changed {
+            continue;
+        }
+
+        let source_update = source_entry
+            .times
+            .last_modification
+            .or(source_entry.times.location_changed);
+
+        if deletion_wins(deletion, source_update) {
+            if base_db.entry(id).is_some() {
+                log.warnings.push(format!(
+                    "Entry {} was deleted in the destination but modified in the source since the common ancestor; kept the deletion.",
+                    id,
+                ));
+            }
+            continue;
+        }
+
+        if base_db.entry(id).is_some() {
+            log.warnings.push(format!(
+                "Entry {} was deleted in the destination but modified in the source since the common ancestor; restored the source's version.",
+                id,
+            ));
+        }
+
+        let parent_id = source_entry.parent().id();
+        let Some(mut parent) = dest_db.group_mut(parent_id) else {
+            log.warnings.push(format!(
+                "Cannot add entry {} because its parent group {} does not exist in the destination database.",
+                id, parent_id,
+            ));
+            continue;
+        };
+
+        #[allow(clippy::expect_used)] // id was selected from source_entries.difference(dest_entries)
+        let mut entry = parent
+            .add_entry_with_id(id)
+            .expect("entry to be (re-)added should not exist yet");
+
+        *entry = source_entry.deref().clone();
+        dest_db.deleted_objects.remove(&id.uuid());
+
+        log.events.push(MergeEvent {
+            target: MergeEventTarget::Entry(id),
+            event_type: MergeEventType::Created,
+        });
+    }
+
+    // Entries that exist only in the destination might need to be deleted.
+    for &id in dest_entries.difference(&source_entries) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist
+        let dest_entry = dest_db.entry(id).unwrap();
+        let deletion = source_db.deleted_objects.get(&id.uuid()).copied().flatten();
+
+        let Some(base_entry) = base_db.entry(id) else {
+            // The entry was added in the destination only.
+            continue;
+        };
+
+        let dest_changed = entry_changed_from_base(&base_entry, &dest_entry);
+        let dest_update = dest_entry
+            .times
+            .last_modification
+            .or(dest_entry.times.location_changed);
+
+        if !dest_changed || deletion_wins(deletion, dest_update) {
+            if dest_changed {
+                log.warnings.push(format!(
+                    "Entry {} was deleted in the source but modified in the destination since the common ancestor; kept the deletion.",
+                    id,
+                ));
+            }
+
+            let dest_entry = dest_db.entry_mut(id).unwrap();
+            dest_entry.remove();
+            dest_db.deleted_objects.insert(id.uuid(), deletion);
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Entry(id),
+                event_type: MergeEventType::Deleted,
+            });
+        } else {
+            log.warnings.push(format!(
+                "Entry {} was deleted in the source but modified in the destination since the common ancestor; kept the modified version.",
+                id,
+            ));
+        }
+    }
+
+    let dest_entries = dest_db.entries.keys().cloned().collect::<HashSet<_>>();
+
+    // Entries that exist in both databases.
+    for &id in dest_entries.intersection(&source_entries) {
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let dest_entry = dest_db.entry(id).unwrap();
+        #[allow(clippy::unwrap_used)] // id is guaranteed to exist in both dest and source
+        let source_entry = source_db.entry(id).unwrap();
+
+        let contents_equal = !have_entry_contents_diverged(&dest_entry, &source_entry);
+        let source_content_changed = match base_db.entry(id) {
+            Some(base) => have_entry_contents_diverged(&base, &source_entry),
+            None => true,
+        };
+        let dest_content_changed = match base_db.entry(id) {
+            Some(base) => have_entry_contents_diverged(&base, &dest_entry),
+            None => true,
+        };
+        let source_moved = match base_db.entry(id) {
+            Some(base) => base.parent().id() != source_entry.parent().id(),
+            None => true,
+        };
+        let dest_moved = match base_db.entry(id) {
+            Some(base) => base.parent().id() != dest_entry.parent().id(),
+            None => true,
+        };
+
+        let mut apply_source_content = false;
+        if source_content_changed {
+            if !dest_content_changed {
+                apply_source_content = true;
+            } else if !contents_equal {
+                log.warnings.push(format!(
+                    "Entry {} was modified differently in both databases since the common ancestor; kept the most recently modified version.",
+                    id,
+                ));
+                apply_source_content = newer(
+                    dest_entry.times.last_modification,
+                    source_entry.times.last_modification,
+                );
+            }
+        }
+
+        let mut apply_source_location = false;
+        if source_moved {
+            if !dest_moved {
+                apply_source_location = true;
+            } else if source_entry.parent().id() != dest_entry.parent().id() {
+                log.warnings.push(format!(
+                    "Entry {} was moved to different groups in both databases since the common ancestor; kept the most recent move.",
+                    id,
+                ));
+                apply_source_location = newer(
+                    dest_entry.times.location_changed,
+                    source_entry.times.location_changed,
+                );
+            }
+        }
+
+        let source_history = source_entry.history.clone().unwrap_or_else(|| {
+            log.warnings.push(format!("Source entry {} had no history.", id));
+            History::default()
+        });
+        let dest_history = dest_entry.history.clone().unwrap_or_else(|| {
+            log.warnings
+                .push(format!("Destination entry {} had no history.", id));
+            History::default()
+        });
+
+        let mut merged_history = merge_history(&dest_history, &source_history, log)?;
+        let dest_version_for_history = if apply_source_content {
+            merged_history.entries.first().and_then(|last_history_entry| {
+                if have_entries_diverged(&dest_entry, last_history_entry) {
+                    let mut version = dest_entry.deref().clone();
+                    version.history = None;
+                    Some(version)
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        };
+
+        if apply_source_location {
+            let source_parent_id = source_entry.parent().id();
+            let mut dest_entry = dest_db.entry_mut(id).unwrap();
+            if dest_entry.move_to(source_parent_id).is_ok() {
+                dest_entry.times.location_changed = source_entry.times.location_changed;
+
+                log.events.push(MergeEvent {
+                    target: MergeEventTarget::Entry(id),
+                    event_type: MergeEventType::LocationUpdated,
+                });
+            } else {
+                log.warnings.push(format!(
+                    "Cannot move entry {} to group {} because the group does not exist in the destination database.",
+                    id, source_parent_id,
+                ));
+            }
+        }
+
+        if apply_source_content {
+            if let Some(version) = dest_version_for_history {
+                merged_history.add_entry(version);
+            }
+
+            let mut dest_entry = dest_db.entry_mut(id).unwrap();
+            copy_entry_contents(&mut dest_entry, &source_entry);
+            dest_entry.history = Some(merged_history);
+
+            log.events.push(MergeEvent {
+                target: MergeEventTarget::Entry(id),
+                event_type: MergeEventType::Updated,
+            });
+        } else if source_content_changed && !contents_equal {
+            let mut source_version = source_entry.deref().clone();
+            source_version.history = None;
+            let already_filed = merged_history.entries.iter().any(|version| {
+                version.times.last_modification == source_version.times.last_modification
+                    && !have_entry_contents_diverged(version, &source_version)
+            });
+
+            if !already_filed {
+                let versions_before = merged_history.entries.len();
+                merged_history = merge_history(
+                    &merged_history,
+                    &History {
+                        entries: vec![source_version],
+                    },
+                    log,
+                )?;
+
+                if merged_history.entries.len() > versions_before {
+                    log.events.push(MergeEvent {
+                        target: MergeEventTarget::Entry(id),
+                        event_type: MergeEventType::Updated,
+                    });
+                }
+            }
+
+            let mut dest_entry = dest_db.entry_mut(id).unwrap();
+            dest_entry.history = Some(merged_history);
+        } else {
+            let mut dest_entry = dest_db.entry_mut(id).unwrap();
+            dest_entry.history = Some(merged_history);
+        }
+    }
+
+    Ok(())
+}
+
+/// Apply the content fields of a source entry to a destination entry.
+fn copy_entry_contents(dest: &mut Entry, source: &Entry) {
+    dest.times.last_modification = source.times.last_modification;
+    dest.times.expiry = source.times.expiry;
+    dest.times.expires = source.times.expires;
+    dest.fields = source.fields.clone();
+    dest.autotype = source.autotype.clone();
+    dest.tags = source.tags.clone();
+    dest.custom_data = source.custom_data.clone();
+    dest.icon = source.icon.clone();
+    dest.foreground_color = source.foreground_color.clone();
+    dest.background_color = source.background_color.clone();
+    dest.override_url = source.override_url.clone();
+    dest.quality_check = source.quality_check;
+}
+
+/// Apply the content fields of a source group to a destination group.
+fn copy_group_contents(dest: &mut Group, source: &Group) {
+    dest.name = source.name.clone();
+    dest.notes = source.notes.clone();
+    dest.tags = source.tags.clone();
+    dest.icon = source.icon.clone();
+    dest.custom_data = source.custom_data.clone();
+    dest.is_expanded = source.is_expanded;
+    dest.default_autotype_sequence = source.default_autotype_sequence.clone();
+    dest.enable_autotype = source.enable_autotype;
+    dest.enable_searching = source.enable_searching;
+    dest.last_top_visible_entry = source.last_top_visible_entry;
+}
+
+/// Whether the source timestamp is newer than the destination timestamp.
+fn newer(dest: Option<NaiveDateTime>, source: Option<NaiveDateTime>) -> bool {
+    match (dest, source) {
+        (Some(dest), Some(source)) => source > dest,
+        (None, Some(_)) => true,
+        _ => false,
+    }
+}
+
+/// Whether a deletion should win over a modification at the given time.
+fn deletion_wins(deletion: Option<NaiveDateTime>, modification: Option<NaiveDateTime>) -> bool {
+    match (deletion, modification) {
+        (Some(deletion), Some(modification)) => deletion >= modification,
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
+}
+
+/// Whether two custom icons have different contents, ignoring their back-references.
+fn icon_contents_changed(a: &crate::db::CustomIcon, b: &crate::db::CustomIcon) -> bool {
+    a.name != b.name || a.data != b.data
+}
+
+/// Whether an entry changed relative to the common ancestor.
+fn entry_changed_from_base(base: &Entry, side: &Entry) -> bool {
+    have_entry_contents_diverged(base, side) || base.parent != side.parent
+}
+
+/// Whether a group changed relative to the common ancestor.
+fn group_changed_from_base(base: &Group, side: &Group) -> bool {
+    have_groups_diverged(base, side) || base.parent != side.parent
+}
+
+/// Whether any part of a group's subtree changed relative to the common ancestor.
+fn group_tree_changed_from_base(base_db: &Database, side_db: &Database, id: GroupId) -> bool {
+    let (Some(base), Some(side)) = (base_db.group(id), side_db.group(id)) else {
+        return base_db.group(id).is_some() != side_db.group(id).is_some();
+    };
+
+    if group_changed_from_base(&base, &side) {
+        return true;
+    }
+
+    let base_entries = base.entry_ids().collect::<HashSet<_>>();
+    let side_entries = side.entry_ids().collect::<HashSet<_>>();
+    if base_entries != side_entries {
+        return true;
+    }
+
+    let base_groups = base.group_ids().collect::<HashSet<_>>();
+    let side_groups = side.group_ids().collect::<HashSet<_>>();
+    if base_groups != side_groups {
+        return true;
+    }
+
+    for entry_id in side_entries {
+        let (Some(base_entry), Some(side_entry)) = (base_db.entry(entry_id), side_db.entry(entry_id)) else {
+            return true;
+        };
+        if entry_changed_from_base(&base_entry, &side_entry) {
+            return true;
+        }
+    }
+
+    side_groups
+        .into_iter()
+        .any(|child_id| group_tree_changed_from_base(base_db, side_db, child_id))
 }
 
 fn have_groups_diverged(a: &Group, b: &Group) -> bool {
@@ -2588,5 +3345,371 @@ mod merge_tests {
 
         let icon = destination_db.custom_icon(icon_id).unwrap();
         assert_eq!(icon.data, vec![5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn test_ancestor_source_change_with_older_timestamp_wins() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "changed in source");
+        });
+        source_db.entry_mut(ENTRY1_ID).unwrap().times.last_modification = Some(Times::epoch());
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get(fields::TITLE),
+            Some("changed in source")
+        );
+    }
+
+    #[test]
+    fn test_ancestor_destination_change_with_older_timestamp_is_kept() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let source_db = ancestor_db.clone();
+
+        destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "changed in destination");
+        });
+        destination_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .times
+            .last_modification = Some(Times::epoch());
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 0);
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get(fields::TITLE),
+            Some("changed in destination")
+        );
+    }
+
+    #[test]
+    fn test_ancestor_identical_changes_do_not_conflict() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "same change");
+        });
+        source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "same change");
+        });
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 0);
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get(fields::TITLE),
+            Some("same change")
+        );
+    }
+
+    #[test]
+    fn test_ancestor_true_conflict_warns_and_newest_wins() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "changed in destination");
+        });
+
+        sleep();
+
+        source_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "changed in source");
+        });
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get(fields::TITLE),
+            Some("changed in source")
+        );
+
+        let history = destination_db.entry(ENTRY1_ID).unwrap().history.clone().unwrap();
+        assert!(history
+            .entries
+            .iter()
+            .any(|entry| entry.get(fields::TITLE) == Some("changed in destination")));
+    }
+
+    #[test]
+    fn test_ancestor_added_group_and_entry_are_merged() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        let group_id = source_db
+            .root_mut()
+            .add_group()
+            .edit(|group| group.name = "added in source".to_string())
+            .id();
+        let entry_id = source_db
+            .group_mut(group_id)
+            .unwrap()
+            .add_entry()
+            .edit_tracking(|entry| entry.set_unprotected(fields::TITLE, "added in source"))
+            .id();
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 2);
+        assert!(destination_db.group(group_id).is_some());
+        assert_eq!(
+            destination_db.entry(entry_id).unwrap().get(fields::TITLE),
+            Some("added in source")
+        );
+    }
+
+    #[test]
+    fn test_ancestor_deleted_entry_is_removed() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db.entry_mut(ENTRY1_ID).unwrap().track_changes().remove();
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 1);
+        assert!(destination_db.entry(ENTRY1_ID).is_none());
+        assert!(destination_db.deleted_objects.contains_key(&ENTRY1_ID.uuid()));
+    }
+
+    #[test]
+    fn test_ancestor_deleted_entry_modified_in_destination_is_kept() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db.entry_mut(ENTRY1_ID).unwrap().track_changes().remove();
+
+        sleep();
+
+        destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "changed in destination");
+        });
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.events.len(), 0);
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get(fields::TITLE),
+            Some("changed in destination")
+        );
+    }
+
+    #[test]
+    fn test_ancestor_move_in_source_and_content_change_in_destination_are_both_kept() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .unwrap();
+        destination_db.entry_mut(ENTRY1_ID).unwrap().edit_tracking(|e| {
+            e.set_unprotected(fields::TITLE, "changed in destination");
+        });
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(destination_db.entry(ENTRY1_ID).unwrap().parent().id(), GROUP2_ID);
+        assert_eq!(
+            destination_db.entry(ENTRY1_ID).unwrap().get(fields::TITLE),
+            Some("changed in destination")
+        );
+    }
+
+    #[test]
+    fn test_ancestor_moves_to_different_groups_warn_and_newest_wins() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP1_ID)
+            .unwrap();
+
+        sleep();
+
+        destination_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .move_to(GROUP2_ID)
+            .unwrap();
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(destination_db.entry(ENTRY1_ID).unwrap().parent().id(), GROUP2_ID);
+    }
+
+    #[test]
+    fn test_ancestor_group_deleted_in_source_but_extended_in_destination_is_kept() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db
+            .group_mut(GROUP1_ID)
+            .unwrap()
+            .track_changes()
+            .remove()
+            .unwrap();
+
+        sleep();
+
+        let new_entry_id = destination_db
+            .group_mut(GROUP1_ID)
+            .unwrap()
+            .add_entry()
+            .edit_tracking(|entry| entry.set_unprotected(fields::TITLE, "added in destination"))
+            .id();
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 1);
+        assert!(destination_db.group(GROUP1_ID).is_some());
+        assert_eq!(
+            destination_db.entry(new_entry_id).unwrap().get(fields::TITLE),
+            Some("added in destination")
+        );
+    }
+
+    #[test]
+    fn test_ancestor_child_group_is_not_restored_under_deleted_parent() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        let new_group_id = source_db
+            .group_mut(GROUP2_ID)
+            .unwrap()
+            .add_group()
+            .edit(|group| group.name = "new group".to_string())
+            .id();
+
+        sleep();
+
+        destination_db
+            .group_mut(GROUP2_ID)
+            .unwrap()
+            .track_changes()
+            .remove()
+            .unwrap();
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 2);
+        assert!(destination_db.group(GROUP2_ID).is_none());
+        assert!(destination_db.group(new_group_id).is_none());
+    }
+
+    #[test]
+    fn test_ancestor_icon_added_in_source_is_merged() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        let icon_id = source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 2);
+        assert_eq!(
+            destination_db.custom_icon(icon_id).unwrap().data,
+            vec![1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn test_ancestor_icon_deleted_in_source_is_removed() {
+        let mut ancestor_db = create_test_database();
+        let icon_id = ancestor_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .custom_icon_mut()
+            .unwrap()
+            .remove();
+        source_db
+            .deleted_objects
+            .insert(icon_id.uuid(), Some(Times::now()));
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 2);
+        assert!(destination_db.custom_icon(icon_id).is_none());
+        assert!(destination_db.deleted_objects.contains_key(&icon_id.uuid()));
     }
 }
