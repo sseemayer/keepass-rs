@@ -51,7 +51,7 @@ mod open;
 mod types;
 
 #[cfg(feature = "_merge")]
-mod merge;
+pub mod merge;
 
 #[cfg(feature = "totp")]
 mod otp;

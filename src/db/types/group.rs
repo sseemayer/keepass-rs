@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use indexmap::IndexSet;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -20,7 +21,8 @@ use crate::{
 pub struct GroupId(Uuid);
 
 impl GroupId {
-    pub(crate) fn new() -> Self {
+    /// Generate a new random `GroupId`.
+    pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
@@ -74,10 +76,10 @@ pub struct Group {
     pub(crate) icon: Option<Icon>,
 
     /// The list of child group identifiers
-    pub(crate) groups: HashSet<GroupId>,
+    pub(crate) groups: IndexSet<GroupId>,
 
     /// The list of entry identifiers directly under this group
-    pub(crate) entries: HashSet<EntryId>,
+    pub(crate) entries: IndexSet<EntryId>,
 
     /// The list of time fields for this group
     pub times: Times,
@@ -117,8 +119,8 @@ impl Group {
             notes: None,
             tags: Vec::new(),
             icon: None,
-            groups: HashSet::new(),
-            entries: HashSet::new(),
+            groups: IndexSet::new(),
+            entries: IndexSet::new(),
             times: Times::new(),
             custom_data: HashMap::new(),
             is_expanded: true,
@@ -138,8 +140,8 @@ impl Group {
             notes: None,
             tags: Vec::new(),
             icon: None,
-            groups: HashSet::new(),
-            entries: HashSet::new(),
+            groups: IndexSet::new(),
+            entries: IndexSet::new(),
             times: Times::new(),
             custom_data: HashMap::new(),
             is_expanded: true,
@@ -570,7 +572,7 @@ impl GroupMut<'_> {
         // Remove from old parent
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // we checked that old_parent_id exists
         let mut old_parent = self.database.group_mut(old_parent_id).unwrap();
-        old_parent.groups.remove(&self.id);
+        old_parent.groups.shift_remove(&self.id);
 
         // Insert into new parent
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // we checked that new_parent_id exists
@@ -593,7 +595,7 @@ impl GroupMut<'_> {
         // Remove from parent
         if let Some(parent_id) = self.parent {
             if let Some(mut parent) = self.database.group_mut(parent_id) {
-                parent.groups.remove(&self.id);
+                parent.groups.shift_remove(&self.id);
             }
         }
 
@@ -725,7 +727,7 @@ impl GroupTrack<'_> {
         // Remove from parent
         if let Some(parent_id) = self.parent {
             if let Some(mut parent) = self.database.group_mut(parent_id) {
-                parent.groups.remove(&self.id);
+                parent.groups.shift_remove(&self.id);
             }
         }
 
@@ -942,6 +944,13 @@ mod group_tests {
             db.root_mut().add_group_with_id(pinned),
             Err(DuplicateGroupIdError(gid)) if gid == pinned
         ));
+    }
+
+    #[test]
+    fn group_id_new_generates_distinct_ids() {
+        use crate::db::GroupId;
+
+        assert_ne!(GroupId::new(), GroupId::new());
     }
 
     #[test]

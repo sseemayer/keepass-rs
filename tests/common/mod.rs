@@ -11,10 +11,22 @@ use keepass::{
     DatabaseKey,
 };
 
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
+
+use sha2::{Digest, Sha256};
 
 pub const MASTER_SEED: u64 = 0xdead_beef_cafe_f00d;
 pub const DEMO_PASSWORD: &str = "demopass";
+
+fn calculate_sha256(elements: &[&[u8]]) -> Vec<u8> {
+    let mut digest = Sha256::new();
+
+    for element in elements {
+        digest.update(element);
+    }
+
+    digest.finalize().to_vec()
+}
 
 #[derive(Debug, Clone)]
 pub struct Combo {
@@ -69,8 +81,13 @@ impl KeyfileKind {
                 };
                 let l1 = line(&hex_lo[0..32]);
                 let l2 = line(&hex_lo[32..64]);
+
+                // hash should be the first 4 bytes of the SHA256 of the keyfile data
+                let hash = calculate_sha256(&[&k[..]]);
+                let hash_hex = hex::encode(&hash[0..4]).to_uppercase();
+
                 format!(
-                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<KeyFile>\n  <Meta><Version>2.0</Version></Meta>\n  <Key>\n    <Data Hash=\"00000000\">\n      {l1}\n      {l2}\n    </Data>\n  </Key>\n</KeyFile>\n"
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<KeyFile>\n  <Meta><Version>2.0</Version></Meta>\n  <Key>\n    <Data Hash=\"{hash_hex}\">\n      {l1}\n      {l2}\n    </Data>\n  </Key>\n</KeyFile>\n"
                 )
                 .into_bytes()
             }
@@ -262,12 +279,10 @@ impl Combo {
                 e.tags = vec![format!("tag-{i}"), "fixture".to_string()];
                 e.times.expires = Some(true);
 
-                e.times.expiry = Some(
-                    NaiveDate::from_ymd_opt(2099, 12, 31)
-                        .unwrap()
-                        .and_hms_opt(23, 59, 59)
-                        .unwrap(),
-                );
+                e.times.expiry = NaiveDate::from_ymd_opt(2099, 12, 31)
+                    .unwrap()
+                    .and_hms_opt(23, 59, 59)
+                    .unwrap();
             }
             e.custom_data.insert(
                 format!("entry.cd.{i}"),
@@ -318,4 +333,11 @@ pub fn save_to_vec(db: &Database, key: DatabaseKey) -> Vec<u8> {
     let mut buf = Vec::new();
     db.save(&mut buf, key).expect("save_to_vec: save failed");
     buf
+}
+
+#[cfg(feature = "save_kdbx4")]
+pub fn save_then_open(db: &Database, key: DatabaseKey) -> Database {
+    let mut buf = Vec::new();
+    db.save(&mut buf, key.clone()).expect("Unable to save database");
+    Database::open(&mut buf.as_slice(), key).expect("Unable to open database")
 }

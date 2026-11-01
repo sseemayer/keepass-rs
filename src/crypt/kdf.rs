@@ -91,3 +91,48 @@ impl Kdf for Argon2Kdf {
             .map_err(|_| CryptographyError::InvalidLength(cipher::InvalidLength))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use argon2::{hash_raw, Config, ThreadMode, Variant, Version};
+    use hybrid_array::{typenum::U32, Array as GenericArray};
+
+    use super::{Argon2Kdf, Kdf};
+
+    #[test]
+    fn argon2_memory_is_interpreted_as_bytes() {
+        let composite_key = GenericArray::<u8, U32>::from([7_u8; 32]);
+        let salt = vec![9_u8; 32];
+        let kdf = Argon2Kdf {
+            memory: 64 * 1024,
+            salt: salt.clone(),
+            iterations: 1,
+            parallelism: 1,
+            version: Version::Version13,
+            variant: Variant::Argon2id,
+        };
+
+        let expected = hash_raw(
+            &composite_key,
+            &salt,
+            &Config {
+                thread_mode: ThreadMode::Parallel,
+                ad: &[],
+                hash_length: 32,
+                lanes: 1,
+                mem_cost: 64,
+                secret: &[],
+                time_cost: 1,
+                variant: Variant::Argon2id,
+                version: Version::Version13,
+            },
+        )
+        .expect("argon2 test vector should derive successfully");
+
+        let actual = kdf
+            .transform_key(&composite_key)
+            .expect("argon2 kdf should derive successfully");
+
+        assert_eq!(actual.as_slice(), expected.as_slice());
+    }
+}

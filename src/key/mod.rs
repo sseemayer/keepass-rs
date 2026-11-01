@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use base64::{engine::general_purpose as base64_engine, Engine as _};
-use quick_xml::{encoding::EncodingError, events::Event, reader::Reader};
+use quick_xml::{encoding::EncodingError, events::Event, reader::Reader, XmlVersion};
 use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -24,13 +24,18 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyFileError> {
 
     let mut reader = Reader::from_reader(xml);
     let mut buf = Vec::new();
+    let mut xml_version = XmlVersion::Implicit1_0;
 
     loop {
         match reader.read_event_into(&mut buf)? {
             Event::Eof => break,
 
+            Event::Decl(e) => {
+                xml_version = e.xml_version()?;
+            }
+
             Event::Start(e) => {
-                tag_stack.push(String::from_utf8_lossy(e.name().as_ref()).to_string());
+                tag_stack.push(e.name().as_ref().to_string());
             }
 
             Event::End(_) => {
@@ -38,7 +43,7 @@ fn parse_xml_keyfile(xml: &[u8]) -> Result<KeyElement, ParseXmlKeyFileError> {
             }
 
             Event::Text(e) => {
-                let s = e.decode()?.into_owned();
+                let s = e.xml_content(xml_version).into_owned();
 
                 if tag_stack == ["KeyFile", "Meta", "Version"] {
                     key_version = Some(s);
@@ -104,13 +109,23 @@ pub enum ParseXmlKeyFileError {
 fn parse_keyfile(buffer: &[u8]) -> Result<KeyElement, DatabaseKeyError> {
     // try to parse the buffer as XML, if successful, use that data instead of full file
     if let Ok(v) = parse_xml_keyfile(buffer) {
-        Ok(v)
-    } else if buffer.len() == 32 {
-        // legacy binary key format
-        Ok(buffer.to_vec())
-    } else {
-        Ok(calculate_sha256(&[buffer]).as_slice().to_vec())
+        return Ok(v);
     }
+
+    // legacy binary key format
+    if buffer.len() == 32 {
+        return Ok(buffer.to_vec());
+    }
+
+    // legacy hex key format
+    if buffer.len() == 64 {
+        if let Ok(key_bytes) = hex::decode(buffer) {
+            return Ok(key_bytes);
+        }
+    }
+
+    // interpret as a "bare" keyfile and hash the entire file contents
+    Ok(calculate_sha256(&[buffer]).as_slice().to_vec())
 }
 
 /// A KeePass key, which might consist of a password and/or a keyfile

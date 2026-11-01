@@ -22,7 +22,8 @@ use crate::{
 pub struct EntryId(Uuid);
 
 impl EntryId {
-    pub(crate) fn new() -> Self {
+    /// Generate a new random `EntryId`.
+    pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
@@ -586,7 +587,7 @@ impl EntryMut<'_> {
         let previous_parent = self.parent;
 
         let mut parent = self.parent_mut();
-        parent.entries.remove(&my_id);
+        parent.entries.shift_remove(&my_id);
 
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // group existence is checked
         let mut new_parent = self.database.group_mut(group_id).unwrap();
@@ -618,15 +619,26 @@ impl EntryMut<'_> {
             }
         }
 
-        // remove references to this entry from attachments
-        self.foreach_attachment_mut(|mut attachment| {
-            attachment.entries.retain(|&(entry_id, _)| entry_id != id);
-
-            // if this was the last entry referencing the attachment, remove it from the database
-            if attachment.entries.is_empty() {
-                attachment.remove();
+        // remove references to this entry from the attachments of every version of it:
+        // a file only an older version used would otherwise stay in the database
+        let mut attachment_ids: Vec<AttachmentId> = self.attachments.values().copied().collect();
+        if let Some(history) = &self.history {
+            for version in &history.entries {
+                attachment_ids.extend(version.attachments.values().copied());
             }
-        });
+        }
+        attachment_ids.sort_by_key(|attachment_id| attachment_id.id());
+        attachment_ids.dedup();
+        for attachment_id in attachment_ids {
+            if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
+                attachment.entries.retain(|&(entry_id, _)| entry_id != id);
+
+                // if this was the last entry referencing the attachment, remove it from the database
+                if attachment.entries.is_empty() {
+                    attachment.remove();
+                }
+            }
+        }
 
         let entry = self.database.entries.remove(&self.id).expect("Entry not found");
 
@@ -635,7 +647,7 @@ impl EntryMut<'_> {
             .database
             .group_mut(entry.parent)
             .expect("Parent group not found");
-        parent.entries.remove(&self.id);
+        parent.entries.shift_remove(&self.id);
 
         // Clear any group's last_top_visible_entry that pointed to this entry.
         // This field is a UI hint and should not hold a dangling EntryId.
@@ -844,10 +856,16 @@ impl Drop for EntryTrack<'_> {
 #[allow(clippy::unwrap_used)]
 mod tests {
 
+    use super::EntryId;
     use crate::{
         db::{fields, Value},
         Database,
     };
+
+    #[test]
+    fn entry_id_new_generates_distinct_ids() {
+        assert_ne!(EntryId::new(), EntryId::new());
+    }
 
     #[test]
     fn test_entry() {

@@ -11,7 +11,7 @@ use crate::{
     crypt::{ciphers::Cipher, CryptographyError},
     db::{AttachmentId, Color, EntryId, EntryMut, GroupId},
     format::xml_db::{
-        custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_intbool, cs_opt_string},
+        custom_serde::{cs_bool, cs_opt_bool, cs_opt_fromstr, cs_opt_string},
         meta::CustomData,
         tags::split_tags,
         times::Times,
@@ -103,18 +103,17 @@ impl Entry {
         target.times = self.times.map(|t| t.into()).unwrap_or_default();
 
         for field in self.string_fields {
-            if let Some(fval) = &field.value.value {
-                let value = if field.value.protected {
-                    let fval = base64_engine::STANDARD.decode(fval)?;
-                    let fval = inner_decryptor.decrypt(&fval)?;
-                    let fval = String::from_utf8_lossy(&fval).to_string();
+            let fval = field.value.value.unwrap_or_default();
+            let value = if field.value.protected {
+                let fval = base64_engine::STANDARD.decode(fval)?;
+                let fval = inner_decryptor.decrypt(&fval)?;
+                let fval = String::from_utf8_lossy(&fval).to_string();
 
-                    crate::db::Value::protected(fval)
-                } else {
-                    crate::db::Value::unprotected(fval)
-                };
-                target.fields.insert(field.key, value);
-            }
+                crate::db::Value::protected(fval)
+            } else {
+                crate::db::Value::unprotected(fval)
+            };
+            target.fields.insert(field.key, value);
         }
 
         for field in self.binary_fields {
@@ -326,8 +325,8 @@ pub struct AutoType {
     #[serde(default, with = "cs_bool")]
     pub enabled: bool,
 
-    #[serde(default, with = "cs_opt_intbool", skip_serializing_if = "Option::is_none")]
-    pub data_transfer_obfuscation: Option<bool>,
+    #[serde(default, with = "cs_opt_fromstr", skip_serializing_if = "Option::is_none")]
+    pub data_transfer_obfuscation: Option<usize>,
 
     #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub default_sequence: Option<String>,
@@ -341,7 +340,10 @@ impl From<AutoType> for crate::db::AutoType {
         crate::db::AutoType {
             enabled: value.enabled,
             default_sequence: value.default_sequence,
-            data_transfer_obfuscation: value.data_transfer_obfuscation,
+            data_transfer_obfuscation: value
+                .data_transfer_obfuscation
+                .map(|d| d.into())
+                .unwrap_or_default(),
             associations: value.associations.into_iter().map(|a| a.into()).collect(),
         }
     }
@@ -351,9 +353,28 @@ impl From<crate::db::AutoType> for AutoType {
     fn from(value: crate::db::AutoType) -> Self {
         Self {
             enabled: value.enabled,
-            data_transfer_obfuscation: value.data_transfer_obfuscation,
+            data_transfer_obfuscation: Some(value.data_transfer_obfuscation.into()),
             default_sequence: value.default_sequence,
             associations: value.associations.into_iter().map(|a| a.into()).collect(),
+        }
+    }
+}
+
+impl From<usize> for crate::db::DataTransferObfuscation {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::UseClipboard,
+            _ => Self::None, // default to None for unknown values
+        }
+    }
+}
+
+impl From<crate::db::DataTransferObfuscation> for usize {
+    fn from(value: crate::db::DataTransferObfuscation) -> Self {
+        match value {
+            crate::db::DataTransferObfuscation::None => 0,
+            crate::db::DataTransferObfuscation::UseClipboard => 1,
         }
     }
 }
@@ -488,7 +509,7 @@ mod tests {
 
         let deserialized: Test<AutoType> = quick_xml::de::from_str(xml).unwrap();
         assert!(deserialized.0.enabled);
-        assert!(!deserialized.0.data_transfer_obfuscation.unwrap());
+        assert_eq!(deserialized.0.data_transfer_obfuscation, Some(0));
         assert_eq!(
             deserialized.0.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"
@@ -499,7 +520,7 @@ mod tests {
     fn test_serialize_autotype() {
         let autotype = AutoType {
             enabled: true,
-            data_transfer_obfuscation: Some(false),
+            data_transfer_obfuscation: Some(0),
             default_sequence: Some("{USERNAME}{TAB}{PASSWORD}{ENTER}".to_string()),
             associations: vec![AutoTypeAssociation {
                 window: "Example Window".to_string(),
@@ -569,7 +590,7 @@ mod tests {
         assert!(deserialized.0.auto_type.is_some());
         let autotype = deserialized.0.auto_type.unwrap();
         assert!(autotype.enabled);
-        assert!(!autotype.data_transfer_obfuscation.unwrap());
+        assert_eq!(autotype.data_transfer_obfuscation, Some(0));
         assert_eq!(
             autotype.default_sequence.unwrap(),
             "{USERNAME}{TAB}{PASSWORD}{ENTER}"

@@ -18,7 +18,7 @@ pub struct Times {
     pub last_access: Option<NaiveDateTime>,
 
     /// The time of expiration
-    pub expiry: Option<NaiveDateTime>,
+    pub expiry: NaiveDateTime,
 
     /// The time of the last location change, which is updated when an entry is moved to a different group.
     pub location_changed: Option<NaiveDateTime>,
@@ -73,7 +73,7 @@ impl Times {
             creation: Some(now),
             last_modification: Some(now),
             last_access: Some(now),
-            expiry: None,
+            expiry: now,
             location_changed: Some(now),
             expires: Some(false),
             usage_count: Some(0),

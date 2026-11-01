@@ -30,12 +30,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Get Nix version
+        id: nix-version
+        run: echo "version=$(cat .nix-version)" >> $GITHUB_OUTPUT
+      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
         with:
-          toolchain: nightly
-          components: rustfmt
+          install_url: https://releases.nixos.org/nix/nix-${{ steps.nix-version.outputs.version }}/install
       - name: run cargo doc
-        run: cargo doc
+        run: nix develop --command cargo doc
 
   check:
     name: Check
@@ -191,6 +193,12 @@ jobs:
       - name: Generate code coverage
         run: |
           nix develop --command cargo tarpaulin --verbose --timeout 120
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   wasm32-tests:
     name: WASM32 Tests (Node)
