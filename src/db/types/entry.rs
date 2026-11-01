@@ -374,20 +374,30 @@ impl EntryMut<'_> {
         self
     }
 
-    /// Convert this mutable reference into a history-tracking variant that will persist the
-    /// current state of the entry into its history when dropped.
+    /// Convert this mutable reference into a history-tracking variant: the current state of
+    /// the entry is persisted into its history, and the changes made through the returned
+    /// [EntryTrack] apply to the entry itself.
+    ///
+    /// The history version is filed right away, so the attachments it refers to stay in the
+    /// database while the entry changes.
     ///
     /// NOTE: will always operate on the main Entry, not a historical version of it.
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
     pub fn track_changes(&mut self) -> EntryTrack<'_> {
-        let mut historical: Entry = self.deref().deref().clone();
+        let id = self.id;
+        let entry = self.database.entries.get_mut(&id).expect("Entry not found");
 
-        // Remove history from the historical entry to avoid exponential growth
-        historical.history = None;
+        // add_entry drops the copy's own history, to avoid exponential growth
+        let historical = entry.clone();
+        entry.history.get_or_insert_default().add_entry(historical);
+
+        // every history version moved down one place
+        let attachment_ids = self.database.entry_attachment_ids(id);
+        self.database.sync_attachment_refs(id, attachment_ids);
 
         EntryTrack {
             database: self.database,
-            id: self.id,
-            historical,
+            id,
         }
     }
 
@@ -435,7 +445,8 @@ impl EntryMut<'_> {
     pub fn add_attachment(&mut self, name: impl Into<String>, data: Value<Vec<u8>>) -> AttachmentMut<'_> {
         let id = AttachmentId::next_free(self.database);
 
-        let entries: HashSet<(EntryId, Option<usize>)> = vec![(self.id, None)].into_iter().collect();
+        let entries: HashSet<(EntryId, Option<usize>)> =
+            vec![(self.id, self.history_index)].into_iter().collect();
 
         self.database
             .attachments
@@ -455,16 +466,10 @@ impl EntryMut<'_> {
     pub fn remove_attachment_by_name(&mut self, name: &str) {
         let id = self.id;
 
-        // remove the attachment reference from this entry
+        // remove the attachment reference from this version; the attachment stays for as
+        // long as another version of the entry, or another entry, still refers to it
         if let Some(attachment_id) = self.attachments.remove(name) {
-            if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
-                attachment.entries.retain(|&(entry_id, _)| entry_id != id);
-
-                // if this was the last entry referencing the attachment, remove it from the database
-                if attachment.entries.is_empty() {
-                    attachment.remove();
-                }
-            }
+            self.database.sync_attachment_refs(id, [attachment_id]);
         }
     }
 
@@ -486,14 +491,7 @@ impl EntryMut<'_> {
             self.attachments.remove(&name);
         }
 
-        if let Some(mut attachment) = self.database.attachment_mut(attachment_id) {
-            attachment.entries.retain(|&(entry_id, _)| entry_id != id);
-
-            // if this was the last entry referencing the attachment, remove it from the database
-            if attachment.entries.is_empty() {
-                attachment.remove();
-            }
-        }
+        self.database.sync_attachment_refs(id, [attachment_id]);
     }
 
     /// Remove the icon from this entry, if it exists.
@@ -701,13 +699,11 @@ impl DerefMut for EntryMut<'_> {
     }
 }
 
-/// A variant of [EntryMut] that will persist the history of the entry when dropped.
-#[clippy::has_significant_drop]
+/// A variant of [EntryMut] whose changes are tracked: the state of the entry before them is
+/// already in its history. See [EntryMut::track_changes].
 pub struct EntryTrack<'a> {
     database: &'a mut Database,
     id: EntryId,
-
-    historical: Entry,
 }
 
 impl EntryTrack<'_> {
@@ -837,18 +833,6 @@ impl DerefMut for EntryTrack<'_> {
     #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.database.entries.get_mut(&self.id).expect("Entry not found")
-    }
-}
-
-impl Drop for EntryTrack<'_> {
-    fn drop(&mut self) {
-        // see if the entry is still there (it might have been removed)
-        if let Some(entry) = self.database.entries.get_mut(&self.id) {
-            let parent_id = entry.parent;
-            let historical = std::mem::replace(&mut self.historical, Entry::new(parent_id));
-
-            entry.history.get_or_insert_default().add_entry(historical);
-        }
     }
 }
 

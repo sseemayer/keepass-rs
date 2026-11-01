@@ -10,7 +10,7 @@ pub(crate) mod meta;
 pub(crate) mod times;
 pub(crate) mod value;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub use attachment::{Attachment, AttachmentId, AttachmentMut, AttachmentRef};
 pub use autotype::{AutoType, AutoTypeAssociation, DataTransferObfuscation};
@@ -134,6 +134,60 @@ impl Database {
     pub fn recycle_bin_mut(&mut self) -> Option<GroupMut<'_>> {
         let recyclebin_id = self.meta.recyclebin_uuid.map(GroupId::from_uuid)?;
         self.group_mut(recyclebin_id)
+    }
+
+    /// The IDs of every attachment that any version of an entry refers to,
+    /// its current version and its history alike.
+    pub(crate) fn entry_attachment_ids(&self, entry_id: EntryId) -> Vec<AttachmentId> {
+        let Some(entry) = self.entries.get(&entry_id) else {
+            return Vec::new();
+        };
+        let mut ids: Vec<AttachmentId> = entry.attachments.values().copied().collect();
+        if let Some(history) = &entry.history {
+            for version in &history.entries {
+                ids.extend(version.attachments.values().copied());
+            }
+        }
+        ids.sort_by_key(|id| id.id());
+        ids.dedup();
+        ids
+    }
+
+    /// Bring one entry's back-references on the given attachments in line
+    /// with what the versions of that entry refer to now, and remove any of
+    /// those attachments that nothing refers to any more.
+    ///
+    /// The references are read from the entry itself rather than adjusted one
+    /// by one, so they stay right however the entry's history has shifted.
+    pub(crate) fn sync_attachment_refs(
+        &mut self,
+        entry_id: EntryId,
+        attachment_ids: impl IntoIterator<Item = AttachmentId>,
+    ) {
+        let mut refs: HashSet<(AttachmentId, Option<usize>)> = HashSet::new();
+        if let Some(entry) = self.entries.get(&entry_id) {
+            refs.extend(entry.attachments.values().map(|&id| (id, None)));
+            if let Some(history) = &entry.history {
+                for (index, version) in history.entries.iter().enumerate() {
+                    refs.extend(version.attachments.values().map(|&id| (id, Some(index))));
+                }
+            }
+        }
+
+        for attachment_id in attachment_ids {
+            let Some(attachment) = self.attachments.get_mut(&attachment_id) else {
+                continue;
+            };
+            attachment.entries.retain(|&(id, _)| id != entry_id);
+            attachment.entries.extend(
+                refs.iter()
+                    .filter(|&&(id, _)| id == attachment_id)
+                    .map(|&(_, history_index)| (entry_id, history_index)),
+            );
+            if attachment.entries.is_empty() {
+                self.attachments.remove(&attachment_id);
+            }
+        }
     }
 
     /// True when the attachment IDs are exactly 0..n, as a file stores them.

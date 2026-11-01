@@ -169,6 +169,15 @@ impl KeePassFile {
         db.attachments = attachments;
         db.custom_icons = custom_icons;
 
+        // Populate Attachment back-reference sets from the entries that refer to them, current
+        // versions and history alike. Without them, removing an attachment from one version
+        // would drop the data every other version and entry still uses.
+        let entry_ids: Vec<crate::db::EntryId> = db.entries.keys().copied().collect();
+        for entry_id in entry_ids {
+            let attachment_ids = db.entry_attachment_ids(entry_id);
+            db.sync_attachment_refs(entry_id, attachment_ids);
+        }
+
         // Re-populate CustomIcon back-reference sets.
         //
         // The XML parser creates CustomIcon values with empty `entries` and `groups` sets
