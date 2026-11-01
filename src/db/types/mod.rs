@@ -184,6 +184,35 @@ impl Database {
         db
     }
 
+    /// Rebuilds each attachment's references from the entries and their
+    /// history as they are now, and removes the attachments that nothing
+    /// refers to any more. Returns how many were removed.
+    ///
+    /// Replacing an entry's history directly (to trim it, say) leaves the
+    /// attachments only the dropped versions used in the database, where
+    /// saving would still write them, and leaves references to history
+    /// positions that no longer hold the same version. This puts both right.
+    pub fn remove_unused_attachments(&mut self) -> usize {
+        for attachment in self.attachments.values_mut() {
+            attachment.entries.clear();
+        }
+        for entry in self.entries.values() {
+            let versions = entry.history.iter().flat_map(|h| h.entries.iter().enumerate());
+            let uses = std::iter::once((None, entry))
+                .chain(versions.map(|(i, version)| (Some(i), version)))
+                .flat_map(|(index, version)| version.attachments.values().map(move |id| (index, *id)));
+            for (index, id) in uses {
+                if let Some(attachment) = self.attachments.get_mut(&id) {
+                    attachment.entries.insert((entry.id, index));
+                }
+            }
+        }
+        let before = self.attachments.len();
+        self.attachments
+            .retain(|_, attachment| !attachment.entries.is_empty());
+        before - self.attachments.len()
+    }
+
     /// Get the number of attachments in the database
     pub fn num_attachments(&self) -> usize {
         self.attachments.len()

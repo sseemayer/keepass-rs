@@ -5,7 +5,7 @@
 mod common;
 
 use common::combo_by_label;
-use keepass::db::{Database, Value};
+use keepass::db::{Database, History, Value};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 fn drive(label: &str, payloads: Vec<Vec<u8>>) {
@@ -135,4 +135,113 @@ fn attachments_after_a_removed_one_keep_their_data() {
     assert_eq!(data(&third, "new.bin"), Some(b"four".to_vec()));
     let old = third.historical(0).expect("the older version");
     assert_eq!(data(&old, "file.bin"), Some(b"three".to_vec()));
+}
+
+/// Removing an entry lets go of the files its older versions used too: a file
+/// only the history refers to must leave the database and the saved file,
+/// while other entries keep theirs.
+#[test]
+fn removing_an_entry_drops_the_files_only_its_history_used() {
+    let combo = combo_by_label("aes256+none+inner-chacha20+argon2d");
+    let mut db = Database::with_config(combo.get_config());
+
+    // The kept file comes first, so removing the other leaves no gap in the IDs.
+    let (gone, kept) = {
+        let mut root = db.root_mut();
+        let mut k = root.add_entry();
+        k.add_attachment("kept.bin", Value::Unprotected(b"kept".to_vec()));
+        let kept = k.id();
+        let mut e = root.add_entry();
+        e.add_attachment("old.bin", Value::Unprotected(b"old".to_vec()));
+        (e.id(), kept)
+    };
+    // An older version keeps the file; the current one no longer has it (as
+    // a file saved by another client can be).
+    db.entry_mut(gone)
+        .unwrap()
+        .edit_tracking(|e| e.set_unprotected("Title", "newer"));
+    let mut without = db.clone();
+    without
+        .entry_mut(gone)
+        .unwrap()
+        .remove_attachment_by_name("old.bin");
+    let current = (*without.entry(gone).unwrap()).clone();
+    *db.entry_mut(gone).unwrap() = current;
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let mut db = Database::open(&mut bytes.as_slice(), combo.get_key()).expect("reopen");
+    assert_eq!(db.entry(gone).unwrap().attachments().count(), 0);
+    assert_eq!(
+        db.entry(gone)
+            .unwrap()
+            .historical(0)
+            .unwrap()
+            .attachments()
+            .count(),
+        1
+    );
+    assert_eq!(db.num_attachments(), 2);
+
+    db.entry_mut(gone).unwrap().track_changes().remove();
+    assert_eq!(
+        db.num_attachments(),
+        1,
+        "the file only the removed history used is gone"
+    );
+
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let parsed = Database::open(&mut bytes.as_slice(), combo.get_key()).expect("reopen");
+    assert_eq!(parsed.num_attachments(), 1);
+    let kept = parsed.entry(kept).unwrap();
+    assert_eq!(
+        kept.attachment_by_name("kept.bin").map(|a| a.data.get().clone()),
+        Some(b"kept".to_vec())
+    );
+}
+
+/// Trimming an entry's history by replacing it leaves the files only the
+/// dropped versions used; removing unused attachments takes them out of the
+/// database and the saved file, and leaves references that later changes can
+/// rely on.
+#[test]
+fn unused_attachments_leave_after_history_is_trimmed() {
+    let combo = combo_by_label("aes256+none+inner-chacha20+argon2d");
+    let mut db = Database::with_config(combo.get_config());
+
+    let id = {
+        let mut root = db.root_mut();
+        let mut e = root.add_entry();
+        e.add_attachment("old.bin", Value::Unprotected(b"old".to_vec()));
+        e.id()
+    };
+    // The older version keeps old.bin; the current one has new.bin instead.
+    db.entry_mut(id).unwrap().edit_tracking(|e| {
+        e.add_attachment("new.bin", Value::Unprotected(b"new".to_vec()));
+    });
+    let mut without = db.clone();
+    without
+        .entry_mut(id)
+        .unwrap()
+        .remove_attachment_by_name("old.bin");
+    let current = (*without.entry(id).unwrap()).clone();
+    *db.entry_mut(id).unwrap() = current;
+    assert_eq!(db.num_attachments(), 2);
+    assert_eq!(db.remove_unused_attachments(), 0, "history still uses old.bin");
+
+    // The history is trimmed away: old.bin is used by nothing now.
+    db.entry_mut(id).unwrap().history = Some(History::default());
+    assert_eq!(db.remove_unused_attachments(), 1);
+    assert_eq!(db.num_attachments(), 1);
+
+    let bytes = common::save_to_vec(&db, combo.get_key());
+    let parsed = Database::open(&mut bytes.as_slice(), combo.get_key()).expect("reopen");
+    assert_eq!(parsed.num_attachments(), 1);
+    let entry = parsed.entry(id).unwrap();
+    assert_eq!(
+        entry.attachment_by_name("new.bin").map(|a| a.data.get().clone()),
+        Some(b"new".to_vec())
+    );
+
+    // The rebuilt references hold: removing the last file empties the pool.
+    db.entry_mut(id).unwrap().remove_attachment_by_name("new.bin");
+    assert_eq!(db.num_attachments(), 0);
 }
