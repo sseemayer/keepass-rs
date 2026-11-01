@@ -279,12 +279,10 @@ impl Combo {
                 e.tags = vec![format!("tag-{i}"), "fixture".to_string()];
                 e.times.expires = Some(true);
 
-                e.times.expiry = Some(
-                    NaiveDate::from_ymd_opt(2099, 12, 31)
-                        .unwrap()
-                        .and_hms_opt(23, 59, 59)
-                        .unwrap(),
-                );
+                e.times.expiry = NaiveDate::from_ymd_opt(2099, 12, 31)
+                    .unwrap()
+                    .and_hms_opt(23, 59, 59)
+                    .unwrap();
             }
             e.custom_data.insert(
                 format!("entry.cd.{i}"),

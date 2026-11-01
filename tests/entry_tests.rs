@@ -29,7 +29,7 @@ mod entry_tests {
         assert_eq!(e.times.expires, Some(false));
 
         let et = chrono::NaiveDateTime::parse_from_str("2016-01-06 09:43:01", "%Y-%m-%d %H:%M:%S").unwrap();
-        assert_eq!(e.times.expiry.as_ref(), Some(&et));
+        assert_eq!(e.times.expiry, et);
 
         if let Some(ref at) = e.autotype {
             if let Some(ref s) = at.default_sequence {
@@ -55,11 +55,7 @@ mod entry_tests {
         assert_eq!(e.get_url(), Some(""));
         assert_eq!(e.times.expires, Some(false));
 
-        if let Some(t) = e.times.expiry {
-            assert_eq!(format!("{}", t), "2016-01-28 12:25:36");
-        } else {
-            panic!("Expected an ExpiryTime");
-        }
+        assert_eq!(format!("{}", e.times.expiry), "2016-01-28 12:25:36");
 
         Ok(())
     }
@@ -85,11 +81,7 @@ mod entry_tests {
         assert_eq!(e.tags, vec!["keepass-rs".to_string(), "test".to_string()]);
         assert_eq!(e.times.expires, Some(true));
 
-        if let Some(t) = e.times.expiry {
-            assert_eq!(format!("{}", t), "2021-04-10 16:53:18");
-        } else {
-            panic!("Expected an ExpiryTime");
-        }
+        assert_eq!(format!("{}", e.times.expiry), "2021-04-10 16:53:18");
 
         Ok(())
     }

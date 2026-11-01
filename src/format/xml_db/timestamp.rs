@@ -37,6 +37,12 @@ impl Timestamp {
     }
 }
 
+impl Default for Timestamp {
+    fn default() -> Self {
+        Timestamp::new_base64(NaiveDateTime::default())
+    }
+}
+
 impl From<Timestamp> for NaiveDateTime {
     fn from(t: Timestamp) -> Self {
         t.time
