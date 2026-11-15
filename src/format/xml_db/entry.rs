@@ -599,6 +599,59 @@ mod tests {
         assert!(deserialized.0.history.is_none());
     }
 
+    /// pykeepass appends a field it sets to the end of `<Entry>`, after
+    /// `<Times>` and `<AutoType>`. KeePass and KeePassXC read that.
+    #[test]
+    fn test_deserialize_entry_with_fields_after_other_elements() {
+        let xml = r#"<Entry>
+            <UUID>AAECAwQFBgcICQoLDA0ODw==</UUID>
+            <String>
+                <Key>Title</Key>
+                <Value>Example Title</Value>
+            </String>
+            <Binary>
+                <Key>first</Key>
+                <Value Ref="0"/>
+            </Binary>
+            <Times>
+                <CreationTime>2023-10-05T12:34:56Z</CreationTime>
+            </Times>
+            <String>
+                <Key>Notes</Key>
+                <Value>set later</Value>
+            </String>
+            <AutoType>
+                <Enabled>True</Enabled>
+            </AutoType>
+            <String>
+                <Key>Custom</Key>
+                <Value>also later</Value>
+            </String>
+            <Binary>
+                <Key>second</Key>
+                <Value Ref="1"/>
+            </Binary>
+        </Entry>"#;
+
+        let deserialized: Test<Entry> = quick_xml::de::from_str(xml).unwrap();
+        let keys: Vec<&str> = deserialized
+            .0
+            .string_fields
+            .iter()
+            .map(|f| f.key.as_str())
+            .collect();
+        assert_eq!(keys, ["Title", "Notes", "Custom"]);
+        let binaries: Vec<&str> = deserialized
+            .0
+            .binary_fields
+            .iter()
+            .map(|f| f.key.as_str())
+            .collect();
+        assert_eq!(binaries, ["first", "second"]);
+        assert!(deserialized.0.times.is_some());
+        assert!(deserialized.0.auto_type.is_some());
+    }
+
     #[test]
     fn test_deserialize_entry_minimal() {
         let xml = r#"<Entry>
