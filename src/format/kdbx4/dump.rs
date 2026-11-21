@@ -15,7 +15,6 @@ use crate::{
             INNER_HEADER_RANDOM_STREAM_KEY,
         },
         variant_dictionary::VariantDictionary,
-        DatabaseVersion,
     },
     key::DatabaseKey,
 };
@@ -28,8 +27,8 @@ pub fn dump_kdbx4(
     db_key: &DatabaseKey,
     writer: &mut dyn Write,
 ) -> Result<(), DatabaseSaveError> {
-    if !matches!(db.config.version, DatabaseVersion::KDB4(1)) {
-        return Err(DatabaseSaveError::UnsupportedVersion);
+    if db.config.version != crate::CURRENT_TARGET_DATABASE_VERSION {
+        return Err(DatabaseSaveError::UnsupportedVersion(db.config.version.clone()));
     }
 
     // generate encryption keys and seeds on the fly when saving

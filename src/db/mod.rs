@@ -60,7 +60,7 @@ mod otp;
 mod save;
 
 #[cfg(feature = "save_kdbx4")]
-pub use crate::db::save::DatabaseSaveError;
+pub use crate::db::save::{DatabaseSaveError, DatabaseUpgradeError};
 
 pub use crate::db::{
     open::{DatabaseFormatError, DatabaseOpenError},
