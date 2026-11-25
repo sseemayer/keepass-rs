@@ -36,7 +36,7 @@ pub fn parse_xml(
     inner_decryptor: &mut dyn Cipher,
 ) -> Result<crate::db::Database, ParseXmlError> {
     let kdbx: KeePassFile = quick_xml::de::from_reader(data)?;
-    Ok(kdbx.xml_to_db(inner_decryptor, header_attachments)?)
+    kdbx.xml_to_db(inner_decryptor, header_attachments)
 }
 
 /// Errors that can occur during parsing of the inner XML database of a KDBX file
@@ -51,6 +51,11 @@ pub enum ParseXmlError {
     /// encryption methods.
     #[error("Error unprotecting entry: {0}")]
     Unprotect(#[from] UnprotectError),
+
+    /// Two attachments have the same ID, in the inner header and `Meta/Binaries` or twice in
+    /// `Meta/Binaries`.
+    #[error("Attachment ID {0} is used more than once")]
+    DuplicateAttachmentId(usize),
 }
 
 #[cfg(feature = "save_kdbx4")]
@@ -99,7 +104,7 @@ impl KeePassFile {
         mut self,
         inner_decryptor: &mut dyn Cipher,
         header_attachments: &[Value<Vec<u8>>],
-    ) -> Result<crate::db::Database, UnprotectError> {
+    ) -> Result<crate::db::Database, ParseXmlError> {
         let mut db = crate::db::Database::new_with_root_id(GroupId::from_uuid(self.root.group.uuid.0));
 
         let mut attachments = HashMap::new();
@@ -120,6 +125,9 @@ impl KeePassFile {
                 // Entries point at the pool by the ID attribute (`<Value Ref="N"/>`),
                 // so the attachment has to keep that ID.
                 let id = crate::db::AttachmentId::new(binary.id);
+                if attachments.contains_key(&id) {
+                    return Err(ParseXmlError::DuplicateAttachmentId(binary.id));
+                }
                 let data = binary.xml_to_db(inner_decryptor)?;
 
                 attachments.insert(
@@ -374,10 +382,10 @@ mod tests {
 
         // "eG1s" is "xml"
         let res = parse_binaries(r#"<Binary ID="0">eG1s</Binary>"#, &header);
-        assert!(res.is_err());
+        assert!(matches!(res, Err(ParseXmlError::DuplicateAttachmentId(0))));
 
         let res = parse_binaries(r#"<Binary ID="1">eG1s</Binary><Binary ID="1">eG1s</Binary>"#, &[]);
-        assert!(res.is_err());
+        assert!(matches!(res, Err(ParseXmlError::DuplicateAttachmentId(1))));
 
         let db = parse_binaries(r#"<Binary ID="1">eG1s</Binary>"#, &header).unwrap();
         let data = |id| {
