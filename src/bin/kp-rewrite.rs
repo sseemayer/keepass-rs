@@ -1,5 +1,5 @@
 //! utility to parse a KeePass database, and then write it out again, to see if anything is lost.
-use std::fs::File;
+use std::{fs::File, path::Path};
 
 use anyhow::Result;
 use clap::Parser;
@@ -44,7 +44,11 @@ fn main() -> Result<()> {
 
     let db = Database::open(&mut source, key.clone())?;
 
-    let mut out_file = File::create(args.out_kdbx)?;
+    save(&db, Path::new(&args.out_kdbx), key)
+}
+
+fn save(db: &Database, out_kdbx: &Path, key: DatabaseKey) -> Result<()> {
+    let mut out_file = File::create(out_kdbx)?;
     db.save(&mut out_file, key)?;
 
     Ok(())
