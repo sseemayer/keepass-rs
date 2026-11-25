@@ -13,6 +13,8 @@ use thiserror::Error;
 use crate::format::io::WriteLengthTaggedExt;
 
 pub const VARIANT_DICTIONARY_VERSION: u16 = 0x100;
+// The high byte is the major version; the low byte, the minor version, can be ignored.
+const VARIANT_DICTIONARY_MAJOR_VERSION_MASK: u16 = 0xFF00;
 pub const VARIANT_DICTIONARY_END: u8 = 0x0;
 
 pub const U32_TYPE_ID: u8 = 0x04;
@@ -52,7 +54,9 @@ impl VariantDictionary {
         let version = buffer.get(0..2).ok_or(VariantDictionaryError::UnexpectedEof)?;
         let version = LittleEndian::read_u16(version);
 
-        if version != VARIANT_DICTIONARY_VERSION {
+        if version & VARIANT_DICTIONARY_MAJOR_VERSION_MASK
+            != VARIANT_DICTIONARY_VERSION & VARIANT_DICTIONARY_MAJOR_VERSION_MASK
+        {
             return Err(VariantDictionaryError::InvalidVersion { version });
         }
 
