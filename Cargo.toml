@@ -24,7 +24,7 @@ include = [
 ]
 
 [features]
-utilities = ["anyhow", "clap", "rpassword", "serialization", "totp"]
+utilities = ["anyhow", "clap", "rpassword", "serialization", "totp", "dep:tempfile"]
 serialization = ["serde_json", "chrono/serde"]
 totp = ["totp-lite", "url", "base32"]
 save_kdbx4 = []
@@ -76,6 +76,7 @@ zeroize = { version = "1", features = ["zeroize_derive"] }
 anyhow = { version = "1", optional = true }
 clap = { version = "4", optional = true, features = ["derive"] }
 rpassword = { version = "7", optional = true }
+tempfile = { version = "3", optional = true }
 
 # dependencies for serialization (enabled by "serialization" feature)
 serde_json = { version = "1", optional = true }
