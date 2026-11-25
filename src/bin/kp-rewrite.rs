@@ -53,3 +53,48 @@ fn save(db: &Database, out_kdbx: &Path, key: DatabaseKey) -> Result<()> {
 
     Ok(())
 }
+
+#[allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use keepass::config::DatabaseVersion;
+
+    use super::*;
+
+    fn database() -> (Database, DatabaseKey) {
+        let mut db = Database::new();
+        db.meta.database_name = Some("rewritten".to_string());
+        (db, DatabaseKey::new().with_password("demopass"))
+    }
+
+    #[test]
+    fn failed_save_leaves_output_untouched() {
+        let (mut db, key) = database();
+        // only KDBX 4.1 databases can be saved
+        db.config.version = DatabaseVersion::KDB3(1);
+        let dir = tempfile::tempdir().unwrap();
+        let out_kdbx = dir.path().join("out.kdbx");
+        fs::write(&out_kdbx, b"previous contents").unwrap();
+
+        assert!(save(&db, &out_kdbx, key).is_err());
+
+        assert_eq!(fs::read(&out_kdbx).unwrap(), b"previous contents");
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn save_replaces_output() {
+        let (db, key) = database();
+        let dir = tempfile::tempdir().unwrap();
+        let out_kdbx = dir.path().join("out.kdbx");
+        fs::write(&out_kdbx, b"previous contents").unwrap();
+
+        save(&db, &out_kdbx, key.clone()).unwrap();
+
+        let saved = Database::open(&mut File::open(&out_kdbx).unwrap(), key).unwrap();
+        assert_eq!(saved.meta.database_name.as_deref(), Some("rewritten"));
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+}
