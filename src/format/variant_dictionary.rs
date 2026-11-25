@@ -13,6 +13,8 @@ use thiserror::Error;
 use crate::format::io::WriteLengthTaggedExt;
 
 pub const VARIANT_DICTIONARY_VERSION: u16 = 0x100;
+// The high byte is the major version; the low byte, the minor version, can be ignored.
+const VARIANT_DICTIONARY_MAJOR_VERSION_MASK: u16 = 0xFF00;
 pub const VARIANT_DICTIONARY_END: u8 = 0x0;
 
 pub const U32_TYPE_ID: u8 = 0x04;
@@ -52,7 +54,9 @@ impl VariantDictionary {
         let version = buffer.get(0..2).ok_or(VariantDictionaryError::UnexpectedEof)?;
         let version = LittleEndian::read_u16(version);
 
-        if version != VARIANT_DICTIONARY_VERSION {
+        if version & VARIANT_DICTIONARY_MAJOR_VERSION_MASK
+            != VARIANT_DICTIONARY_VERSION & VARIANT_DICTIONARY_MAJOR_VERSION_MASK
+        {
             return Err(VariantDictionaryError::InvalidVersion { version });
         }
 
@@ -397,6 +401,30 @@ mod variant_dictionary_tests {
         assert!(matches!(
             res,
             Err(VariantDictionaryError::InvalidValueType { value_type: 0xAA })
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn minor_version_is_ignored() -> Result<(), VariantDictionaryError> {
+        //                                        ver t key_len key   val_len value   termination
+        //                                        |   | |       |     |       |       |
+        let res = VariantDictionary::parse(&hex!("010104030000004142430400000015CD5B0700"))?;
+        assert_eq!(res.get_typed::<u32>("ABC")?, &123456789);
+
+        assert!(VariantDictionary::parse(&hex!("FF0100")).is_ok());
+
+        let res = VariantDictionary::parse(&hex!("000200"));
+        assert!(matches!(
+            res,
+            Err(VariantDictionaryError::InvalidVersion { version: 0x0200 })
+        ));
+
+        let res = VariantDictionary::parse(&hex!("010000"));
+        assert!(matches!(
+            res,
+            Err(VariantDictionaryError::InvalidVersion { version: 0x0001 })
         ));
 
         Ok(())
