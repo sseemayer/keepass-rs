@@ -403,6 +403,30 @@ mod variant_dictionary_tests {
     }
 
     #[test]
+    fn minor_version_is_ignored() -> Result<(), VariantDictionaryError> {
+        //                                        ver t key_len key   val_len value   termination
+        //                                        |   | |       |     |       |       |
+        let res = VariantDictionary::parse(&hex!("010104030000004142430400000015CD5B0700"))?;
+        assert_eq!(res.get_typed::<u32>("ABC")?, &123456789);
+
+        assert!(VariantDictionary::parse(&hex!("FF0100")).is_ok());
+
+        let res = VariantDictionary::parse(&hex!("000200"));
+        assert!(matches!(
+            res,
+            Err(VariantDictionaryError::InvalidVersion { version: 0x0200 })
+        ));
+
+        let res = VariantDictionary::parse(&hex!("010000"));
+        assert!(matches!(
+            res,
+            Err(VariantDictionaryError::InvalidVersion { version: 0x0001 })
+        ));
+
+        Ok(())
+    }
+
+    #[test]
     #[cfg(feature = "save_kdbx4")]
     fn variant_dictionary() {
         let mut vd = VariantDictionary::new();
