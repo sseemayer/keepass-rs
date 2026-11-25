@@ -356,6 +356,39 @@ mod tests {
         assert!(!serialized.contains("<deletion_time>"));
     }
 
+    fn parse_binaries(
+        binaries: &str,
+        header_attachments: &[Value<Vec<u8>>],
+    ) -> Result<crate::db::Database, ParseXmlError> {
+        let xml = format!(
+            "<KeePassFile><Meta><Binaries>{binaries}</Binaries></Meta><Root><Group>\
+             <UUID>tP/vJ/3uSHyomfPZ4dXVlg==</UUID><Name></Name></Group></Root></KeePassFile>"
+        );
+        let mut cipher = crate::config::InnerCipherConfig::Plain.get_cipher(&[]).unwrap();
+        parse_xml(xml.as_bytes(), header_attachments, &mut *cipher)
+    }
+
+    #[test]
+    fn attachment_ids_are_unique() {
+        let header = [Value::unprotected(b"header".to_vec())];
+
+        // "eG1s" is "xml"
+        let res = parse_binaries(r#"<Binary ID="0">eG1s</Binary>"#, &header);
+        assert!(res.is_err());
+
+        let res = parse_binaries(r#"<Binary ID="1">eG1s</Binary><Binary ID="1">eG1s</Binary>"#, &[]);
+        assert!(res.is_err());
+
+        let db = parse_binaries(r#"<Binary ID="1">eG1s</Binary>"#, &header).unwrap();
+        let data = |id| {
+            db.attachments
+                .get(&crate::db::AttachmentId::new(id))
+                .map(|a| a.data.get().clone())
+        };
+        assert_eq!(data(0), Some(b"header".to_vec()));
+        assert_eq!(data(1), Some(b"xml".to_vec()));
+    }
+
     #[test]
     fn test_deserialize_legacy_deleted_object_deletion_time() {
         let deleted_object: DeletedObject = quick_xml::de::from_str(
